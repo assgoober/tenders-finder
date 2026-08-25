@@ -11,12 +11,20 @@ which one you are facing decides the whole agent design:
     online.mod.gov.il/.../BalamList.aspx       ASP.NET WebForms (postback paging)
     sapakim.mod.gov.il/home                    SPA (JSON API behind it)
 
-Usage:
+Usage — the script is self-contained and runs from any directory. It needs
+only Playwright, not the service's full requirements.txt:
 
-    cd tenders-finder/scraper-service
-    python -m tools.probe_portal --url "https://sapakim.mod.gov.il/home"
-    python -m tools.probe_portal --url "<BALAM url>" --detail-sample
-    python -m tools.probe_portal --url "<gov.il url>" --out report.json
+    pip install playwright
+    playwright install chromium
+
+    python tools/probe_portal.py --url "https://sapakim.mod.gov.il/home"
+    python tools/probe_portal.py --url "<BALAM url>" --detail-sample
+    python tools/probe_portal.py --url "<gov.il url>" --out report.json
+
+On Windows PowerShell use backslashes and run one command per line —
+PowerShell 5.1 does not accept `&&` as a separator:
+
+    python tools\probe_portal.py --url "https://sapakim.mod.gov.il/home"
 
 What it reports:
 
@@ -131,7 +139,17 @@ def detect_architecture(html: str, json_calls: list[dict]) -> dict:
 
 
 async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) -> dict:
-    from playwright.async_api import async_playwright
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        # The probe only needs Playwright — not the service's full
+        # requirements.txt — so say exactly that rather than sending someone
+        # to install anthropic and supabase to look at a web page.
+        raise SystemExit(
+            "Playwright is not installed. This probe needs only Playwright:\n"
+            "    pip install playwright\n"
+            "    playwright install chromium"
+        ) from None
 
     report: dict = {"url": url}
     parsed = urlparse(url)

@@ -107,13 +107,42 @@ procurement. Nothing downstream can tell the difference.
 
 ### Verifying a portal
 
-From a machine that can reach it:
+The probe is self-contained and runs from any directory. It needs only
+Playwright — not the service's full `requirements.txt`.
+
+**macOS / Linux:**
 
 ```bash
+git clone https://github.com/omer-izhaki/ai-trainer-cal-counter.git
+cd ai-trainer-cal-counter
+git checkout claude/tenders-finder-architecture-piz4ft
 cd tenders-finder/scraper-service
-python -m tools.probe_portal --url "https://sapakim.mod.gov.il/home"
-python -m tools.probe_portal --url "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1" --detail-sample
+
+pip install playwright
+playwright install chromium
+
+python tools/probe_portal.py --url "https://sapakim.mod.gov.il/home"
+python tools/probe_portal.py --url "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1" --detail-sample
 ```
+
+**Windows PowerShell** — backslashes, and one command per line
+(PowerShell 5.1 does not accept `&&`):
+
+```powershell
+git clone https://github.com/omer-izhaki/ai-trainer-cal-counter.git
+cd ai-trainer-cal-counter
+git checkout claude/tenders-finder-architecture-piz4ft
+cd tenders-finder\scraper-service
+
+pip install playwright
+playwright install chromium
+
+python tools\probe_portal.py --url "https://sapakim.mod.gov.il/home"
+python tools\probe_portal.py --url "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1" --detail-sample
+```
+
+Add `--headed` to watch the browser work, and `--out report.json` to save the
+full report.
 
 The probe reports whether robots.txt permits the path, classifies the
 architecture, lists any JSON endpoints seen over XHR, shows which candidate
