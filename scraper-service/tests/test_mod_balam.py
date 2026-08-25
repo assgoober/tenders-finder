@@ -19,7 +19,13 @@ import pytest
 from app.agents.base import FetchedTender
 from app.agents.govil import PortalContractUnverified
 from app.agents.hebrew import ISRAEL_TZ
-from app.agents.mod_balam import CONTRACT, ModBalamAgent, verified_contract
+from app.agents.mod_balam import (
+    CONTRACT,
+    ModBalamAgent,
+    postback_argument,
+    postback_target,
+    verified_contract,
+)
 from app.config import Settings
 
 
@@ -233,94 +239,154 @@ def test_enrich_does_not_overwrite_the_listing_value():
     assert stub.deadline.year == 2027
 
 
+# --- Postback parsing --------------------------------------------------------
+
+
+def test_postback_argument_parses_the_bare_form():
+    href = "javascript:__doPostBack('ctl00$ContentPlaceHolder1$gvBalam','Page$2')"
+    assert postback_argument(href) == "Page$2"
+    assert postback_target(href) == "ctl00$ContentPlaceHolder1$gvBalam"
+
+
+def test_postback_argument_parses_the_options_wrapper():
+    """A GridView LinkButton often renders as WebForm_DoPostBackWithOptions
+    rather than a bare __doPostBack. A pattern that only knows the bare form
+    reports 'no links' on a page full of them — which is exactly what the
+    first probe run did."""
+    href = (
+        'javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions('
+        '"ctl00$ContentPlaceHolder1$gvBalam", "Select$3", true, "", "", false, true))'
+    )
+    assert postback_argument(href) == "Select$3"
+    assert postback_target(href) == "ctl00$ContentPlaceHolder1$gvBalam"
+
+
+def test_postback_argument_is_none_for_a_plain_url():
+    assert postback_argument("/Online2016/Pages/Detail.aspx?id=5") is None
+    assert postback_argument("javascript:void(0)") is None
+    assert postback_argument(None) is None
+
+
 # --- WebForms pagination -----------------------------------------------------
 
 
-class FakeElement:
-    def __init__(self, text: str = "", attrs: dict | None = None, children: list | None = None):
-        self._text = text
-        self._attrs = attrs or {}
-        self._children = children or []
+class FakeLink:
+    def __init__(self, href: str):
+        self._href = href
         self.clicked = False
 
-    async def inner_text(self):
-        return self._text
-
     async def get_attribute(self, name):
-        return self._attrs.get(name)
+        return self._href if name == "href" else None
 
-    async def query_selector(self, selector):
-        results = await self.query_selector_all(selector)
-        return results[0] if results else None
-
-    async def query_selector_all(self, selector):
-        if selector == "a":
-            return [c for c in self._children if c._attrs.get("tag") == "a"]
-        return self._children
+    async def inner_text(self):
+        return ""
 
     async def click(self):
         self.clicked = True
 
 
-class FakePager(FakeElement):
-    def __init__(self, current: int, links: list[str]):
-        children = [FakeElement(text=t, attrs={"tag": "a"}) for t in links]
-        # WebForms renders the active page as plain text among the links.
-        super().__init__(text=" ".join([*links, str(current)]), children=children)
+def pager_link(page_number: int) -> FakeLink:
+    return FakeLink(
+        f"javascript:__doPostBack('ctl00$ContentPlaceHolder1$gvBalam','Page${page_number}')"
+    )
+
+
+class FakeRow:
+    def __init__(self, text: str):
+        self._text = text
+
+    async def inner_text(self):
+        return self._text
 
 
 class FakePage:
-    def __init__(self, pager: FakePager | None, *, row_changes: bool = True):
-        self._pager = pager
+    """Stands in for a Playwright page. Only the calls the pager makes."""
+
+    def __init__(self, pager_pages: list[int], *, row_changes: bool = True, rows: str = "row-1"):
+        self._links = [pager_link(n) for n in pager_pages]
         self._row_changes = row_changes
+        self._rows = rows
         self.waited = False
 
     async def query_selector(self, selector):
-        return self._pager
+        return self
 
     async def query_selector_all(self, selector):
-        return [FakeElement(text="row-1")]
+        if "Page$" in selector:
+            return self._links
+        return [FakeRow(self._rows)]
 
     async def wait_for_function(self, *args, **kwargs):
         self.waited = True
         if not self._row_changes:
             raise TimeoutError("row set unchanged")
 
-
-@pytest.mark.asyncio
-async def test_pagination_clicks_the_numbered_successor():
-    pager = FakePager(current=2, links=["1", "3", "4", "..."])
-    page = FakePage(pager)
-
-    assert await agent()._go_to_next_page(page) is True
-    assert [c for c in pager._children if c.clicked][0]._text == "3"
+    def clicked_hrefs(self):
+        return [link._href for link in self._links if link.clicked]
 
 
 @pytest.mark.asyncio
-async def test_pagination_does_not_follow_the_ellipsis():
-    """A WebForms pager's '...' jumps a whole block of pages. Following it
-    would skip rows without any error."""
-    pager = FakePager(current=2, links=["1", "..."])
-    assert await agent()._go_to_next_page(FakePage(pager)) is False
+async def test_pagination_clicks_the_next_numbered_page():
+    a = agent()
+    page = FakePage([2, 3, 4, 5, 6, 7, 8, 9])
+
+    assert await a._go_to_next_page(page) is True
+    assert "Page$2" in page.clicked_hrefs()[0]
+    assert a._page_index == 2
 
 
 @pytest.mark.asyncio
-async def test_pagination_stops_when_the_row_set_does_not_change():
-    """The URL never changes on a postback, so an unchanged row set is the
-    only signal that paging is done. Continuing would re-ingest page N."""
-    pager = FakePager(current=2, links=["1", "3"])
-    page = FakePage(pager, row_changes=False)
+async def test_pagination_walks_forward_one_page_at_a_time():
+    """WebForms cannot jump to page N: the URL never changes and each page is
+    a postback from the one before it."""
+    a = agent()
+    visited = []
 
-    assert await agent()._go_to_next_page(page) is False
-    assert page.waited is True
+    for _ in range(4):
+        page = FakePage([2, 3, 4, 5, 6, 7, 8, 9])
+        assert await a._go_to_next_page(page) is True
+        visited.append(page.clicked_hrefs()[0])
+
+    assert [postback_argument(h) for h in visited] == ["Page$2", "Page$3", "Page$4", "Page$5"]
+    assert a._page_index == 5
 
 
 @pytest.mark.asyncio
-async def test_pagination_stops_with_no_pager():
-    assert await agent()._go_to_next_page(FakePage(None)) is False
+async def test_page_index_does_not_advance_when_the_postback_fails():
+    """Otherwise the walk would skip a page and never notice."""
+    a = agent()
+    page = FakePage([2, 3], row_changes=False)
+
+    assert await a._go_to_next_page(page) is False
+    assert a._page_index == 1
 
 
 @pytest.mark.asyncio
-async def test_current_page_is_the_number_that_is_not_a_link():
-    pager = FakePager(current=3, links=["1", "2", "4"])
-    assert await agent()._current_page_number(pager) == 3
+async def test_pagination_stops_at_the_last_page():
+    a = agent()
+    a._page_index = 9
+    page = FakePage([2, 3, 4, 5, 6, 7, 8, 9])
+
+    assert await a._go_to_next_page(page) is False
+
+
+@pytest.mark.asyncio
+async def test_page_argument_matches_exactly_not_by_prefix():
+    """A substring match would let Page$3 also select Page$30 once the
+    listing passes 29 pages, silently skipping 27 pages of tenders."""
+    a = agent()
+    a._page_index = 2
+    page = FakePage([30, 31, 3])
+
+    assert await a._go_to_next_page(page) is True
+    assert postback_argument(page.clicked_hrefs()[0]) == "Page$3"
+
+
+@pytest.mark.asyncio
+async def test_pagination_stops_when_no_pager_exists():
+    assert await agent()._go_to_next_page(FakePage([])) is False
+
+
+@pytest.mark.asyncio
+async def test_contract_records_the_probed_grid_control_id():
+    assert CONTRACT.grid_control_id == "ctl00$ContentPlaceHolder1$gvBalam"

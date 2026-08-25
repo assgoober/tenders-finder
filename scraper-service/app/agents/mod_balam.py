@@ -39,28 +39,44 @@ A live probe confirmed:
   excise the date before looking for a clock; and titles carry a `המשך...`
   truncation marker that has to be stripped before storing or embedding.
 
+## Pagination — resolved
+
+The second probe run dumped the page's postback targets and settled it. The
+pager carries no distinguishing class, id or ARIA label, which is why every
+container selector matched nothing; but its links are unambiguous:
+
+    <a href="javascript:__doPostBack('ctl00$ContentPlaceHolder1$gvBalam','Page$2')">2</a>
+
+Pages 2 through 9 were present, so **the listing is at least nine pages
+deep** — an agent that read only page one would have taken roughly an eighth
+of the tenders and reported success. Pagination now matches on the postback
+argument and walks forward from page 1.
+
 ## Still blocking — the agent stays disabled
 
-Two things the probe could not answer, either of which makes the agent
-useless in a way that is invisible at runtime:
+**Row links have no URL.** The listing's row control is a postback, so a
+tender has no addressable source page, and `_detail_url` rejects those — the
+agent would skip every row. A tender with no link back to its notice also
+cannot be checked by a bid team, which is the product's whole trust model.
 
-1. **No pagination control was found.** Every pager selector matched zero
-   elements. Either the listing is single-page, or it pages through a control
-   not yet identified. If it pages and we do not follow it, the agent silently
-   ingests only the first page and every later tender is simply never seen.
-2. **Row links are `javascript:__doPostBack(...)`, not URLs.** Every tender
-   therefore has no addressable source, and `_detail_url` rejects those — so
-   the agent would currently skip every row. A tender without a link back to
-   its notice also cannot be verified by a bid team, which is the product's
-   whole trust model.
+The first probe run reported no row-level postback at all while also warning
+that the row href was a `javascript:` URL. The likely explanation is that a
+GridView LinkButton renders as `WebForm_DoPostBackWithOptions(...)` rather
+than a bare `__doPostBack(...)`, which the probe's pattern did not match —
+so it saw nothing rather than reporting the difference. Both the probe and
+`_POSTBACK` below now recognize either form, and the probe additionally dumps
+the first data row's links verbatim and follows one to see whether a real
+detail URL exists.
 
-Both are answered by the postback dump the probe now emits. Re-run:
+Re-run to close it:
 
     python tools/probe_portal.py --url "<BALAM URL>" --detail-sample
 
-then fill in `detail_link_selector` / the detail URL pattern and
-`pager_selector`, and set `verified=True`. Until then the agent refuses to
-run rather than silently returning zero tenders.
+If a real detail URL exists, set `detail_link_selector` and `verified=True`.
+If the detail view is postback-only and has no URL at all, that is a product
+decision, not a parsing one: the honest fallback is to store the listing URL
+plus the reference number so a human can find the tender, and to say so in
+the UI. Until it is resolved the agent refuses to run.
 
 ## Operational notes
 
@@ -75,6 +91,7 @@ run rather than silently returning zero tenders.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, replace
 from urllib.parse import urljoin
 
@@ -149,11 +166,18 @@ class BalamContract:
     #: the postback dump it now emits.
     detail_link_selector: str = "a[href*='Balam'], a[id*='lnk']"
 
-    #: Pager container. Every candidate selector the probe tried matched zero
-    #: elements, so either this listing is single-page or it pages through a
-    #: control not yet identified. Left as a best guess; with no pager found
-    #: the agent processes one page and logs that it did.
-    pager_selector: str = ".GridPager, tr.pager, [id*='Pager']"
+    #: The GridView's WebForms control id, confirmed by probe. Every pager
+    #: link posts back to this target with an argument of `Page$N`.
+    grid_control_id: str = "ctl00$ContentPlaceHolder1$gvBalam"
+
+    #: Pager links are matched by their postback argument, not by a container
+    #: class. The probe found the pager carries no distinguishing class, id or
+    #: ARIA label — every container selector tried matched zero elements — but
+    #: the links themselves are unambiguous:
+    #:   <a href="javascript:__doPostBack('...$gvBalam','Page$2')">2</a>
+    #: Matching on the argument is also more precise than matching link text,
+    #: which carries stray whitespace.
+    pager_link_selector: str = "a[href*='Page$']"
 
     #: Truncation marker the portal appends to clipped titles in the listing.
     title_truncation_marker: str = "המשך..."
@@ -167,6 +191,40 @@ class BalamContract:
 
 
 CONTRACT = BalamContract()
+
+
+#: Matches both forms ASP.NET emits for a postback link. A LinkButton inside
+#: a GridView frequently renders as `WebForm_DoPostBackWithOptions(new
+#: WebForm_PostBackOptions("target", "argument", ...))` rather than a bare
+#: `__doPostBack('target','argument')` — and a pattern that only knows the
+#: bare form sees no links at all rather than failing, which is how the first
+#: probe run reported "no row links" on a page that has them.
+_POSTBACK = re.compile(
+    r"""(?:__doPostBack|WebForm_PostBackOptions)\(\s*
+        (?:new\s+WebForm_PostBackOptions\(\s*)?
+        ['"](?P<target>[^'"]*)['"]\s*,\s*
+        ['"](?P<argument>[^'"]*)['"]""",
+    re.VERBOSE,
+)
+
+
+def postback_argument(href: str | None) -> str | None:
+    """Extract the argument from a WebForms postback href.
+
+    Returns None for a plain URL or an unrecognized script call.
+    """
+    if not href:
+        return None
+    match = _POSTBACK.search(href)
+    return match.group("argument") if match else None
+
+
+def postback_target(href: str | None) -> str | None:
+    """Extract the control id from a WebForms postback href."""
+    if not href:
+        return None
+    match = _POSTBACK.search(href)
+    return match.group("target") if match else None
 
 
 @register_agent
@@ -192,6 +250,10 @@ class ModBalamAgent(PlaywrightPortalAgent):
         # Pagination is handled by the WebForms-aware override below, so the
         # generic link-clicking path is switched off.
         self.pagination_next_selector = None
+        # Which GridView page we are on. Every run enters at page 1 through
+        # ?Reset=1, so stepping this forward is exact — see _go_to_next_page
+        # for why it is not read from the DOM.
+        self._page_index = 1
 
     # --- Guard ---------------------------------------------------------------
 
@@ -209,6 +271,11 @@ class ModBalamAgent(PlaywrightPortalAgent):
 
     async def discover(self, *, limit: int = 50) -> list[TenderStub]:
         self._require_verified_contract()
+        # Reset the walk: the agent instance may be reused across runs, and a
+        # stale index would start page-two-onwards from the wrong number and
+        # skip pages.
+        self._page_index = 1
+
         stubs = await super().discover(limit=limit)
 
         if not stubs:
@@ -299,80 +366,79 @@ class ModBalamAgent(PlaywrightPortalAgent):
     # --- WebForms pagination -------------------------------------------------
 
     async def _go_to_next_page(self, page) -> bool:
-        """Advance the GridView by postback.
+        """Advance the GridView by one postback.
 
-        Three things make this different from clicking a "next" link:
+        The page number is tracked here rather than read from the DOM. A
+        WebForms pager shows a moving window of links and renders the current
+        page as plain text, so inferring "where am I" from the markup is
+        guesswork that gets worse as the window slides. We always enter at
+        page 1 through `?Reset=1` and step forward one at a time, so a counter
+        is exact.
 
-        * The URL does not change, so navigation waits have nothing to key on.
-          Instead this snapshots the current first row and waits for it to
-          change — the only reliable signal that the postback landed.
-        * Page links are numbered, not "next", so the successor is located by
-          its number.
-        * A WebForms pager renders `...` ellipsis links that jump a block of
-          pages. Matching by exact text avoids following one and skipping
-          rows silently.
+        The successor is matched on its postback *argument*, not its link
+        text: `Page$3` is unambiguous, whereas link text carries stray
+        whitespace, and a substring match would let `Page$3` also match
+        `Page$30` once the listing passes 29 pages.
 
-        Kept here rather than in a shared base until a second WebForms portal
-        exists to generalize from.
+        The URL does not change across a postback, so there is nothing for a
+        navigation wait to key on. Instead this snapshots the first data row
+        and waits for it to change — the only reliable signal the postback
+        landed.
         """
-        pager = await page.query_selector(self.contract.pager_selector)
-        if pager is None:
-            return False
-
-        current = await self._current_page_number(pager)
-        target = str(current + 1)
-
-        next_link = None
-        for link in await pager.query_selector_all("a"):
-            if (clean_text(await link.inner_text()) or "") == target:
-                next_link = link
-                break
+        target_page = self._page_index + 1
+        next_link = await self._pager_link(page, target_page)
 
         if next_link is None:
+            logger.info(
+                "[%s] no pager link for page %d — end of listing", self.key, target_page
+            )
             return False
 
         before = await self._first_row_signature(page)
 
-        await self.with_backoff(lambda: next_link.click(), description=f"postback to page {target}")
+        await self.with_backoff(
+            lambda: next_link.click(), description=f"postback to page {target_page}"
+        )
 
         try:
             await page.wait_for_function(
                 """([selector, previous]) => {
-                    const row = document.querySelector(selector + ' tr:nth-of-type(2)');
-                    return row && row.innerText.trim() !== previous;
+                    const rows = document.querySelectorAll(selector + ' tr');
+                    for (const row of rows) {
+                        const text = row.innerText.trim();
+                        if (text) return text !== previous;
+                    }
+                    return false;
                 }""",
                 arg=[self.contract.table_selector, before],
                 timeout=self.contract.postback_timeout_ms,
             )
         except Exception:  # noqa: BLE001
-            # The rows did not change. Treat it as the end of the list rather
-            # than re-ingesting the same page under a new page number.
+            # Rows did not change. Stop rather than re-ingesting the same page
+            # under a new page number — duplicates would dedupe on
+            # external_id, but the walk would never terminate on its own.
             logger.warning(
-                "[%s] postback to page %s did not change the row set — stopping pagination",
+                "[%s] postback to page %d did not change the row set — stopping pagination",
                 self.key,
-                target,
+                target_page,
             )
             return False
 
+        self._page_index = target_page
         return True
 
-    async def _current_page_number(self, pager) -> int:
-        """The active page is rendered as plain text, not as a link."""
-        text = clean_text(await pager.inner_text()) or ""
-        linked = set()
-        for link in await pager.query_selector_all("a"):
-            value = clean_text(await link.inner_text())
-            if value:
-                linked.add(value)
+    async def _pager_link(self, page, page_number: int):
+        """Find the pager link that posts back with exactly `Page$<n>`."""
+        wanted = f"Page${page_number}"
 
-        for token in text.split():
-            if token.isdigit() and token not in linked:
-                return int(token)
-        return 1
+        for link in await page.query_selector_all(self.contract.pager_link_selector):
+            href = await link.get_attribute("href") or ""
+            if postback_argument(href) == wanted:
+                return link
+        return None
 
     async def _first_row_signature(self, page) -> str:
-        rows = await self._data_rows(page)
-        for row in rows:
+        for row in await self._data_rows(page):
             text = clean_text(await row.inner_text())
             if text:
                 return text

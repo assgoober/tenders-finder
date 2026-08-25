@@ -235,11 +235,26 @@ async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) 
             link = await sample.query_selector("a[href]")
             href = await link.get_attribute("href") if link else None
             report["sample_item_href"] = href
+
+            # Every link in the sample row, verbatim and unfiltered. The
+            # pattern-matched dump above can only report calls it recognizes;
+            # this reports what is actually there, which is what you need when
+            # the recognizer is the thing that is wrong.
+            report["sample_row_links"] = await sample.evaluate(
+                """(node) => Array.from(node.querySelectorAll('a, [onclick]')).slice(0, 10).map(a => ({
+                    text: (a.innerText || '').trim().slice(0, 60),
+                    id: a.id || null,
+                    href: a.getAttribute('href'),
+                    onclick: a.getAttribute('onclick'),
+                }))"""
+            )
+
             if href and href.strip().lower().startswith("javascript:"):
                 report["href_warning"] = (
                     "Row links are javascript postbacks, not URLs. Each tender needs a real "
-                    "source URL to stay auditable — capture the id from the postback argument "
-                    "and construct the detail URL."
+                    "source URL to stay auditable. `sample_row_links` below shows them "
+                    "verbatim; with --detail-sample the probe also clicks one and reports "
+                    "where it lands, which tells you whether a real detail URL exists at all."
                 )
 
         pagers = {}
@@ -266,7 +281,17 @@ async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) 
 
         if detail_sample and report.get("sample_item_href"):
             href = report["sample_item_href"]
-            if not href.strip().lower().startswith("javascript:"):
+
+            if href.strip().lower().startswith("javascript:"):
+                # The decisive test for a postback-driven listing: click the
+                # row and see where the browser ends up. If the URL changes,
+                # a real detail page exists and tenders can be linked. If it
+                # does not, the detail view has no address at all — which is
+                # a product decision, not a parsing problem.
+                report["detail_probe"] = await follow_postback_row(
+                    page, best, url, fixture_dir, wait_ms
+                )
+            else:
                 detail_url = urljoin(url, href)
                 await page.goto(detail_url, wait_until="networkidle", timeout=90_000)
                 await page.wait_for_timeout(wait_ms)
@@ -291,6 +316,57 @@ async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) 
     return report
 
 
+async def follow_postback_row(page, item_selector: str, listing_url: str, fixture_dir, wait_ms: int) -> dict:
+    """Click a postback-driven row and report where it lands.
+
+    Answers the one question that decides whether tenders from this portal
+    can carry a source link: does opening a tender produce a URL?
+    """
+    result: dict = {"before_url": page.url}
+
+    try:
+        elements = await page.query_selector_all(item_selector)
+        sample = elements[1] if len(elements) > 1 else elements[0]
+        link = await sample.query_selector("a[href], [onclick]")
+        if link is None:
+            return {**result, "outcome": "no clickable element in the row"}
+
+        # A postback may navigate in place, or open a new tab.
+        async with page.context.expect_page(timeout=5_000) as popup_info:
+            await link.click()
+        popup = await popup_info.value
+        await popup.wait_for_load_state("networkidle", timeout=60_000)
+
+        result["outcome"] = "opened a new tab"
+        result["detail_url"] = popup.url
+        (fixture_dir / "detail.html").write_text(await popup.content(), encoding="utf-8")
+        result["detail_text_sample"] = (await popup.inner_text("body"))[:2000]
+        await popup.close()
+        return result
+
+    except Exception:  # noqa: BLE001 - no popup appeared; it navigated in place
+        pass
+
+    try:
+        await page.wait_for_load_state("networkidle", timeout=60_000)
+        await page.wait_for_timeout(wait_ms)
+
+        result["after_url"] = page.url
+        result["url_changed"] = page.url != result["before_url"]
+        result["outcome"] = (
+            "navigated to a real URL — tenders can be linked"
+            if result["url_changed"]
+            else "stayed on the same URL — the detail view has no address of its own"
+        )
+
+        (fixture_dir / "detail.html").write_text(await page.content(), encoding="utf-8")
+        result["detail_text_sample"] = (await page.inner_text("body"))[:2000]
+    except Exception as exc:  # noqa: BLE001
+        result["outcome"] = f"click failed: {type(exc).__name__}: {exc}"
+
+    return result
+
+
 async def collect_postback_targets(page, limit: int = 40) -> list[dict]:
     """List every `__doPostBack` / `window.open` call on the page.
 
@@ -307,9 +383,15 @@ async def collect_postback_targets(page, limit: int = 40) -> list[dict]:
 
             for (const node of nodes) {
                 const raw = (node.getAttribute('href') || '') + ' ' + (node.getAttribute('onclick') || '');
-                if (!/__doPostBack|window\\.open/.test(raw)) continue;
+                if (!/__doPostBack|WebForm_PostBackOptions|window\\.open/.test(raw)) continue;
 
-                const postback = raw.match(/__doPostBack\\(\\s*['"]([^'"]*)['"]\\s*,\\s*['"]([^'"]*)['"]/);
+                // A GridView LinkButton often renders as
+                // WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions("t","a",...))
+                // rather than a bare __doPostBack('t','a'). Matching only the
+                // bare form reports "no links" on a page full of them.
+                const postback =
+                    raw.match(/__doPostBack\\(\\s*['"]([^'"]*)['"]\\s*,\\s*['"]([^'"]*)['"]/) ||
+                    raw.match(/WebForm_PostBackOptions\\(\\s*['"]([^'"]*)['"]\\s*,\\s*['"]([^'"]*)['"]/);
                 const opened = raw.match(/window\\.open\\(\\s*['"]([^'"]+)['"]/);
 
                 const entry = {
@@ -424,6 +506,18 @@ def main() -> int:
 
     if report.get("href_warning"):
         print(f"\n!! {report['href_warning']}")
+
+    if report.get("sample_row_links"):
+        print("\n=== first data row — every link, verbatim ===")
+        for entry in report["sample_row_links"]:
+            print(f"  text={entry['text']!r} id={entry['id']!r}")
+            print(f"    href={entry['href']!r}")
+            if entry.get("onclick"):
+                print(f"    onclick={entry['onclick']!r}")
+
+    if report.get("detail_probe"):
+        print("\n=== following a row link ===")
+        print(json.dumps(report["detail_probe"], indent=2, ensure_ascii=False)[:2000])
 
     if report.get("sample_item_text"):
         print("\n=== sample row/card text ===")
