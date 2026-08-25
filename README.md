@@ -93,7 +93,7 @@ Three candidate Israeli sources were considered. Probe results as of
 |---|---|---|
 | `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | **Verified and enabled.** ASP.NET WebForms; selectors, column map, pager and detail URL all confirmed live |
 | `sapakim.mod.gov.il/home` — MOD suppliers portal | none, and none planned | **`robots.txt` disallows, for `*` and for our agent. Do not scrape it.** |
-| `gov.il` publications collector | `govil` | **Undetermined.** There is no `robots.txt` — see below. Stays disabled until re-probed |
+| `gov.il` publications collector | `govil` | **Has a public JSON API** — see below. The agent should target that, not selectors. Still disabled pending the API probe |
 
 ### sapakim.mod.gov.il is off limits
 
@@ -102,9 +102,9 @@ no agent, no probe beyond the robots check, no workaround. If this portal's
 data is wanted, the route is an access agreement with the operator, not a
 scraper.
 
-**Caveat:** that check ran before the probe distinguished a real disallow
-from a missing `robots.txt` (below). It is worth re-running to confirm the
-verdict was a policy and not the same artefact that misread gov.il.
+**Re-confirmed** after the probe learned to tell a real disallow from a
+missing `robots.txt`: sapakim serves a genuine `User-agent: * / Disallow: /`.
+The verdict was policy, not artefact.
 
 ### gov.il is undetermined, not closed
 
@@ -136,6 +136,41 @@ The probe now separates three outcomes rather than two:
 
 That is a decision for a human, so the probe stops and makes you pass a flag
 to continue. It will not let you past a *real* disallow.
+
+### gov.il has a public JSON API
+
+Probing gov.il with `--robots-inconclusive-ok` found it is an Angular SPA
+backed by a JSON API on **`openapi-gc.digital.gov.il`** — the government ICT
+authority's gateway, with `openapi` in the hostname. That is the integration
+target: an API survives redesigns that break every selector, returns
+structured data, needs no browser, and is cheap to poll.
+
+The collector exposes a full taxonomy — 149 offices, 85 publication types,
+679 topics, 766 units — so tenders can be filtered server-side instead of
+fetched and sifted.
+
+The listing call the SPA made returned `{"total": 0, "results": []}`, and the
+page showed "אין תוצאות". **That is not an empty portal — it is a wrong
+query.** The SPA normalises the URL's `publicationType=tenders` into
+`Type=tenders`, and `Type` is a taxonomy filter whose valid values come from
+`GetTypesList`; `tenders` is not one of them. The collector type that selects
+tender notices is `rfp`.
+
+`tools/probe_govil_api.py` settles it, using only the standard library:
+
+```powershell
+python tools\probe_govil_api.py --out govil-api.json
+```
+
+It checks the API host's own `robots.txt` (a different host from
+`www.gov.il`, so a separate policy), dumps the tender-related `Type` values,
+tries several query shapes and reports `total` for each, and prints one full
+result record — which is what the agent maps into a `TenderStub`.
+
+**Note on `www.gov.il`:** there is no `robots.txt` there, and the CDN answers
+library user-agents with `403`. That is not a prohibition, but it is a signal
+the operator filters automated traffic. The API host is the right door to
+knock on, and its policy is what governs.
 
 ### mod-balam — what the probe settled
 
