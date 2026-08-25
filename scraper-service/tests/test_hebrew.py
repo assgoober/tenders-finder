@@ -118,6 +118,22 @@ def test_date_digits_are_not_misread_as_a_time():
     assert parse_israeli_datetime("03/04/2026") == datetime(2026, 4, 3, 0, 0, tzinfo=ISRAEL_TZ)
 
 
+def test_time_before_date_is_parsed():
+    """The MOD BALAM listing writes deadlines time-first: "16:00 26/08/2026".
+    Reading only the text after the date drops the time, and the deadline
+    silently becomes midnight — sixteen hours early, and still a valid
+    timestamp. Confirmed against a live probe of the portal."""
+    assert parse_israeli_datetime("16:00 26/08/2026") == datetime(
+        2026, 8, 26, 16, 0, tzinfo=ISRAEL_TZ
+    )
+
+
+def test_both_orderings_agree():
+    assert parse_israeli_datetime("16:00 26/08/2026") == parse_israeli_datetime(
+        "26/08/2026 16:00"
+    )
+
+
 def test_invalid_clock_values_fall_back_to_midnight():
     assert parse_israeli_datetime("03/04/2026 99:99") == datetime(
         2026, 4, 3, 0, 0, tzinfo=ISRAEL_TZ

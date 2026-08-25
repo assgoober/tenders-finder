@@ -62,26 +62,56 @@ def test_agent_is_registered():
 
 
 def test_row_becomes_a_normalized_stub():
+    """Values taken from a live probe row of the BALAM listing."""
     stub = agent().build_stub(
         source_url="https://www.online.mod.gov.il/Online2016/Pages/General/Balam/Detail.aspx?id=884",
-        reference="  4-2026  ",
-        title='‏אספקת מערכות קשר טקטיות‎',
-        buyer_text="אגף הרכש",
-        publication_text="12/02/2026",
-        deadline_text="20/03/2026 14:00",
-        status_text="פתוח",
+        reference="  1000957926  ",
+        title="רכש דלקני מתכת 20 ליטר ריקים המשך...",
+        publication_text="06/08/2026",
+        deadline_text="16:00 26/08/2026",
+        contact_text="03-6977476",
     )
 
-    assert stub.external_id == "4-2026"
+    assert stub.external_id == "1000957926"
+    assert stub.title == "רכש דלקני מתכת 20 ליטר ריקים"
+    assert stub.buyer_name == "משרד הביטחון"
+    assert stub.deadline == datetime(2026, 8, 26, 16, 0, tzinfo=ISRAEL_TZ)
+    assert stub.publication_date.date().isoformat() == "2026-08-06"
+    assert stub.listing_metadata["contact_phone"] == "03-6977476"
+
+
+def test_portal_deadline_format_keeps_the_submission_time():
+    """The listing writes the deadline time-first. Dropping the time makes
+    the deadline midnight — sixteen hours early, and still a valid value."""
+    stub = agent().build_stub(
+        source_url="https://x/y", title="מכרז", deadline_text="16:00 26/08/2026"
+    )
+    assert (stub.deadline.hour, stub.deadline.minute) == (16, 0)
+
+
+def test_truncation_marker_is_stripped_from_the_title():
+    """The listing clips long titles with 'המשך...'. Left in, it is stored,
+    shown in the dashboard, and embedded — a token every truncated tender
+    shares, which pulls their vectors together."""
+    stub = agent().build_stub(
+        source_url="https://x/y", title="רכש דלקני מתכת 20 ליטר ריקים המשך..."
+    )
+    assert stub.title == "רכש דלקני מתכת 20 ליטר ריקים"
+
+
+def test_untruncated_titles_are_untouched():
+    stub = agent().build_stub(source_url="https://x/y", title="אספקת מערכות קשר טקטיות")
     assert stub.title == "אספקת מערכות קשר טקטיות"
-    assert stub.buyer_name == "אגף הרכש"
-    assert stub.deadline == datetime(2026, 3, 20, 14, 0, tzinfo=ISRAEL_TZ)
-    assert stub.listing_metadata["normalized_status"] == "open"
+
+
+def test_bidi_marks_are_stripped_from_titles():
+    stub = agent().build_stub(source_url="https://x/y", title="\u200fאספקת מערכות קשר\u200e")
+    assert stub.title == "אספקת מערכות קשר"
 
 
 def test_buyer_defaults_to_the_ministry():
-    """Every row on this portal is MOD procurement, so an empty buyer column
-    is still a known buyer — not an unknown one."""
+    """The listing has no buyer column — every row is MOD procurement, so an
+    absent buyer is a known buyer, not an unknown one."""
     stub = agent().build_stub(source_url="https://x/y", title="מכרז")
     assert stub.buyer_name == "משרד הביטחון"
 
@@ -162,6 +192,16 @@ def test_column_indexes_are_configurable_per_portal_layout():
         title="כותרת",
     )
     assert stub.external_id == "REF-9"
+
+
+def test_contract_matches_the_probed_column_map():
+    """Guards the observed layout: a silent index shift swaps two fields
+    rather than raising, so the mapping is asserted rather than trusted."""
+    assert (CONTRACT.col_reference, CONTRACT.col_title) == (1, 2)
+    assert (CONTRACT.col_deadline, CONTRACT.col_publication_date) == (4, 5)
+    # Neither column exists on this listing.
+    assert CONTRACT.col_buyer is None
+    assert CONTRACT.col_status is None
 
 
 # --- Detail enrichment -------------------------------------------------------

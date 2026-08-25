@@ -247,6 +247,18 @@ async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) 
             pagers[selector] = len(await page.query_selector_all(selector))
         report["pager_candidates"] = pagers
 
+        # On a WebForms page, both the row links and the pager are usually
+        # __doPostBack calls rather than hrefs, so no CSS guess finds them.
+        # Dumping the actual postback targets answers two questions at once:
+        # which control opens a tender, and which control changes the page.
+        report["postback_targets"] = await collect_postback_targets(page)
+        if not any(isinstance(n, int) and n > 0 for n in pagers.values()):
+            report["pager_note"] = (
+                "No pager matched. Check `postback_targets` below for a control whose "
+                "argument looks like 'Page$2' — that is the pager. If none appears, the "
+                "listing is single-page and the agent should process one page."
+            )
+
         fixture_dir.mkdir(parents=True, exist_ok=True)
         listing_fixture = fixture_dir / "listing.html"
         listing_fixture.write_text(html, encoding="utf-8")
@@ -277,6 +289,52 @@ async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) 
         await browser.close()
 
     return report
+
+
+async def collect_postback_targets(page, limit: int = 40) -> list[dict]:
+    """List every `__doPostBack` / `window.open` call on the page.
+
+    WebForms encodes both row navigation and pagination as
+    `__doPostBack('<control id>', '<argument>')`. The argument is the tell:
+    `Page$2` is the pager, while a row id or key is a tender link. Reading
+    them beats guessing selectors, because neither has an href to match on.
+    """
+    return await page.evaluate(
+        """(limit) => {
+            const out = [];
+            const seen = new Set();
+            const nodes = document.querySelectorAll('a, input[type=submit], input[type=button], [onclick]');
+
+            for (const node of nodes) {
+                const raw = (node.getAttribute('href') || '') + ' ' + (node.getAttribute('onclick') || '');
+                if (!/__doPostBack|window\\.open/.test(raw)) continue;
+
+                const postback = raw.match(/__doPostBack\\(\\s*['"]([^'"]*)['"]\\s*,\\s*['"]([^'"]*)['"]/);
+                const opened = raw.match(/window\\.open\\(\\s*['"]([^'"]+)['"]/);
+
+                const entry = {
+                    text: (node.innerText || node.value || '').trim().slice(0, 60),
+                    id: node.id || null,
+                    target: postback ? postback[1] : null,
+                    argument: postback ? postback[2] : null,
+                    opens_url: opened ? opened[1] : null,
+                };
+
+                const key = JSON.stringify(entry);
+                if (seen.has(key)) continue;
+                seen.add(key);
+
+                entry.looks_like = entry.argument && /^Page\\$/.test(entry.argument)
+                    ? 'pager'
+                    : (entry.opens_url ? 'opens a URL' : 'row / action');
+                out.push(entry);
+
+                if (out.length >= limit) break;
+            }
+            return out;
+        }""",
+        limit,
+    )
 
 
 def describe_shape(value, depth: int = 0) -> object:
@@ -347,6 +405,18 @@ def main() -> int:
             ensure_ascii=False,
         )
     )
+
+    if report.get("pager_note"):
+        print(f"\n!! {report['pager_note']}")
+
+    if report.get("postback_targets"):
+        print("\n=== __doPostBack / window.open targets ===")
+        for entry in report["postback_targets"]:
+            print(
+                f"  [{entry['looks_like']:>12}] text={entry['text']!r} "
+                f"target={entry['target']!r} arg={entry['argument']!r} "
+                f"opens={entry['opens_url']!r}"
+            )
 
     if report.get("column_map"):
         print("\n=== column map (set the contract's col_* indexes from this) ===")

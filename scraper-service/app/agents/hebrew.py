@@ -151,16 +151,20 @@ def parse_israeli_datetime(value: str | None, *, default_time: time | None = Non
         return None
 
     text = clean_text(value) or ""
-    # Look for the clock only after the date, so the date's own digits cannot
-    # be read as a time ("03/04/2026" would otherwise yield 03:04).
-    tail = text
+
+    # Cut the matched date out of the string, then look for a clock in what
+    # remains. Searching only *after* the date misses the MOD BALAM portal's
+    # format, which puts the time first: "16:00 26/08/2026". Searching the
+    # whole string instead would read "03/04/2026" as 03:04. Excising the
+    # date handles both orders.
+    remainder = text
     for pattern in (_HEBREW_DATE, _ISO_DATE, _NUMERIC_DATE):
         match = pattern.search(text)
         if match:
-            tail = text[match.end() :]
+            remainder = f"{text[: match.start()]} {text[match.end() :]}"
             break
 
-    clock = _TIME.search(tail)
+    clock = _TIME.search(remainder)
     if clock:
         hour, minute = int(clock.group("hour")), int(clock.group("minute"))
         if 0 <= hour <= 23 and 0 <= minute <= 59:

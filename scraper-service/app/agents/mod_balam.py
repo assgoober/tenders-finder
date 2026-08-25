@@ -24,18 +24,43 @@ the navigation model. Three consequences, all handled below:
    for. Entering without it can return the previous session's filtered view,
    so every run enters through the reset URL for a deterministic result set.
 
-## Read this before enabling the agent
+## Probe results — 2026-08-25
 
-The parsing and pagination logic is written and tested. The **portal
-contract** — the table and row selectors, the column order, the pager and the
-detail link — is NOT verified against the live site: this was built in an
-environment with no network route to `online.mod.gov.il`, so nothing here was
-observed.
+A live probe confirmed:
 
-Run `python -m tools.probe_portal --url "<BALAM URL>" --detail-sample` from a
-machine that can reach it. Fill the results into `BalamContract` and set
-`verified=True`. Until then the agent refuses to run rather than silently
-returning zero tenders.
+* `robots.txt` **allows** this path, for our agent and for `*`. No crawl-delay
+  is declared, so the conservative defaults in `Settings` stand.
+* Architecture is ASP.NET WebForms (`__VIEWSTATE`, `__doPostBack` present),
+  as the URL suggested.
+* `table[id*='gv'] tr` matches the listing (23 rows: header plus data).
+* The column map, now recorded in `BalamContract`. Two findings from it were
+  load-bearing: the deadline is written **time first** (`16:00 26/08/2026`),
+  which silently dropped the submission time until `hebrew.py` was fixed to
+  excise the date before looking for a clock; and titles carry a `המשך...`
+  truncation marker that has to be stripped before storing or embedding.
+
+## Still blocking — the agent stays disabled
+
+Two things the probe could not answer, either of which makes the agent
+useless in a way that is invisible at runtime:
+
+1. **No pagination control was found.** Every pager selector matched zero
+   elements. Either the listing is single-page, or it pages through a control
+   not yet identified. If it pages and we do not follow it, the agent silently
+   ingests only the first page and every later tender is simply never seen.
+2. **Row links are `javascript:__doPostBack(...)`, not URLs.** Every tender
+   therefore has no addressable source, and `_detail_url` rejects those — so
+   the agent would currently skip every row. A tender without a link back to
+   its notice also cannot be verified by a bid team, which is the product's
+   whole trust model.
+
+Both are answered by the postback dump the probe now emits. Re-run:
+
+    python tools/probe_portal.py --url "<BALAM URL>" --detail-sample
+
+then fill in `detail_link_selector` / the detail URL pattern and
+`pager_selector`, and set `verified=True`. Until then the agent refuses to
+run rather than silently returning zero tenders.
 
 ## Operational notes
 
@@ -77,33 +102,61 @@ class BalamContract:
     When the portal is redesigned, this is the only block that changes.
     """
 
-    #: Set True only after tools/probe_portal.py confirms these values.
+    #: Still False. A live probe on 2026-08-25 confirmed robots.txt, the
+    #: architecture, the row selector and the column map (all recorded below),
+    #: but left two things unresolved that make the agent useless until
+    #: answered — see the module docstring:
+    #:   1. no pagination control was found on the page;
+    #:   2. row links are javascript postbacks, so no tender has a URL.
     verified: bool = False
 
     #: Reset=1 clears server-side session filters. Always enter through it.
     listing_path: str = "/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1"
 
-    #: The GridView and its data rows. WebForms GridViews render header and
-    #: pager as <tr> too, so the row selector must exclude them.
-    table_selector: str = "table[id*='grd'], table[id*='gv'], table.GridView"
-    row_selector: str = "tr:not(.GridHeader):not(.pager):not(.GridPager)"
+    #: Confirmed by probe: `table[id*='gv'] tr` matched 23 rows (one header
+    #: plus data). Header rows carry <th>, and `_read_listing_page` skips any
+    #: row with fewer than two <td>, so no class-based exclusion is needed —
+    #: the GridHeader/GridPager classes this previously guessed at do not
+    #: exist on this page.
+    table_selector: str = "table[id*='gv']"
+    row_selector: str = "tr"
 
-    #: Zero-based column indexes within a row. WebForms tables are positional
-    #: and rarely carry useful class names, so columns are read by position.
-    #: Verify against a real row before enabling — a wrong index silently
-    #: swaps two fields rather than failing.
-    col_reference: int = 0
-    col_title: int = 1
-    col_buyer: int | None = 2
-    col_publication_date: int | None = 3
+    #: Zero-based column indexes, taken from the probe's column map:
+    #:   0  (empty — icon/select column)
+    #:   1  1000957926              reference number
+    #:   2  רכש דלקני מתכת...       title, with a "המשך..." truncation marker
+    #:   3  (empty)
+    #:   4  16:00 26/08/2026        submission deadline — TIME FIRST
+    #:   5  06/08/2026              publication date
+    #:   6  03-6977476              contact phone
+    #: A wrong index here swaps two fields silently rather than failing, so
+    #: re-run the probe after any portal change.
+    col_reference: int = 1
+    col_title: int = 2
+    #: No buyer column: every row on this portal is MOD procurement.
+    col_buyer: int | None = None
     col_deadline: int | None = 4
-    col_status: int | None = 5
+    col_publication_date: int | None = 5
+    #: No status column on the listing. Status is inferred from the deadline
+    #: by the pipeline, or read from the detail page.
+    col_status: int | None = None
+    col_contact: int | None = 6
 
     #: Link out of a row to the tender's own page.
+    #: The probe found row links are `javascript:__doPostBack(...)` with no
+    #: href, so this currently matches nothing usable. Resolving it needs the
+    #: postback target and the detail URL pattern — run the probe again with
+    #: the postback dump it now emits.
     detail_link_selector: str = "a[href*='Balam'], a[id*='lnk']"
 
-    #: Pager container. Individual page links are matched by their text.
+    #: Pager container. Every candidate selector the probe tried matched zero
+    #: elements, so either this listing is single-page or it pages through a
+    #: control not yet identified. Left as a best guess; with no pager found
+    #: the agent processes one page and logs that it did.
     pager_selector: str = ".GridPager, tr.pager, [id*='Pager']"
+
+    #: Truncation marker the portal appends to clipped titles in the listing.
+    title_truncation_marker: str = "המשך..."
 
     detail_body_selector: str = "form#aspnetForm, body"
     attachment_selector: str = "a[href$='.pdf'], a[href*='Download'], a[href*='Attachment']"
@@ -209,6 +262,7 @@ class ModBalamAgent(PlaywrightPortalAgent):
                     publication_text=self._column(texts, self.contract.col_publication_date),
                     deadline_text=self._column(texts, self.contract.col_deadline),
                     status_text=self._column(texts, self.contract.col_status),
+                    contact_text=self._column(texts, self.contract.col_contact),
                     row_text=" | ".join(t for t in texts if t),
                 )
             )
@@ -336,9 +390,10 @@ class ModBalamAgent(PlaywrightPortalAgent):
         publication_text: str | None = None,
         deadline_text: str | None = None,
         status_text: str | None = None,
+        contact_text: str | None = None,
         row_text: str | None = None,
     ) -> TenderStub:
-        title = clean_text(title) or source_url
+        title = self.clean_title(title) or source_url
         reference = clean_text(reference)
 
         return TenderStub(
@@ -353,10 +408,29 @@ class ModBalamAgent(PlaywrightPortalAgent):
                 "reference_number": reference,
                 "raw_status": clean_text(status_text),
                 "normalized_status": parse_status(status_text),
+                "contact_phone": clean_text(contact_text),
                 "raw_row": row_text,
                 "portal": self.key,
             },
         )
+
+    def clean_title(self, title: str | None) -> str | None:
+        """Strip the portal's truncation marker from a listing title.
+
+        The listing clips long titles and appends "המשך..." as a read-more
+        affordance. Left in place it becomes part of the stored title, shows
+        up in the dashboard, and gets embedded — polluting the vector with a
+        token every truncated tender shares.
+        """
+        cleaned = clean_text(title)
+        if not cleaned:
+            return None
+
+        marker = self.contract.title_truncation_marker
+        if marker and cleaned.endswith(marker):
+            cleaned = cleaned[: -len(marker)].strip()
+
+        return cleaned or None
 
     def external_id_from(
         self, source_url: str, reference: str | None = None, title: str | None = None

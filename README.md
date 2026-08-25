@@ -86,24 +86,52 @@ organization, so no component needs an organization filter of its own.
 
 ## Israeli portal agents
 
-Three candidate Israeli sources, and they are three different architectures.
-Which one you are facing decides the whole agent design:
+Three candidate Israeli sources were considered. Probe results as of
+2026-08-25:
 
-| Portal | Agent | Architecture |
+| Portal | Agent | Status |
 |---|---|---|
-| `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | ASP.NET WebForms, postback pagination |
-| `sapakim.mod.gov.il/home` — MOD suppliers portal | *not built* | SPA — almost certainly a JSON API behind it |
-| `gov.il` publications collector | `govil` | server-rendered or XHR |
+| `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | **robots.txt allows.** ASP.NET WebForms confirmed. Selectors and column map confirmed. Two blockers remain — see below |
+| `sapakim.mod.gov.il/home` — MOD suppliers portal | none, and none planned | **`robots.txt` disallows, for `*` and for our agent. Do not scrape it.** |
+| `gov.il` publications collector | `govil` | Not yet probed |
 
-**Both agents ship disabled.** Their contract blocks have `verified=False`
-and they raise `PortalContractUnverified` rather than running. The
-normalization, pagination and dedup logic is written and tested; the
-selectors are not — nothing was observed against a live site, because the
-environment this was built in has no network route to any of these hosts.
+### sapakim.mod.gov.il is off limits
 
-The guard exists because the failure it prevents is invisible: a stale
-selector returns zero tenders, which looks exactly like a quiet week in
-procurement. Nothing downstream can tell the difference.
+Its `robots.txt` disallows the path for every user agent. That settles it:
+no agent, no probe beyond the robots check, no workaround. If this portal's
+data is wanted, the route is an access agreement with the operator, not a
+scraper.
+
+### mod-balam — confirmed, and still disabled
+
+The probe confirmed `robots.txt` permission, the WebForms architecture,
+`table[id*='gv'] tr` as the row selector, and the column map (now recorded
+in `BalamContract`). Two findings from that map were load-bearing:
+
+- **The deadline is written time-first** — `16:00 26/08/2026`. The parser
+  read only the text after the date, so the submission time was dropped and
+  every deadline became midnight: sixteen hours early, and a perfectly valid
+  timestamp that nothing downstream would question. Fixed, with a test.
+- **Titles carry a `המשך...` truncation marker.** Left in it would be
+  stored, displayed, and embedded — a token every clipped tender shares,
+  pulling their vectors together. Stripped, with a test.
+
+Two blockers keep `verified=False`, both invisible at runtime if ignored:
+
+1. **No pagination control was found** — every pager selector matched zero
+   elements. If the listing does page and the agent does not follow it, only
+   the first page is ever ingested and later tenders are simply never seen.
+2. **Row links are `javascript:__doPostBack(...)`, not URLs.** Every tender
+   would be skipped, and a tender with no link back to its notice cannot be
+   verified by a bid team — which is the product's whole trust model.
+
+The probe now dumps every `__doPostBack` target and argument, which answers
+both: an argument like `Page$2` is the pager, anything else is a row link.
+Re-run it and both blockers close.
+
+The `verified` guard exists because the failure it prevents is invisible: a
+stale selector returns zero tenders, which looks exactly like a quiet week
+in procurement. Nothing downstream can tell the difference.
 
 ### Verifying a portal
 
