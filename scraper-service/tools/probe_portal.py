@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -95,13 +96,68 @@ def check_robots(url: str) -> dict:
         # and let a human decide.
         return {"ok": False, "url": robots_url, "error": f"{type(exc).__name__}: {exc}"}
 
-    return {
+    result = {
         "ok": True,
         "url": robots_url,
         "allowed_for_our_agent": parser.can_fetch(USER_AGENT, url),
         "allowed_for_wildcard": parser.can_fetch("*", url),
         "crawl_delay": parser.crawl_delay(USER_AGENT) or parser.crawl_delay("*"),
     }
+
+    # On a disallow, the parsed verdict alone is not enough to act on. Two
+    # very different situations produce the same `false`: the whole host is
+    # closed, or only this route is. And a site that serves an HTML error
+    # page at /robots.txt parses as "disallow everything" while actually
+    # having no policy at all. So fetch the file and show it.
+    if not result["allowed_for_wildcard"]:
+        result.update(inspect_robots(robots_url, url))
+
+    return result
+
+
+def inspect_robots(robots_url: str, target_url: str) -> dict:
+    """Fetch robots.txt verbatim and work out how broad the disallow is."""
+    import urllib.request
+
+    detail: dict = {}
+    try:
+        request = urllib.request.Request(robots_url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            content_type = response.headers.get("content-type", "")
+            body = response.read(200_000).decode("utf-8", errors="replace")
+    except Exception as exc:  # noqa: BLE001
+        return {"robots_fetch_error": f"{type(exc).__name__}: {exc}"}
+
+    detail["robots_content_type"] = content_type
+    detail["robots_body"] = body[:4000]
+
+    if "html" in content_type.lower() or body.lstrip()[:1] == "<":
+        # Not a robots.txt at all. The parser's verdict is meaningless here.
+        detail["robots_warning"] = (
+            "This is not a robots.txt — the server returned HTML. The disallow verdict "
+            "above is an artefact of parsing an error page, not a real policy. Confirm "
+            "the site's terms of use directly before drawing any conclusion."
+        )
+        return detail
+
+    detail["sitemaps"] = re.findall(r"(?im)^\s*sitemap:\s*(\S+)", body)
+
+    # Which groups actually disallow, and how broadly.
+    blanket = re.search(r"(?ims)^\s*user-agent:\s*\*\s*$.*?^\s*disallow:\s*/\s*$", body)
+    detail["blanket_disallow_for_all_agents"] = bool(blanket)
+    detail["scope"] = (
+        "The entire host is closed to all agents."
+        if blanket
+        else "Only specific paths are disallowed — another route on this host may be open."
+    )
+
+    path = urlparse(target_url).path or "/"
+    detail["disallow_rules"] = [
+        rule for rule in re.findall(r"(?im)^\s*disallow:\s*(\S*)", body)
+        if rule and (path.startswith(rule) or rule == "/")
+    ][:20]
+
+    return detail
 
 
 def detect_architecture(html: str, json_calls: list[dict]) -> dict:
@@ -490,11 +546,27 @@ def main() -> int:
     print(json.dumps(robots, indent=2, ensure_ascii=False))
 
     if robots.get("ok") and not robots.get("allowed_for_wildcard"):
+        if robots.get("robots_warning"):
+            print(f"\n!! {robots['robots_warning']}", file=sys.stderr)
+        else:
+            print(f"\nScope: {robots.get('scope', 'unknown')}")
+            if robots.get("sitemaps"):
+                print("\nSitemaps declared in robots.txt:")
+                for sitemap in robots["sitemaps"]:
+                    print(f"  {sitemap}")
+            if robots.get("disallow_rules"):
+                print(f"\nRules covering this path: {robots['disallow_rules']}")
+
         print(
             "\nrobots.txt disallows this path. Stop here and resolve access with the portal "
             "operator before scraping it.",
             file=sys.stderr,
         )
+        if args.out:
+            args.out.write_text(
+                json.dumps({"robots": robots}, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            print(f"Robots detail written to {args.out}", file=sys.stderr)
         return 2
 
     report = asyncio.run(
