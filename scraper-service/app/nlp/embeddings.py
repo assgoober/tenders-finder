@@ -1,0 +1,144 @@
+"""Embedding providers.
+
+Anthropic does not serve an embeddings endpoint, so the vector half of the
+matching engine uses a separate provider. Voyage AI is the default; the
+protocol below keeps that choice swappable (REPOMIX.md ADR-6).
+
+Two things matter for correctness:
+
+  * Dimension must match the `vector(N)` column exactly. A mismatch is a
+    hard database error, so it is checked here rather than at INSERT time.
+  * Query and document vectors must come from the same provider *and* the
+    same model. Cosine similarity across two embedding spaces is noise that
+    looks like a score.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import math
+from typing import Protocol, runtime_checkable
+
+from ..config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
+
+# Voyage distinguishes the two: a corpus document and a search query get
+# different prefixes and embed into comparable but not identical positions.
+InputType = str  # "document" | "query"
+
+
+@runtime_checkable
+class EmbeddingProvider(Protocol):
+    model_name: str
+    dimension: int
+
+    async def embed(self, texts: list[str], *, input_type: InputType = "document") -> list[list[float]]:
+        ...
+
+
+class VoyageEmbeddingProvider:
+    """Production provider, backed by the Voyage AI REST API."""
+
+    ENDPOINT = "https://api.voyageai.com/v1/embeddings"
+    # Voyage caps batch size; larger lists are chunked.
+    MAX_BATCH = 96
+
+    def __init__(self, settings: Settings) -> None:
+        if not settings.voyage_api_key:
+            raise ValueError(
+                "VOYAGE_API_KEY is required for the 'voyage' embedding provider. "
+                "Set EMBEDDING_PROVIDER=hash for offline development."
+            )
+        self._api_key = settings.voyage_api_key
+        self.model_name = settings.voyage_model
+        self.dimension = settings.embedding_dim
+
+    async def embed(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[list[float]]:
+        import httpx
+
+        vectors: list[list[float]] = []
+        async with httpx.AsyncClient(timeout=60.0) as http:
+            for start in range(0, len(texts), self.MAX_BATCH):
+                batch = texts[start : start + self.MAX_BATCH]
+                response = await http.post(
+                    self.ENDPOINT,
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json={
+                        "input": batch,
+                        "model": self.model_name,
+                        "input_type": input_type,
+                        "output_dimension": self.dimension,
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                # Voyage does not guarantee response order matches input order.
+                ordered = sorted(payload["data"], key=lambda d: d["index"])
+                vectors.extend(item["embedding"] for item in ordered)
+
+        _assert_dimensions(vectors, self.dimension)
+        return vectors
+
+
+class HashEmbeddingProvider:
+    """Deterministic local provider for development and tests.
+
+    Produces stable, normalized vectors with no network call, so the whole
+    pipeline — including the pgvector insert and the matching trigger — can
+    be exercised without API keys. It captures lexical overlap only; it is
+    not a semantic model and must never be used in production.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self.model_name = "hash-dev"
+        self.dimension = settings.embedding_dim
+
+    async def embed(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[list[float]]:
+        return [self._embed_one(text) for text in texts]
+
+    def _embed_one(self, text: str) -> list[float]:
+        vector = [0.0] * self.dimension
+        tokens = [t for t in text.lower().split() if t]
+
+        for token in tokens:
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            index = int.from_bytes(digest[:4], "big") % self.dimension
+            # Sign from a different byte so tokens don't all push one way.
+            sign = 1.0 if digest[4] % 2 == 0 else -1.0
+            vector[index] += sign
+
+        norm = math.sqrt(sum(v * v for v in vector))
+        if norm == 0:
+            # Cosine distance is undefined against a zero vector; anchor it.
+            vector[0] = 1.0
+            return vector
+        return [v / norm for v in vector]
+
+
+def _assert_dimensions(vectors: list[list[float]], expected: int) -> None:
+    for vector in vectors:
+        if len(vector) != expected:
+            raise ValueError(
+                f"embedding provider returned {len(vector)} dimensions, "
+                f"but the schema declares vector({expected}). "
+                "Changing provider requires a migration and a full re-embedding."
+            )
+
+
+def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvider:
+    settings = settings or get_settings()
+    provider = settings.embedding_provider.lower()
+
+    if provider == "voyage":
+        return VoyageEmbeddingProvider(settings)
+    if provider == "hash":
+        logger.warning("using the hash embedding provider — development only, not semantic")
+        return HashEmbeddingProvider(settings)
+
+    raise ValueError(f"unknown embedding provider: {settings.embedding_provider!r}")
