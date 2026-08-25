@@ -262,6 +262,17 @@ async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) 
             pagers[selector] = len(await page.query_selector_all(selector))
         report["pager_candidates"] = pagers
 
+        # When nothing matched, the URL is probably a landing page rather than
+        # the listing itself. Dumping the tender-ish links turns a dead-end run
+        # into a pointer at the right URL, instead of just "0 items".
+        if not best:
+            report["candidate_links"] = await collect_candidate_links(page)
+            report["no_items_note"] = (
+                "No item selector matched. This is most likely a landing page rather than "
+                "the listing, or the content is behind a filter that has to be submitted. "
+                "Check `candidate_links` for a more specific URL and probe that instead."
+            )
+
         # On a WebForms page, both the row links and the pager are usually
         # __doPostBack calls rather than hrefs, so no CSS guess finds them.
         # Dumping the actual postback targets answers two questions at once:
@@ -314,6 +325,41 @@ async def probe(url: str, *, detail_sample: bool, headless: bool, wait_ms: int) 
         await browser.close()
 
     return report
+
+
+async def collect_candidate_links(page, limit: int = 40) -> list[dict]:
+    """Internal links that look like they lead to a tender listing.
+
+    Matches on Hebrew and English alike: a gov.il route may say `tenders`,
+    `michrazim` or `מכרזים` depending on which generation of the site built
+    the page.
+    """
+    return await page.evaluate(
+        """(limit) => {
+            const pattern = /(מכרז|tender|michraz|publication|collector|רכש|procure)/i;
+            const out = [];
+            const seen = new Set();
+
+            for (const a of document.querySelectorAll('a[href]')) {
+                const href = a.getAttribute('href') || '';
+                const text = (a.innerText || '').trim();
+                if (!href || href.startsWith('#')) continue;
+                if (!pattern.test(href) && !pattern.test(text)) continue;
+
+                let absolute;
+                try { absolute = new URL(href, location.href).href; } catch { continue; }
+                // Internal links only - an outbound link is not our listing.
+                if (new URL(absolute).host !== location.host) continue;
+                if (seen.has(absolute)) continue;
+                seen.add(absolute);
+
+                out.push({ text: text.slice(0, 80), url: absolute });
+                if (out.length >= limit) break;
+            }
+            return out;
+        }""",
+        limit,
+    )
 
 
 async def follow_postback_row(page, item_selector: str, listing_url: str, fixture_dir, wait_ms: int) -> dict:
@@ -499,6 +545,14 @@ def main() -> int:
                 f"target={entry['target']!r} arg={entry['argument']!r} "
                 f"opens={entry['opens_url']!r}"
             )
+
+    if report.get("no_items_note"):
+        print(f"\n!! {report['no_items_note']}")
+
+    if report.get("candidate_links"):
+        print("\n=== candidate listing links on this page ===")
+        for entry in report["candidate_links"]:
+            print(f"  {entry['text']!r}\n    {entry['url']}")
 
     if report.get("column_map"):
         print("\n=== column map (set the contract's col_* indexes from this) ===")

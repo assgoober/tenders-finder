@@ -167,8 +167,7 @@ cd tenders-finder/scraper-service
 pip install playwright
 playwright install chromium
 
-python tools/probe_portal.py --url "https://sapakim.mod.gov.il/home"
-python tools/probe_portal.py --url "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1" --detail-sample
+python tools/probe_portal.py --url "https://www.gov.il/he/collectors/publications?publicationType=tenders" --detail-sample
 ```
 
 **Windows PowerShell** — backslashes, and one command per line
@@ -183,8 +182,17 @@ cd tenders-finder\scraper-service
 pip install playwright
 playwright install chromium
 
-python tools\probe_portal.py --url "https://sapakim.mod.gov.il/home"
-python tools\probe_portal.py --url "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1" --detail-sample
+python tools\probe_portal.py --url "https://www.gov.il/he/collectors/publications?publicationType=tenders" --detail-sample
+```
+
+If a run reports zero items, the URL is probably a landing page rather than
+the listing. The probe then dumps the page's tender-related links — probe
+whichever of those looks like the real listing. Known candidates for gov.il:
+
+```
+/he/collectors/publications?publicationType=tenders
+/he/departments/publications?publicationType=tenders
+/he/departments/topics/tenders-sub/govil-landing-page
 ```
 
 Add `--headed` to watch the browser work, and `--out report.json` to save the

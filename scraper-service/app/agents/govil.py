@@ -69,6 +69,16 @@ class GovIlContract:
 
     #: Listing path. `publicationType` selects tender notices; leaving
     #: officeId unset returns every ministry.
+    #: UNVERIFIED — a guess at gov.il's route, never loaded. gov.il has been
+    #: rebuilt more than once and the tender collector has lived at several
+    #: paths. Probe these in order and keep whichever returns rows:
+    #:
+    #:   /he/collectors/publications?publicationType=tenders
+    #:   /he/departments/publications?publicationType=tenders
+    #:   /he/departments/topics/tenders-sub/govil-landing-page
+    #:
+    #: If a run reports zero items, the probe now dumps the page's
+    #: tender-related links — the real listing URL is usually one of them.
     listing_path: str = "/he/collectors/publications?publicationType=tenders"
 
     #: One card in the results list.
