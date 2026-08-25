@@ -93,27 +93,49 @@ Three candidate Israeli sources were considered. Probe results as of
 |---|---|---|
 | `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | **Verified and enabled.** ASP.NET WebForms; selectors, column map, pager and detail URL all confirmed live |
 | `sapakim.mod.gov.il/home` — MOD suppliers portal | none, and none planned | **`robots.txt` disallows, for `*` and for our agent. Do not scrape it.** |
-| `gov.il` publications collector | `govil` | **`robots.txt` disallows** both candidate paths, for `*` and for our agent. Stays disabled |
+| `gov.il` publications collector | `govil` | **Undetermined.** There is no `robots.txt` — see below. Stays disabled until re-probed |
 
-### Two of the three are off limits
+### sapakim.mod.gov.il is off limits
 
-`sapakim.mod.gov.il` and `www.gov.il` both disallow their tender paths in
-`robots.txt`, for `*` and for our agent alike. That settles both: no agent,
-no probe beyond the robots check, no workaround. If their data is wanted,
-the route is an access agreement with the operator, not a scraper.
+Its `robots.txt` disallows the path for every user agent. That settles it:
+no agent, no probe beyond the robots check, no workaround. If this portal's
+data is wanted, the route is an access agreement with the operator, not a
+scraper.
 
-This matters for planning. The assumption that breadth could be added
-without negotiating access does not hold for Israeli government portals —
-of the three checked, only the MOD BALAM list permits crawling, and it is
-the one that publishes no documents. Expanding coverage here means asking
-for access, or looking at sources that publish open data deliberately.
+**Caveat:** that check ran before the probe distinguished a real disallow
+from a missing `robots.txt` (below). It is worth re-running to confirm the
+verdict was a policy and not the same artefact that misread gov.il.
 
-On a disallow the probe now also fetches `robots.txt` verbatim and reports
-whether the whole host is closed or only specific routes, lists any declared
-sitemaps, and flags the case where a server returns an HTML error page at
-`/robots.txt` — which parses as "disallow everything" while being no policy
-at all. A blanket close and a single closed route call for different next
-steps, so the verdict alone is not enough to act on.
+### gov.il is undetermined, not closed
+
+An earlier run here reported "disallowed" and this file recorded gov.il as
+closed. **That was wrong.** `www.gov.il/robots.txt` does not exist — the
+site is an Angular SPA that serves its homepage for any unmatched path, so
+the response is HTML, not a robots policy.
+
+The disallow came from somewhere else: `RobotFileParser` fetches with
+urllib's own user-agent, gov.il's CDN answers that with `403`, and RFC 9309
+permits a crawler to read a `403` on `robots.txt` as a complete disallow. So
+the library reported a prohibition for a site that has stated no policy at
+all. Reproduced locally: default library agent gets `403`, ours gets `200`
+with the SPA shell.
+
+The probe now separates three outcomes rather than two:
+
+| Verdict | Meaning | Exit |
+|---|---|---|
+| `allowed` | A real `robots.txt` permits the path | continues |
+| `disallowed` | A real `robots.txt` forbids it | `2`, stops |
+| `inconclusive` | No `robots.txt` exists to read | `3`, stops unless `--robots-inconclusive-ok` |
+
+`inconclusive` is deliberately neither permission nor prohibition:
+
+- There is no `robots.txt`, so the robots convention imposes no restriction.
+- But the operator does filter automated traffic, and the site's terms of
+  use govern regardless of what `robots.txt` says or fails to say.
+
+That is a decision for a human, so the probe stops and makes you pass a flag
+to continue. It will not let you past a *real* disallow.
 
 ### mod-balam — what the probe settled
 

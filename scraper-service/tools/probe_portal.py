@@ -102,17 +102,58 @@ def check_robots(url: str) -> dict:
         "allowed_for_our_agent": parser.can_fetch(USER_AGENT, url),
         "allowed_for_wildcard": parser.can_fetch("*", url),
         "crawl_delay": parser.crawl_delay(USER_AGENT) or parser.crawl_delay("*"),
+        "verdict": "allowed",
     }
 
-    # On a disallow, the parsed verdict alone is not enough to act on. Two
-    # very different situations produce the same `false`: the whole host is
-    # closed, or only this route is. And a site that serves an HTML error
-    # page at /robots.txt parses as "disallow everything" while actually
-    # having no policy at all. So fetch the file and show it.
-    if not result["allowed_for_wildcard"]:
-        result.update(inspect_robots(robots_url, url))
+    if result["allowed_for_wildcard"]:
+        return result
 
+    # A disallow verdict is not enough to act on by itself. Three very
+    # different situations produce the same `false`:
+    #
+    #   1. A real robots.txt that closes the whole host.
+    #   2. A real robots.txt that closes only this route.
+    #   3. No robots.txt at all — RobotFileParser fetches with urllib's own
+    #      user-agent, and a CDN that answers 403 to library traffic makes it
+    #      set disallow_all. That is bot-protection, not a policy, and
+    #      reading it as a prohibition is a false negative that closes a
+    #      source nobody actually closed.
+    #
+    # So fetch the file ourselves and tell them apart.
+    result.update(inspect_robots(robots_url, url))
+    result["verdict"] = "inconclusive" if result.get("robots_is_not_a_policy") else "disallowed"
     return result
+
+
+def probe_with_default_agent(robots_url: str) -> dict:
+    """Repeat the robots fetch the way RobotFileParser does it.
+
+    RobotFileParser sends urllib's default user-agent. Many CDNs answer that
+    with 403, and RFC 9309 tells a crawler it may read a 403 on robots.txt as
+    a complete disallow — so the library reports "disallowed" for a site that
+    has no robots.txt and no stated policy at all. Showing both fetches side
+    by side makes that visible instead of leaving it to be guessed at.
+    """
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(robots_url, timeout=30) as response:
+            return {"status": response.status, "content_type": response.headers.get("content-type")}
+    except urllib.error.HTTPError as exc:
+        return {
+            "status": exc.code,
+            "blocked": exc.code in (401, 403),
+            "note": (
+                "The default library user-agent was refused while ours was served. "
+                "That is bot-protection, not a robots policy — but it is also a clear "
+                "signal the operator filters automated traffic."
+            )
+            if exc.code in (401, 403)
+            else None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 def inspect_robots(robots_url: str, target_url: str) -> dict:
@@ -132,12 +173,16 @@ def inspect_robots(robots_url: str, target_url: str) -> dict:
     detail["robots_body"] = body[:4000]
 
     if "html" in content_type.lower() or body.lstrip()[:1] == "<":
-        # Not a robots.txt at all. The parser's verdict is meaningless here.
+        # Not a robots.txt at all. The parser's verdict says nothing here.
+        detail["robots_is_not_a_policy"] = True
         detail["robots_warning"] = (
-            "This is not a robots.txt — the server returned HTML. The disallow verdict "
-            "above is an artefact of parsing an error page, not a real policy. Confirm "
-            "the site's terms of use directly before drawing any conclusion."
+            "There is no robots.txt at this URL — the server returned HTML "
+            f"({content_type}). The disallow verdict above is an artefact, not a policy."
         )
+        # Why did the parser see a disallow, then? Almost always because it
+        # fetches with urllib's own user-agent and got blocked. Reproduce
+        # that fetch so the discrepancy is visible rather than inferred.
+        detail["default_agent_fetch"] = probe_with_default_agent(robots_url)
         return detail
 
     detail["sitemaps"] = re.findall(r"(?im)^\s*sitemap:\s*(\S+)", body)
@@ -532,6 +577,13 @@ def describe_shape(value, depth: int = 0) -> object:
     return type(value).__name__
 
 
+def _write_robots_report(out: Path | None, robots: dict) -> None:
+    if not out:
+        return
+    out.write_text(json.dumps({"robots": robots}, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"Robots detail written to {out}", file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Probe a tender portal's architecture.")
     parser.add_argument("--url", required=True, help="Listing URL to probe.")
@@ -539,35 +591,59 @@ def main() -> int:
     parser.add_argument("--headed", action="store_true", help="Show the browser window.")
     parser.add_argument("--wait-ms", type=int, default=3000, help="Extra wait for late XHR.")
     parser.add_argument("--out", type=Path, help="Write the full JSON report here.")
+    parser.add_argument(
+        "--robots-inconclusive-ok",
+        action="store_true",
+        help=(
+            "Continue when there is no robots.txt to read. Not a way past a real "
+            "disallow — that still stops the probe."
+        ),
+    )
     args = parser.parse_args()
 
     robots = check_robots(args.url)
     print("=== robots.txt ===")
     print(json.dumps(robots, indent=2, ensure_ascii=False))
 
-    if robots.get("ok") and not robots.get("allowed_for_wildcard"):
-        if robots.get("robots_warning"):
-            print(f"\n!! {robots['robots_warning']}", file=sys.stderr)
-        else:
-            print(f"\nScope: {robots.get('scope', 'unknown')}")
-            if robots.get("sitemaps"):
-                print("\nSitemaps declared in robots.txt:")
-                for sitemap in robots["sitemaps"]:
-                    print(f"  {sitemap}")
-            if robots.get("disallow_rules"):
-                print(f"\nRules covering this path: {robots['disallow_rules']}")
+    verdict = robots.get("verdict") if robots.get("ok") else "unknown"
+
+    if verdict == "disallowed":
+        print(f"\nScope: {robots.get('scope', 'unknown')}")
+        if robots.get("sitemaps"):
+            print("\nSitemaps declared in robots.txt:")
+            for sitemap in robots["sitemaps"]:
+                print(f"  {sitemap}")
+        if robots.get("disallow_rules"):
+            print(f"\nRules covering this path: {robots['disallow_rules']}")
 
         print(
-            "\nrobots.txt disallows this path. Stop here and resolve access with the portal "
-            "operator before scraping it.",
+            "\nA real robots.txt disallows this path. Stop here and resolve access with the "
+            "portal operator before scraping it.",
             file=sys.stderr,
         )
-        if args.out:
-            args.out.write_text(
-                json.dumps({"robots": robots}, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-            print(f"Robots detail written to {args.out}", file=sys.stderr)
+        _write_robots_report(args.out, robots)
         return 2
+
+    if verdict == "inconclusive":
+        print(f"\n!! {robots.get('robots_warning', '')}")
+        fetch = robots.get("default_agent_fetch") or {}
+        print(
+            f"   Default library user-agent got HTTP {fetch.get('status')}; "
+            f"ours got 200 {robots.get('robots_content_type')}."
+        )
+        print(
+            "\nINCONCLUSIVE — this is not a prohibition, and it is not permission either.\n"
+            "  * There is no robots.txt, so the robots convention imposes no restriction.\n"
+            "  * But the operator does filter automated traffic, and the site's terms of\n"
+            "    use still govern regardless of what robots.txt does or does not say.\n"
+            "\nDecide deliberately, then re-run with --robots-inconclusive-ok to continue.",
+            file=sys.stderr,
+        )
+        _write_robots_report(args.out, robots)
+
+        if not args.robots_inconclusive_ok:
+            return 3
+        print("\nContinuing: --robots-inconclusive-ok was passed.", file=sys.stderr)
 
     report = asyncio.run(
         probe(
