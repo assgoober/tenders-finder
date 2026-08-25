@@ -39,44 +39,40 @@ A live probe confirmed:
   excise the date before looking for a clock; and titles carry a `המשך...`
   truncation marker that has to be stripped before storing or embedding.
 
-## Pagination — resolved
-
-The second probe run dumped the page's postback targets and settled it. The
-pager carries no distinguishing class, id or ARIA label, which is why every
-container selector matched nothing; but its links are unambiguous:
+**Pagination.** The pager carries no class, id or ARIA label — which is why
+every container selector matched nothing — but its links are unambiguous:
 
     <a href="javascript:__doPostBack('ctl00$ContentPlaceHolder1$gvBalam','Page$2')">2</a>
 
-Pages 2 through 9 were present, so **the listing is at least nine pages
-deep** — an agent that read only page one would have taken roughly an eighth
-of the tenders and reported success. Pagination now matches on the postback
-argument and walks forward from page 1.
+Pages 2 through 9 were present, so the listing is at least nine pages deep.
+An agent reading only page one would have taken roughly an eighth of the
+tenders and reported success.
 
-## Still blocking — the agent stays disabled
+**Detail URLs.** The row's read-more control is not a postback after all:
 
-**Row links have no URL.** The listing's row control is a postback, so a
-tender has no addressable source page, and `_detail_url` rejects those — the
-agent would skip every row. A tender with no link back to its notice also
-cannot be checked by a bid team, which is the product's whole trust model.
+    <a href="javascript:ShowDialog('/Online2016/.../BalamHeaderText.aspx?BalamId=1000957926');">
 
-The first probe run reported no row-level postback at all while also warning
-that the row href was a `javascript:` URL. The likely explanation is that a
-GridView LinkButton renders as `WebForm_DoPostBackWithOptions(...)` rather
-than a bare `__doPostBack(...)`, which the probe's pattern did not match —
-so it saw nothing rather than reporting the difference. Both the probe and
-`_POSTBACK` below now recognize either form, and the probe additionally dumps
-the first data row's links verbatim and follows one to see whether a real
-detail URL exists.
+A real URL behind a dialog opener, confirmed by clicking it and landing on
+that address. `BalamId` matched the reference number in column 1, so a URL
+can also be built for rows that have no read-more link — which matters,
+because that control only renders on titles long enough to be clipped.
 
-Re-run to close it:
+## What this portal actually gives us
 
-    python tools/probe_portal.py --url "<BALAM URL>" --detail-sample
+Worth being plain about, because it bounds what the rest of the pipeline can
+do. The public listing carries: reference number, title, submission
+deadline, publication date, and a contact phone. `BalamHeaderText.aspx`
+serves the tender's **full title** and nothing more — it is a read-more
+dialog, not a specification page.
 
-If a real detail URL exists, set `detail_link_selector` and `verified=True`.
-If the detail view is postback-only and has no URL at all, that is a product
-decision, not a parsing one: the honest fallback is to store the listing URL
-plus the reference number so a human can find the tender, and to say so in
-the UI. Until it is resolved the agent refuses to run.
+So there is no public document to run PEGS extraction over. Specifications,
+threshold conditions and attachments sit behind the supplier login (the
+`כניסה למערכת` control on the page), which this agent does not touch.
+
+That still leaves real product value — aggregation, deadline alerts, and
+semantic matching on the title — but a tender from this source will have a
+thin `metadata` payload compared to one from a portal that publishes its
+documents, and the dashboard should not imply otherwise.
 
 ## Operational notes
 
@@ -119,13 +115,14 @@ class BalamContract:
     When the portal is redesigned, this is the only block that changes.
     """
 
-    #: Still False. A live probe on 2026-08-25 confirmed robots.txt, the
-    #: architecture, the row selector and the column map (all recorded below),
-    #: but left two things unresolved that make the agent useless until
-    #: answered — see the module docstring:
-    #:   1. no pagination control was found on the page;
-    #:   2. row links are javascript postbacks, so no tender has a URL.
-    verified: bool = False
+    #: Verified against the live portal on 2026-08-25. Every value below was
+    #: observed, not assumed: robots.txt permission, the architecture, the row
+    #: selector, the column map, the pager control, and the detail URL — the
+    #: last confirmed by clicking a row and landing on it.
+    #:
+    #: Set this back to False after any portal redesign, and re-run
+    #: `python tools/probe_portal.py --url "<BALAM URL>" --detail-sample`.
+    verified: bool = True
 
     #: Reset=1 clears server-side session filters. Always enter through it.
     listing_path: str = "/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1"
@@ -159,12 +156,24 @@ class BalamContract:
     col_status: int | None = None
     col_contact: int | None = 6
 
-    #: Link out of a row to the tender's own page.
-    #: The probe found row links are `javascript:__doPostBack(...)` with no
-    #: href, so this currently matches nothing usable. Resolving it needs the
-    #: postback target and the detail URL pattern — run the probe again with
-    #: the postback dump it now emits.
-    detail_link_selector: str = "a[href*='Balam'], a[id*='lnk']"
+    #: Confirmed by probe: the row's only link is the "המשך..." read-more
+    #: control, rendered as
+    #:   <a href="javascript:ShowDialog('/Online2016/.../BalamHeaderText.aspx?BalamId=1000957926');">
+    #: Not a postback at all — a real URL wrapped in a dialog opener.
+    detail_link_selector: str = "a[href*='ShowDialog'], a[href*='BalamId']"
+
+    #: Fallback used when a row has no read-more link.
+    #:
+    #: This is load-bearing, not a nicety: the "המשך..." control only appears
+    #: on titles long enough to be clipped. A tender with a short title has no
+    #: link in its row at all, and without this template every such tender
+    #: would be dropped for lack of a source URL — silently, and only for the
+    #: tenders whose titles happen to be short.
+    #:
+    #: The probe confirmed `BalamId` equals the reference number in column 1
+    #: for the sampled row. The link is still preferred wherever one exists,
+    #: so this assumption only has to hold for unclipped rows.
+    detail_url_template: str = "/Online2016/Pages/General/Balam/BalamHeaderText.aspx?BalamId={reference}"
 
     #: The GridView's WebForms control id, confirmed by probe. Every pager
     #: link posts back to this target with an argument of `Page$N`.
@@ -206,6 +215,11 @@ _POSTBACK = re.compile(
         ['"](?P<argument>[^'"]*)['"]""",
     re.VERBOSE,
 )
+
+
+#: The portal's read-more control: a real URL wrapped in a dialog opener,
+#: `javascript:ShowDialog('/Online2016/.../BalamHeaderText.aspx?BalamId=...')`.
+_SHOW_DIALOG = re.compile(r"""ShowDialog\(\s*['"](?P<url>[^'"]+)['"]""")
 
 
 def postback_argument(href: str | None) -> str | None:
@@ -311,19 +325,29 @@ class ModBalamAgent(PlaywrightPortalAgent):
 
             texts = [clean_text(await cell.inner_text()) for cell in cells]
 
+            reference = self._column(texts, self.contract.col_reference)
+
             link = await row.query_selector(self.contract.detail_link_selector)
             href = await link.get_attribute("href") if link else None
-            source_url = self._detail_url(href)
+
+            # The read-more link exists only on clipped titles, so fall back
+            # to building the URL from the reference number. Without this,
+            # every short-titled tender would be dropped for lack of a link.
+            source_url = self._detail_url(href) or self._detail_url_from_reference(reference)
             if source_url is None:
-                # A row with no navigable link is unusable — the source URL
-                # is what makes the extraction auditable, so it is required.
-                logger.debug("[%s] skipping row with no detail link", self.key)
+                # No link and no reference: nothing addressable to store. The
+                # source URL is what makes an extraction auditable, so a row
+                # without one is skipped rather than given a fabricated URL.
+                logger.warning(
+                    "[%s] skipping row with neither a detail link nor a reference number",
+                    self.key,
+                )
                 continue
 
             stubs.append(
                 self.build_stub(
                     source_url=source_url,
-                    reference=self._column(texts, self.contract.col_reference),
+                    reference=reference,
                     title=self._column(texts, self.contract.col_title) or "",
                     buyer_text=self._column(texts, self.contract.col_buyer),
                     publication_text=self._column(texts, self.contract.col_publication_date),
@@ -342,20 +366,40 @@ class ModBalamAgent(PlaywrightPortalAgent):
         return await scope.query_selector_all(self.contract.row_selector)
 
     def _detail_url(self, href: str | None) -> str | None:
-        """Resolve a row's link, rejecting javascript postback links.
+        """Resolve a row's link to an addressable URL.
 
-        Some GridViews link rows through `__doPostBack` rather than an href.
-        Such a row has no addressable URL, and a tender without a link back to
-        its source cannot be verified by a bid team — so it is skipped and
-        reported rather than stored with a fabricated URL. If the probe shows
-        the portal does this, the fix is to capture the id from the postback
-        argument and build the real detail URL here.
+        Three shapes, in order:
+
+        1. A `ShowDialog('/path?BalamId=...')` wrapper — what this portal
+           actually emits. The dialog opener hides a real URL, confirmed by
+           the probe: clicking it lands on that exact address.
+        2. A plain href.
+        3. Any other `javascript:` call — no address, so None. A tender with
+           no link back to its notice cannot be checked by a bid team, and a
+           fabricated URL is worse than an absent one.
         """
         if not href:
             return None
+
+        dialog = _SHOW_DIALOG.search(href)
+        if dialog:
+            return urljoin(self.base_url, dialog.group("url"))
+
         if href.strip().lower().startswith("javascript:"):
             return None
+
         return urljoin(self.base_url, href)
+
+    def _detail_url_from_reference(self, reference: str | None) -> str | None:
+        """Build the detail URL from the tender's reference number.
+
+        Used for rows with no read-more link — see `detail_url_template`.
+        """
+        if not reference or not self.contract.detail_url_template:
+            return None
+        return urljoin(
+            self.base_url, self.contract.detail_url_template.format(reference=reference.strip())
+        )
 
     @staticmethod
     def _column(texts: list[str | None], index: int | None) -> str | None:
@@ -459,6 +503,10 @@ class ModBalamAgent(PlaywrightPortalAgent):
         contact_text: str | None = None,
         row_text: str | None = None,
     ) -> TenderStub:
+        raw_title = clean_text(title)
+        marker = self.contract.title_truncation_marker
+        was_truncated = bool(raw_title and marker and raw_title.endswith(marker))
+
         title = self.clean_title(title) or source_url
         reference = clean_text(reference)
 
@@ -475,6 +523,9 @@ class ModBalamAgent(PlaywrightPortalAgent):
                 "raw_status": clean_text(status_text),
                 "normalized_status": parse_status(status_text),
                 "contact_phone": clean_text(contact_text),
+                # The listing clipped this title; `enrich` recovers the full
+                # text from the detail page.
+                "title_truncated": was_truncated,
                 "raw_row": row_text,
                 "portal": self.key,
             },
@@ -524,6 +575,18 @@ class ModBalamAgent(PlaywrightPortalAgent):
         """
         stub = fetched.stub
         body = fetched.raw_text
+
+        # BalamHeaderText.aspx serves the tender's full title — that is what
+        # the read-more control exists to show. Recovering it matters beyond
+        # display: the title is most of what gets embedded for semantic
+        # matching, and a clipped one loses exactly the trailing detail
+        # (model numbers, quantities, variants) that distinguishes tenders.
+        if stub.listing_metadata.get("title_truncated"):
+            full_title = clean_text(body)
+            if full_title and len(full_title) > len(stub.title):
+                stub.listing_metadata["listing_title"] = stub.title
+                stub.title = full_title
+                stub.listing_metadata["title_truncated"] = False
 
         if stub.deadline is None:
             for label in ("מועד אחרון להגשה", "תאריך אחרון להגשה", "מועד אחרון", "מועד הגשה"):

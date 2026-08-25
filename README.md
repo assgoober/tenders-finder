@@ -25,7 +25,7 @@ web/                   Next.js 14 dashboard
 | Piece | State |
 |---|---|
 | Database schema, RLS, matching functions | Written; **not yet applied to a live Postgres** |
-| Aggregation agents | Base classes, registry, generic Playwright agent, offline fixture agent, and the gov.il agent — **its selectors are unverified, see below** |
+| Aggregation agents | `mod-balam` **verified against the live portal and enabled**; `govil` written but unprobed; plus base classes, registry and an offline fixture agent |
 | NLP extraction (PEGS + Pydantic) | Complete, tested against a mocked client |
 | Alert engine | SQL functions and ingestion trigger written |
 | Dashboard | Complete, running on mock data |
@@ -91,9 +91,9 @@ Three candidate Israeli sources were considered. Probe results as of
 
 | Portal | Agent | Status |
 |---|---|---|
-| `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | **robots.txt allows.** ASP.NET WebForms confirmed. Selectors and column map confirmed. Two blockers remain — see below |
+| `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | **Verified and enabled.** ASP.NET WebForms; selectors, column map, pager and detail URL all confirmed live |
 | `sapakim.mod.gov.il/home` — MOD suppliers portal | none, and none planned | **`robots.txt` disallows, for `*` and for our agent. Do not scrape it.** |
-| `gov.il` publications collector | `govil` | Not yet probed |
+| `gov.il` publications collector | `govil` | Written but **not probed** — still `verified=False` |
 
 ### sapakim.mod.gov.il is off limits
 
@@ -102,36 +102,54 @@ no agent, no probe beyond the robots check, no workaround. If this portal's
 data is wanted, the route is an access agreement with the operator, not a
 scraper.
 
-### mod-balam — confirmed, and still disabled
+### mod-balam — what the probe settled
 
-The probe confirmed `robots.txt` permission, the WebForms architecture,
-`table[id*='gv'] tr` as the row selector, and the column map (now recorded
-in `BalamContract`). Two findings from that map were load-bearing:
+- **`robots.txt` allows it**, for `*` and for our agent, with no crawl-delay
+  declared. The conservative defaults in `Settings` stand anyway.
+- **Rows:** `table[id*='gv'] tr`, read positionally. Column map in
+  `BalamContract`: reference=1, title=2, deadline=4, publication=5,
+  contact=6. No buyer column (every row is MOD) and no status column.
+- **Pagination:** the pager has no class, id or ARIA label — hence zero
+  matches on every container selector — but its links are unambiguous:
+  `__doPostBack('ctl00$ContentPlaceHolder1$gvBalam','Page$2')`. Pages 2–9
+  were present, so the listing is **at least nine pages deep**; an agent
+  reading page one only would have taken about an eighth of the tenders and
+  reported success.
+- **Detail URLs:** the read-more control is not a postback but a real URL
+  behind a dialog opener —
+  `ShowDialog('/Online2016/.../BalamHeaderText.aspx?BalamId=1000957926')` —
+  confirmed by clicking it and landing there. `BalamId` matched the
+  reference number, so a URL can also be built for rows with no read-more
+  link. That fallback is load-bearing: the control only renders on titles
+  long enough to be clipped, so without it every short-titled tender would
+  be dropped.
+
+Two parsing bugs the real data exposed, both of which produce a plausible
+wrong value rather than an error:
 
 - **The deadline is written time-first** — `16:00 26/08/2026`. The parser
   read only the text after the date, so the submission time was dropped and
-  every deadline became midnight: sixteen hours early, and a perfectly valid
-  timestamp that nothing downstream would question. Fixed, with a test.
+  every deadline became midnight: sixteen hours early, and a valid
+  timestamp nothing downstream would question.
 - **Titles carry a `המשך...` truncation marker.** Left in it would be
-  stored, displayed, and embedded — a token every clipped tender shares,
-  pulling their vectors together. Stripped, with a test.
+  stored, displayed, and embedded — a token every clipped tender shares.
+  It is now stripped, and `enrich` recovers the full title from the detail
+  page, which matters because the title is most of what gets embedded and
+  the clipped part is exactly the trailing detail that distinguishes
+  tenders.
 
-Two blockers keep `verified=False`, both invisible at runtime if ignored:
+### What this portal actually gives us
 
-1. **No pagination control was found** — every pager selector matched zero
-   elements. If the listing does page and the agent does not follow it, only
-   the first page is ever ingested and later tenders are simply never seen.
-2. **Row links are `javascript:__doPostBack(...)`, not URLs.** Every tender
-   would be skipped, and a tender with no link back to its notice cannot be
-   verified by a bid team — which is the product's whole trust model.
+The public listing carries reference number, title, deadline, publication
+date and a contact phone; `BalamHeaderText.aspx` serves the full title and
+nothing else. **There is no public document to run PEGS extraction over** —
+specifications and attachments sit behind the supplier login, which this
+agent does not touch.
 
-The probe now dumps every `__doPostBack` target and argument, which answers
-both: an argument like `Page$2` is the pager, anything else is a row link.
-Re-run it and both blockers close.
-
-The `verified` guard exists because the failure it prevents is invisible: a
-stale selector returns zero tenders, which looks exactly like a quiet week
-in procurement. Nothing downstream can tell the difference.
+That still leaves aggregation, deadline alerts and semantic matching on the
+title, but tenders from this source will have a thin `metadata` payload
+compared to a portal that publishes its documents, and the dashboard should
+not imply otherwise.
 
 ### Verifying a portal
 

@@ -12,6 +12,7 @@ bugs live, and none of it needs Chromium to test.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -39,20 +40,23 @@ def agent(**overrides) -> ModBalamAgent:
 # --- Guard -------------------------------------------------------------------
 
 
-def test_shipped_contract_is_unverified():
-    assert CONTRACT.verified is False
+def test_shipped_contract_is_verified():
+    """Every value in it was observed against the live portal on 2026-08-25.
+    Flip back to False after a portal redesign and re-run the probe."""
+    assert CONTRACT.verified is True
 
 
 @pytest.mark.asyncio
-async def test_discover_refuses_while_contract_is_unverified():
-    unverified = ModBalamAgent(Settings())
+async def test_discover_refuses_when_a_contract_is_marked_unverified():
+    """The guard still has to work — it is what a redesign turns back on."""
+    unverified = ModBalamAgent(Settings(), contract=replace(CONTRACT, verified=False))
     with pytest.raises(PortalContractUnverified, match="probe_portal"):
         await unverified.discover()
 
 
 @pytest.mark.asyncio
-async def test_fetch_refuses_while_contract_is_unverified():
-    unverified = ModBalamAgent(Settings())
+async def test_fetch_refuses_when_a_contract_is_marked_unverified():
+    unverified = ModBalamAgent(Settings(), contract=replace(CONTRACT, verified=False))
     stub = agent().build_stub(source_url="https://x/y", title="מכרז")
     with pytest.raises(PortalContractUnverified):
         await unverified.fetch(stub)
@@ -162,10 +166,46 @@ def test_falls_back_to_the_url_when_nothing_else_exists():
 # --- Detail links ------------------------------------------------------------
 
 
-def test_javascript_postback_links_are_rejected():
-    """A tender with no addressable URL cannot be checked against its source,
-    and the source link is what makes the extraction trustworthy. Skipping
-    beats storing a fabricated URL."""
+def test_show_dialog_wrapper_yields_the_real_url():
+    """The portal's read-more control is a real URL behind a dialog opener,
+    not a postback. Confirmed by probe: clicking it lands on this address."""
+    href = (
+        "javascript:ShowDialog('/Online2016/Pages/General/Balam/"
+        "BalamHeaderText.aspx?BalamId=1000957926');"
+    )
+    assert agent()._detail_url(href) == (
+        "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/"
+        "BalamHeaderText.aspx?BalamId=1000957926"
+    )
+
+
+def test_url_is_built_from_the_reference_when_a_row_has_no_link():
+    """The read-more control only renders on clipped titles. Without this
+    fallback every short-titled tender would be dropped for lack of a source
+    URL — silently, and only for those tenders."""
+    assert agent()._detail_url_from_reference("1000957926") == (
+        "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/"
+        "BalamHeaderText.aspx?BalamId=1000957926"
+    )
+
+
+def test_reference_fallback_matches_what_the_link_would_have_given():
+    a = agent()
+    from_link = a._detail_url(
+        "javascript:ShowDialog('/Online2016/Pages/General/Balam/"
+        "BalamHeaderText.aspx?BalamId=1000957926');"
+    )
+    assert from_link == a._detail_url_from_reference("1000957926")
+
+
+def test_reference_fallback_is_none_without_a_reference():
+    assert agent()._detail_url_from_reference(None) is None
+    assert agent()._detail_url_from_reference("") is None
+
+
+def test_other_javascript_links_are_still_rejected():
+    """A tender with no addressable URL cannot be checked against its source.
+    A fabricated URL is worse than an absent one."""
     assert agent()._detail_url("javascript:__doPostBack('gv','Select$3')") is None
     assert agent()._detail_url("JavaScript:void(0)") is None
     assert agent()._detail_url(None) is None
@@ -176,6 +216,55 @@ def test_relative_hrefs_resolve_against_the_portal():
         agent()._detail_url("/Online2016/Pages/General/Balam/Detail.aspx?id=5")
         == "https://www.online.mod.gov.il/Online2016/Pages/General/Balam/Detail.aspx?id=5"
     )
+
+
+# --- Title recovery ----------------------------------------------------------
+
+
+def test_truncated_title_is_flagged_for_recovery():
+    stub = agent().build_stub(
+        source_url="https://x/y", title="רכש דלקני מתכת 20 ליטר ריקים המשך..."
+    )
+    assert stub.listing_metadata["title_truncated"] is True
+
+
+def test_untruncated_title_is_not_flagged():
+    stub = agent().build_stub(source_url="https://x/y", title="אספקת מערכות קשר")
+    assert stub.listing_metadata["title_truncated"] is False
+
+
+def test_enrich_recovers_the_full_title_from_the_detail_page():
+    """BalamHeaderText.aspx exists to serve the full title. Recovering it is
+    not cosmetic: the title is most of what gets embedded, and the clipped
+    part is exactly the trailing detail that distinguishes tenders."""
+    a = agent()
+    stub = a.build_stub(
+        source_url="https://x/y", title="רכש דלקני מתכת המשך...", reference="1000957926"
+    )
+    a.enrich(FetchedTender(stub=stub, raw_text="רכש דלקני מתכת 20 ליטר ריקים דגם ב"))
+
+    assert stub.title == "רכש דלקני מתכת 20 ליטר ריקים דגם ב"
+    assert stub.listing_metadata["listing_title"] == "רכש דלקני מתכת"
+    assert stub.listing_metadata["title_truncated"] is False
+
+
+def test_enrich_keeps_the_listing_title_when_the_page_is_shorter():
+    """A dialog that failed to load must not replace a good title with a
+    fragment."""
+    a = agent()
+    stub = a.build_stub(source_url="https://x/y", title="רכש דלקני מתכת ריקים המשך...")
+    original = stub.title
+    a.enrich(FetchedTender(stub=stub, raw_text="שגיאה"))
+
+    assert stub.title == original
+
+
+def test_enrich_leaves_untruncated_titles_alone():
+    a = agent()
+    stub = a.build_stub(source_url="https://x/y", title="אספקת מערכות קשר")
+    a.enrich(FetchedTender(stub=stub, raw_text="טקסט אחר לגמרי מהדף"))
+
+    assert stub.title == "אספקת מערכות קשר"
 
 
 # --- Positional columns ------------------------------------------------------
