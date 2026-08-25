@@ -80,10 +80,15 @@ QUERY_ATTEMPTS: list[tuple[str, list[tuple[str, str]]]] = [
 TENDER_WORDS = ("מכרז", "rfp", "tender", "רכש", "הצעות", "התקשרות")
 
 
+#: Set from --client-id. The gateway rejects every call without it.
+CLIENT_ID: str | None = None
+
+
 def fetch(url: str, timeout: float = 45.0) -> tuple[int, object | str]:
-    request = urllib.request.Request(
-        url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
-    )
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    if CLIENT_ID:
+        headers["x-client-id"] = CLIENT_ID
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8", errors="replace")
@@ -112,13 +117,25 @@ def check_api_robots() -> dict:
         return {"url": robots_url, "error": f"{type(exc).__name__}: {exc}"}
 
     status, body = fetch(robots_url)
-    is_policy = isinstance(body, str) and not body.lstrip().startswith("<")
+
+    # A 404 or an empty response is not a policy document. Reporting it as
+    # one would be a false statement in the output, and the whole point of
+    # this check is that the reader can trust what it says.
+    has_body = isinstance(body, str) and bool(body.strip())
+    is_policy = status == 200 and has_body and not body.lstrip().startswith("<")
 
     return {
         "url": robots_url,
         "http_status": status,
         "allowed_for_wildcard": parser.can_fetch("*", API_BASE),
         "looks_like_a_real_robots_txt": is_policy,
+        "interpretation": (
+            "No robots.txt on this host (404). Under the robots convention that means no "
+            "restriction — but this API is gated by a client id, which is the control that "
+            "actually governs access here."
+            if status == 404
+            else None
+        ),
         "body": body[:1000] if isinstance(body, str) else "(JSON, not robots.txt)",
     }
 
@@ -127,7 +144,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, help="Write the full JSON report here.")
     parser.add_argument("--culture", default="he", help="Language code (default: he).")
+    parser.add_argument(
+        "--client-id",
+        help=(
+            "Apigee client id for the gateway, sent as x-client-id. Request your own from "
+            "the API operator — do not reuse the one embedded in the gov.il front end."
+        ),
+    )
     args = parser.parse_args()
+
+    global CLIENT_ID
+    CLIENT_ID = args.client_id
+    if not CLIENT_ID:
+        print(
+            "No --client-id supplied. The gateway will reject every call with "
+            "'Failed to resolve API Key variable request.header.x-client-id'. "
+            "Running anyway so the failure is on the record.\n",
+            file=sys.stderr,
+        )
 
     report: dict = {"api_base": API_BASE}
 

@@ -93,7 +93,7 @@ Three candidate Israeli sources were considered. Probe results as of
 |---|---|---|
 | `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | **Verified and enabled.** ASP.NET WebForms; selectors, column map, pager and detail URL all confirmed live |
 | `sapakim.mod.gov.il/home` — MOD suppliers portal | none, and none planned | **`robots.txt` disallows, for `*` and for our agent. Do not scrape it.** |
-| `gov.il` publications collector | `govil` | **Has a public JSON API** — see below. The agent should target that, not selectors. Still disabled pending the API probe |
+| `gov.il` publications collector | `govil` | **JSON API found, but gated by an API key.** Needs a client id from the operator. Stays disabled |
 
 ### sapakim.mod.gov.il is off limits
 
@@ -156,16 +156,41 @@ query.** The SPA normalises the URL's `publicationType=tenders` into
 `GetTypesList`; `tenders` is not one of them. The collector type that selects
 tender notices is `rfp`.
 
-`tools/probe_govil_api.py` settles it, using only the standard library:
+**The API is gated.** Running `tools/probe_govil_api.py` returned, for every
+query:
 
-```powershell
-python tools\probe_govil_api.py --out govil-api.json
+```json
+{"fault":{"faultstring":"Failed to resolve API Key variable request.header.x-client-id",
+          "detail":{"errorcode":"steps.oauth.v2.FailedToResolveAPIKey"}}}
 ```
 
-It checks the API host's own `robots.txt` (a different host from
-`www.gov.il`, so a separate policy), dumps the tender-related `Type` values,
-tries several query shapes and reports `total` for each, and prints one full
-result record — which is what the agent maps into a `TenderStub`.
+That is an Apigee gateway demanding an `x-client-id` header. The browser gets
+through because the gov.il front end sends its own; a direct call does not.
+There is no `robots.txt` on the API host (404), so the robots convention
+imposes nothing — **the client id is the control that actually governs access
+here.**
+
+The gov.il front end's client id is visible in its page source. **Do not
+lift it.** The gateway rejects requests without it, which makes it a
+credential rather than a public constant, and using another party's
+credential to reach an API is a different act from reading a public page —
+it would put this integration on someone else's quota and identity, and
+almost certainly breach the terms of use.
+
+The constructive reading: an Apigee gateway exists precisely so that
+third parties can be issued their own keys. That is a request to make, and
+it is a far better footing than scraping — a sanctioned key means a stable
+contract, a quota you can plan against, and no dependency on markup.
+
+Once a client id is issued, the probe takes it directly:
+
+```powershell
+python tools\probe_govil_api.py --client-id "<your id>" --out govil-api.json
+```
+
+It then checks the API host's robots policy, dumps the tender-related `Type`
+values, tries several query shapes and reports `total` for each, and prints
+one full result record — the shape the agent maps into a `TenderStub`.
 
 **Note on `www.gov.il`:** there is no `robots.txt` there, and the CDN answers
 library user-agents with `403`. That is not a prohibition, but it is a signal
