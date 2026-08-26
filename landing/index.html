@@ -1,0 +1,1605 @@
+<meta charset="utf-8">
+<title>Tenders Finder</title>
+<script>
+  /* The artifact wrapper owns <html>, so language and direction are set
+     here rather than in markup. Assistive tech reads these attributes —
+     the CSS `direction` below is not a substitute for them. */
+  document.documentElement.lang = "he";
+  document.documentElement.dir = "rtl";
+</script>
+<meta name="description" content="אגרגציית מכרזים ביטחוניים ואזרחיים: איסוף אוטומטי מפורטלים מבודדים, חילוץ תנאי הסף, והתראה כשמכרז מתאים לפרופיל שלכם.">
+<meta name="theme-color" content="#05070C">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Assistant:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* ===========================================================================
+   Tenders Finder — landing page
+
+   Design plan
+   -----------
+   Colour   ink #05070C (blue-biased near-black, the logo's own ground),
+            surface #0B111C, line #1A2436, navy #12294D (logo navy),
+            blue #2C7BEE (logo blue, lifted for AA on dark),
+            steel #8C9BB3 (blue-biased neutral), paper #E9EEF7.
+            Semantic — live #34C77B, urgent #FF6B6E — kept apart from the
+            accent so status never competes with brand.
+   Type     Heebo 800/900 display (Hebrew-native, engineered),
+            Assistant 400/600 body, IBM Plex Mono for identifiers.
+            The mono is not decoration: reference numbers and standard codes
+            are matched character for character downstream, so they are set
+            as the identifiers they are.
+   Layout   RTL operations console. The hero is a live tender board with
+            running countdowns — deadline pressure is the product's whole
+            emotional core, so the page states it by behaving like it.
+
+   Accessibility: IS 5568 / WCAG 2.2 AA — see the הצהרת נגישות section.
+   =========================================================================== */
+
+/* --- Tokens: light is the bare :root, dark is the intended expression ----- */
+:root {
+  --ink: #F6F8FC;
+  --surface: #FFFFFF;
+  --surface-2: #EEF2F9;
+  --line: #D5DEEC;
+  --line-strong: #B9C6DA;
+  --navy: #12294D;
+  --blue: #1256B8;
+  /* A single blue cannot satisfy AA both as text on the ground and as a
+     fill behind white text — the two pull in opposite directions. The fill
+     is a separate token, measured against white. */
+  --blue-solid: #1256B8;
+  --blue-soft: #E3EDFC;
+  --steel: #55637C;
+  --paper: #0B1626;
+  --live: #147A47;
+  --live-bg: #DFF3E9;
+  --urgent: #B4232A;
+  --urgent-bg: #FBE4E5;
+  --warn: #8A5A00;
+  --warn-bg: #FBEFD8;
+  --glow: rgba(18, 86, 184, .10);
+  --shadow: 0 1px 2px rgba(11,22,38,.06), 0 8px 28px rgba(11,22,38,.07);
+  --rail: rgba(18,86,184,.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #05070C;
+    --surface: #0B111C;
+    --surface-2: #111A2A;
+    --line: #1A2436;
+    --line-strong: #2A3A55;
+    --navy: #12294D;
+    --blue: #2C7BEE;
+    --blue-solid: #1F6ADB;
+    --blue-soft: #0E1E36;
+    --steel: #8C9BB3;
+    --paper: #E9EEF7;
+    --live: #34C77B;
+    --live-bg: #0C2A1D;
+    --urgent: #FF6B6E;
+    --urgent-bg: #2B1113;
+    --warn: #E9A93A;
+    --warn-bg: #2A1F0B;
+    --glow: rgba(44,123,238,.16);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 18px 50px rgba(0,0,0,.45);
+    --rail: rgba(44,123,238,.28);
+  }
+}
+:root[data-theme="dark"] {
+  --ink: #05070C;
+  --surface: #0B111C;
+  --surface-2: #111A2A;
+  --line: #1A2436;
+  --line-strong: #2A3A55;
+  --navy: #12294D;
+  --blue: #2C7BEE;
+  --blue-solid: #1F6ADB;
+  --blue-soft: #0E1E36;
+  --steel: #8C9BB3;
+  --paper: #E9EEF7;
+  --live: #34C77B;
+  --live-bg: #0C2A1D;
+  --urgent: #FF6B6E;
+  --urgent-bg: #2B1113;
+  --warn: #E9A93A;
+  --warn-bg: #2A1F0B;
+  --glow: rgba(44,123,238,.16);
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 18px 50px rgba(0,0,0,.45);
+  --rail: rgba(44,123,238,.28);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  /* Set in markup by the script above too; kept here so the very first
+     paint is already RTL and the page never flashes left-aligned. */
+  direction: rtl;
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: "Assistant", "Segoe UI", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4 {
+  font-family: "Heebo", "Segoe UI", system-ui, sans-serif;
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+  margin: 0;
+}
+
+p { margin: 0; }
+a { color: inherit; }
+
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.skip {
+  position: absolute;
+  inset-inline-start: 50%;
+  transform: translate(50%, -140%);
+  background: var(--blue-solid);
+  color: #fff;
+  padding: 12px 22px;
+  z-index: 200;
+  font-weight: 700;
+  border-radius: 0 0 10px 10px;
+  transition: transform .18s ease;
+}
+.skip:focus { transform: translate(50%, 0); }
+
+.wrap { width: min(1180px, 100% - 40px); margin-inline: auto; }
+
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .74rem;
+  font-weight: 500;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin: 0;
+}
+
+/* --- Header -------------------------------------------------------------- */
+.site-head {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-block-end: 1px solid var(--line);
+}
+.head-row {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  min-height: 72px;
+}
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex-shrink: 0; }
+.brand svg { width: 42px; height: 34px; display: block; }
+.brand-name { font-family: "Heebo", sans-serif; font-weight: 900; font-size: 1.12rem; letter-spacing: -.02em; }
+.brand-name span { color: var(--blue); }
+
+.site-nav { display: flex; gap: 4px; margin-inline-start: auto; }
+.site-nav a {
+  text-decoration: none;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--steel);
+  transition: color .15s, background .15s;
+}
+.site-nav a:hover { color: var(--paper); background: var(--surface-2); }
+@media (max-width: 900px) { .site-nav { display: none; } }
+
+/* Below this the brand, the theme toggle and the CTA stop fitting at full
+   size and the CTA pushes past the gutter. Tighten rather than wrap — a
+   wrapping sticky header eats the viewport on a phone. */
+@media (max-width: 560px) {
+  .head-row { gap: 10px; min-height: 64px; }
+  .brand-name { font-size: 1rem; }
+  .brand svg { width: 34px; height: 28px; }
+  .head-row .btn { padding: 0 14px; font-size: .92rem; }
+  .theme-toggle { width: 40px; height: 40px; }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-family: "Heebo", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .18s ease, background .15s;
+}
+.btn-primary { background: var(--blue-solid); color: #fff; box-shadow: 0 6px 22px var(--glow); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 30px var(--glow); }
+.btn-ghost { background: transparent; color: var(--paper); border-color: var(--line-strong); }
+.btn-ghost:hover { background: var(--surface-2); }
+
+/* --- Hero ---------------------------------------------------------------- */
+.hero { position: relative; padding-block: clamp(56px, 8vw, 104px) 72px; overflow: hidden; }
+.hero::before {
+  content: "";
+  position: absolute;
+  inset-block-start: -300px;
+  inset-inline-end: -180px;
+  width: 780px; height: 780px;
+  background: radial-gradient(circle, var(--glow) 0%, transparent 62%);
+  pointer-events: none;
+}
+.hero-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr);
+  gap: clamp(36px, 5vw, 68px);
+  align-items: center;
+}
+@media (max-width: 980px) { .hero-grid { grid-template-columns: 1fr; } }
+
+.hero h1 { font-size: clamp(2.3rem, 5.4vw, 3.9rem); font-weight: 900; margin-block: 18px 20px; }
+.hero h1 em { font-style: normal; color: var(--blue); }
+.hero-lead { font-size: clamp(1.05rem, 1.9vw, 1.22rem); color: var(--steel); max-width: 60ch; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-block-start: 30px; }
+.hero-note {
+  margin-block-start: 20px;
+  font-size: .9rem;
+  color: var(--steel);
+  display: flex; align-items: center; gap: 9px;
+}
+.dot-live {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--live) 22%, transparent);
+  animation: pulse 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* --- Tender board (hero + demo share this) ------------------------------- */
+.board {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.board-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px;
+  border-block-end: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.board-title { font-family: "Heebo", sans-serif; font-weight: 700; font-size: .95rem; }
+.board-count {
+  margin-inline-start: auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .8rem;
+  color: var(--steel);
+}
+.rows { list-style: none; margin: 0; padding: 0; }
+.row {
+  display: grid;
+  grid-template-columns: 4px minmax(0,1fr) auto;
+  gap: 0 16px;
+  align-items: center;
+  padding: 0;
+  border-block-end: 1px solid var(--line);
+  background: none;
+  border-inline: 0; border-block-start: 0;
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background .14s;
+}
+.row:last-child { border-block-end: 0; }
+.row:hover, .row[aria-expanded="true"] { background: var(--surface-2); }
+.row-rail { align-self: stretch; background: var(--rail); }
+.row[data-sev="urgent"] .row-rail { background: var(--urgent); }
+.row[data-sev="soon"] .row-rail { background: var(--warn); }
+.row[data-sev="open"] .row-rail { background: var(--live); }
+.row-main { padding-block: 15px; min-width: 0; }
+.row-title {
+  font-family: "Heebo", sans-serif;
+  font-weight: 700;
+  font-size: 1.02rem;
+  line-height: 1.35;
+  margin-block-end: 5px;
+  overflow-wrap: anywhere;
+}
+.row-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .84rem; color: var(--steel); }
+.row-side { padding-inline-end: 18px; text-align: end; }
+.countdown {
+  font-family: "IBM Plex Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 1.02rem;
+  white-space: nowrap;
+}
+.row[data-sev="urgent"] .countdown { color: var(--urgent); }
+.row[data-sev="soon"] .countdown { color: var(--warn); }
+.countdown-label { font-size: .74rem; color: var(--steel); display: block; margin-block-start: 2px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: .76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip-live { background: var(--live-bg); color: var(--live); }
+.chip-soon { background: var(--warn-bg); color: var(--warn); }
+.chip-urgent { background: var(--urgent-bg); color: var(--urgent); }
+.chip-match { background: var(--blue-soft); color: var(--blue); }
+
+/* --- Sections ------------------------------------------------------------ */
+section { padding-block: clamp(60px, 8vw, 100px); }
+.section-head { max-width: 62ch; margin-block-end: 44px; }
+.section-head h2 { font-size: clamp(1.75rem, 3.6vw, 2.6rem); margin-block: 14px 16px; }
+.section-head p { color: var(--steel); font-size: 1.06rem; }
+
+.band { background: var(--surface); border-block: 1px solid var(--line); }
+
+/* Problem figures */
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; }
+.figure {
+  padding: 26px 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--ink);
+}
+.figure-num {
+  font-family: "Heebo", sans-serif;
+  font-weight: 900;
+  font-size: clamp(2.2rem, 4.5vw, 3rem);
+  line-height: 1;
+  color: var(--blue);
+  font-variant-numeric: tabular-nums;
+}
+.figure p { margin-block-start: 10px; color: var(--steel); font-size: .97rem; }
+.figure cite { display: block; margin-block-start: 12px; font-size: .8rem; font-style: normal; color: var(--steel); opacity: .8; }
+
+/* Pipeline — a real sequence, so it is numbered */
+.pipeline { display: grid; gap: 2px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+@media (min-width: 860px) { .pipeline { grid-template-columns: repeat(4, 1fr); } }
+.stage { background: var(--ink); padding: 30px 26px; display: flex; flex-direction: column; gap: 12px; }
+.stage-idx {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--blue);
+  letter-spacing: .1em;
+}
+.stage h3 { font-size: 1.22rem; }
+.stage p { color: var(--steel); font-size: .96rem; }
+.stage-tech {
+  margin-block-start: auto;
+  padding-block-start: 14px;
+  border-block-start: 1px dashed var(--line-strong);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .78rem;
+  color: var(--steel);
+}
+
+/* Trust */
+.trust { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.trust-item { border-inline-start: 3px solid var(--blue); padding-inline-start: 22px; }
+.trust-item h3 { font-size: 1.14rem; margin-block-end: 9px; }
+.trust-item p { color: var(--steel); font-size: .97rem; }
+
+/* Demo */
+.demo-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 980px) { .demo-grid { grid-template-columns: 1fr; } }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-block-end: 18px; }
+.filter {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--steel);
+  font: 600 .92rem "Assistant", sans-serif;
+  cursor: pointer;
+  transition: all .14s;
+}
+.filter:hover { color: var(--paper); }
+.filter[aria-pressed="true"] { background: var(--blue-solid); border-color: var(--blue-solid); color: #fff; }
+
+.detail {
+  position: sticky;
+  top: 92px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+@media (max-width: 980px) { .detail { position: static; } }
+.detail h3 { font-size: 1.2rem; margin-block-end: 6px; }
+.detail-buyer { color: var(--steel); font-size: .92rem; margin-block-end: 16px; }
+.source-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 42px; padding: 0 16px;
+  border-radius: 9px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 700;
+  font-size: .93rem;
+  text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+}
+.source-link:hover { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+
+.pegs { margin-block-start: 22px; display: grid; gap: 16px; }
+.pegs-block { border-block-start: 1px solid var(--line); padding-block-start: 14px; }
+.pegs-key {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .72rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-block-end: 7px;
+}
+.pegs-block ul { margin: 0; padding-inline-start: 20px; font-size: .93rem; color: var(--steel); }
+.pegs-block li { margin-block-end: 4px; }
+.pegs-block li strong { color: var(--paper); font-weight: 600; }
+.null-note { font-size: .9rem; color: var(--steel); font-style: italic; }
+.std {
+  display: inline-block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .8rem;
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  margin: 2px 0 2px 4px;
+}
+
+/* Roadmap */
+.roadmap { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.phase { border: 1px solid var(--line); border-radius: 14px; padding: 26px 24px; background: var(--ink); }
+.phase[data-state="now"] { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+.phase-state { font-size: .76rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-block-end: 12px; }
+.phase[data-state="now"] .phase-state { color: var(--live); }
+.phase[data-state="next"] .phase-state { color: var(--blue); }
+.phase[data-state="later"] .phase-state { color: var(--steel); }
+.phase h3 { font-size: 1.15rem; margin-block-end: 12px; }
+.phase ul { margin: 0; padding-inline-start: 20px; color: var(--steel); font-size: .95rem; }
+.phase li { margin-block-end: 7px; }
+
+/* Form */
+.form-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(32px, 5vw, 64px); align-items: start; }
+@media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: clamp(24px, 3vw, 34px);
+  box-shadow: var(--shadow);
+}
+.field { margin-block-end: 18px; }
+.field label { display: block; font-weight: 600; font-size: .94rem; margin-block-end: 7px; }
+.req { color: var(--urgent); }
+.field input, .field select, .field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--ink);
+  color: var(--paper);
+  font: 400 1rem "Assistant", sans-serif;
+}
+.field textarea { min-height: 96px; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--blue); }
+.field .hint { font-size: .84rem; color: var(--steel); margin-block-start: 6px; }
+.field-error { color: var(--urgent); font-size: .86rem; margin-block-start: 6px; display: none; }
+.field[data-invalid="true"] input,
+.field[data-invalid="true"] select { border-color: var(--urgent); }
+.field[data-invalid="true"] .field-error { display: block; }
+
+.two-up { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+@media (max-width: 560px) { .two-up { grid-template-columns: 1fr; } }
+
+.consent { display: flex; gap: 12px; align-items: flex-start; margin-block: 22px; }
+.consent input { width: 24px; height: 24px; min-height: 0; margin-block-start: 2px; flex-shrink: 0; accent-color: var(--blue); }
+.consent label { font-size: .9rem; color: var(--steel); font-weight: 400; line-height: 1.55; }
+.consent a { color: var(--blue); }
+
+.form-status {
+  margin-block-start: 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  font-size: .93rem;
+  display: none;
+}
+.form-status[data-kind="ok"] { display: block; background: var(--live-bg); color: var(--live); border: 1px solid color-mix(in srgb, var(--live) 34%, transparent); }
+.form-status[data-kind="err"] { display: block; background: var(--urgent-bg); color: var(--urgent); border: 1px solid color-mix(in srgb, var(--urgent) 34%, transparent); }
+
+.value-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+.value-list li { display: flex; gap: 14px; }
+.value-list svg { flex-shrink: 0; margin-block-start: 3px; color: var(--blue); }
+.value-list strong { display: block; font-family: "Heebo", sans-serif; font-size: 1.03rem; margin-block-end: 3px; }
+.value-list span { color: var(--steel); font-size: .95rem; }
+
+/* FAQ */
+.faq { max-width: 78ch; }
+.faq details {
+  border-block-end: 1px solid var(--line);
+  padding-block: 6px;
+}
+.faq summary {
+  cursor: pointer;
+  padding-block: 16px;
+  font-family: "Heebo", sans-serif;
+  font-weight: 700;
+  font-size: 1.06rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "+";
+  margin-inline-start: auto;
+  color: var(--blue);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1;
+  transition: transform .18s;
+}
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq details p { color: var(--steel); padding-block-end: 18px; font-size: .99rem; max-width: 68ch; }
+
+/* Accessibility statement */
+.a11y { font-size: .96rem; color: var(--steel); max-width: 76ch; }
+.a11y h3 { color: var(--paper); font-size: 1.08rem; margin-block: 22px 10px; }
+.a11y ul { padding-inline-start: 22px; }
+.a11y li { margin-block-end: 6px; }
+.a11y a { color: var(--blue); }
+
+/* Footer */
+.site-foot { border-block-start: 1px solid var(--line); padding-block: 40px; background: var(--surface); }
+.foot-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
+.foot-links { display: flex; flex-wrap: wrap; gap: 20px; font-size: .9rem; }
+.foot-links a { color: var(--steel); text-decoration: none; }
+.foot-links a:hover { color: var(--paper); text-decoration: underline; }
+.foot-note { font-size: .84rem; color: var(--steel); margin-block-start: 22px; max-width: 80ch; }
+
+.theme-toggle {
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--steel);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { color: var(--paper); background: var(--surface-2); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+</style>
+
+<a class="skip" href="#main">דילוג לתוכן המרכזי</a>
+
+<header class="site-head">
+  <div class="wrap head-row">
+    <a class="brand" href="#main" aria-label="Tenders Finder — לראש הדף">
+      <svg viewBox="0 0 132 104" role="img" aria-label="לוגו Tenders Finder">
+        <title>Tenders Finder</title>
+        <polygon points="26,8 126,8 116,34 16,34" fill="#12294D"/>
+        <path d="M62 34 L84 34 L70 86 Q66 100 50 100 L40 100 Q56 95 59 82 Z" fill="#12294D"/>
+        <polygon points="76,46 118,46 108,68 66,68" fill="#1668D8"/>
+        <polygon points="68,76 104,76 95,96 59,96" fill="#7A879B"/>
+        <circle cx="122" cy="57" r="13" fill="#1668D8"/>
+      </svg>
+      <span class="brand-name">Tenders<span>Finder</span></span>
+    </a>
+
+    <nav class="site-nav" aria-label="ניווט ראשי">
+      <a href="#problem">הבעיה</a>
+      <a href="#how">איך זה עובד</a>
+      <a href="#demo">דמו חי</a>
+      <a href="#roadmap">מפת דרכים</a>
+      <a href="#faq">שאלות</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="החלפת ערכת צבעים">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+      </svg>
+    </button>
+    <a class="btn btn-primary" href="#lead">השארת פרטים</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ===================== HERO ===================== -->
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">אגרגציית מכרזים · ביטחוני ואזרחי</p>
+        <h1 id="hero-h">המכרז הבא שלכם כבר פורסם.<br>השאלה היא <em>אם ראיתם אותו</em>.</h1>
+        <p class="hero-lead">
+          מכרזי רכש מפוזרים על פני פורטלים מבודדים — לכל אחד ממשק אחר, פורמט אחר, ואף אחד מהם
+          לא שולח התראה. Tenders&nbsp;Finder אוסף אותם, מחלץ את תנאי הסף והמועדים, ומתריע
+          כשמכרז מתאים לפרופיל שלכם — בזמן שעוד אפשר להגיש.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#demo">לדמו החי</a>
+          <a class="btn btn-ghost" href="#how">איך זה עובד</a>
+        </div>
+        <p class="hero-note">
+          <span class="dot-live" aria-hidden="true"></span>
+          <span>סוכן משרד הביטחון פעיל · המועדים למטה רצים בזמן אמת</span>
+        </p>
+      </div>
+
+      <div class="board" aria-labelledby="feed-h">
+        <div class="board-head">
+          <span class="dot-live" aria-hidden="true"></span>
+          <h2 class="board-title" id="feed-h">פיד מכרזים</h2>
+          <span class="board-count mono" id="feedCount"></span>
+        </div>
+        <ul class="rows" id="heroRows"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PROBLEM ===================== -->
+  <section id="problem" class="band" aria-labelledby="problem-h">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">הבעיה</p>
+        <h2 id="problem-h">הקיטוע הוא לא אי-נוחות. הוא עלות.</h2>
+        <p>
+          צוות פיתוח עסקי לא מפספס מכרזים כי הוא לא מקצועי. הוא מפספס אותם כי אף אחד
+          לא יכול לבדוק ידנית עשרות פורטלים, כל יום, לפני שהמועד נסגר.
+        </p>
+      </div>
+
+      <div class="figures">
+        <div class="figure">
+          <div class="figure-num mono">9+</div>
+          <p>עמודי תוצאות ברשימת המכרזים של משרד הביטחון — בלי חיווי כמה יש, ובלי התראה על חדשים.</p>
+          <cite>נמדד ישירות מול הפורטל, 08/2026</cite>
+        </div>
+        <div class="figure">
+          <div class="figure-num mono">149</div>
+          <p>משרדים ויחידות שמפרסמים באוסף הפרסומים הממשלתי, כל אחד עם לוח זמנים משלו.</p>
+          <cite>מתוך טקסונומיית האוסף</cite>
+        </div>
+        <div class="figure">
+          <div class="figure-num mono">679</div>
+          <p>נושאי פרסום שונים. מכרז רלוונטי יכול להופיע תחת כל אחד מהם.</p>
+          <cite>מתוך טקסונומיית האוסף</cite>
+        </div>
+        <div class="figure">
+          <div class="figure-num mono">1</div>
+          <p>מועד הגשה שפוספס מספיק כדי למחוק את כל העבודה שהושקעה בהזדמנות.</p>
+          <cite>זו הנקודה</cite>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HOW IT WORKS ===================== -->
+  <section id="how" aria-labelledby="how-h">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">איך זה עובד</p>
+        <h2 id="how-h">ארבעה שלבים, בסדר הזה</h2>
+        <p>
+          כל שלב מוסר לבא אחריו נתון מאומת. שלב שנכשל עוצר ומסמן — הוא לא ממציא ערך
+          כדי להמשיך את השרשרת.
+        </p>
+      </div>
+
+      <div class="pipeline">
+        <article class="stage">
+          <span class="stage-idx mono">שלב 01</span>
+          <h3>איסוף</h3>
+          <p>
+            סוכן ייעודי לכל פורטל, שמפריד ניווט מחילוץ — כך ששינוי עיצוב שובר רק חצי אחד.
+            הסוכן נעול עד שהמבנה שלו אומת מול האתר החי.
+          </p>
+          <p class="stage-tech">Playwright · backoff מדורג · אימות מבנה</p>
+        </article>
+
+        <article class="stage">
+          <span class="stage-idx mono">שלב 02</span>
+          <h3>חילוץ</h3>
+          <p>
+            מודל שפה קורא את המסמך ומחלץ תנאי סף, קריטריוני ניקוד, מפרט ומדד זכייה —
+            לפי מסגרת PEGS. הפלט נאכף מול סכמה לפני שהוא נוגע בנתונים.
+          </p>
+          <p class="stage-tech">Claude · PEGS · אכיפת סכמה</p>
+        </article>
+
+        <article class="stage">
+          <span class="stage-idx mono">שלב 03</span>
+          <h3>התאמה</h3>
+          <p>
+            חיפוש היברידי: התאמה סמנטית תופסת מינוח נרדף, והתאמת מילים מדויקת תופסת
+            תקנים ומספרי פריט שדמיון סמנטי מטשטש.
+          </p>
+          <p class="stage-tech">pgvector · דמיון קוסינוס + מילות מפתח</p>
+        </article>
+
+        <article class="stage">
+          <span class="stage-idx mono">שלב 04</span>
+          <h3>התראה</h3>
+          <p>
+            מכרז שעובר את סף ההתאמה של הפרופיל מייצר התראה באותה פעולה שבה הוא נשמר —
+            אין חלון שבו מכרז קיים ואף אחד לא יודע עליו.
+          </p>
+          <p class="stage-tech">טריגר בשכבת הנתונים</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TRUST ===================== -->
+  <section class="band" aria-labelledby="trust-h">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">אמון בנתונים</p>
+        <h2 id="trust-h">מערכת שמחליטה במקומכם היא מערכת שאי אפשר לבדוק</h2>
+        <p>
+          בהגשה למכרז, שדה שגוי עולה בפסילה. שלושה כללים שהמערכת בנויה סביבם:
+        </p>
+      </div>
+
+      <div class="trust">
+        <div class="trust-item">
+          <h3>כל שדה, לצד המקור שלו</h3>
+          <p>
+            לכל מכרז יש קישור לפרסום המקורי, גלוי תמיד. מכרז שאי אפשר לאמת מול המקור
+            לא נשמר — עדיף להחסיר רשומה מאשר להציג כתובת שהומצאה.
+          </p>
+        </div>
+        <div class="trust-item">
+          <h3>"לא צוין" עדיף על ניחוש</h3>
+          <p>
+            המודל מונחה להחזיר ערך ריק כשהמסמך לא אומר. פלט שנכשל באימות חוזר לתיקון
+            פעם אחת, ואז עובר לבדיקה אנושית. פלט לא מאומת לא נשמר, לעולם.
+          </p>
+        </div>
+        <div class="trust-item">
+          <h3>בידוד בין ארגונים</h3>
+          <p>
+            חברות ביטחוניות מתחרות זו בזו. פרופילי החיפוש, סטטוסי ההצעה וההערות של כל
+            ארגון מבודדים ברמת מסד הנתונים — לא ברמת קוד האפליקציה.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DEMO ===================== -->
+  <section id="demo" aria-labelledby="demo-h">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">דמו חי</p>
+        <h2 id="demo-h">כך זה נראה בעבודה</h2>
+        <p>
+          סננו את הפיד ובחרו מכרז כדי לראות את החילוץ המלא. הנתונים כאן הם דוגמה
+          מייצגת, לא מכרזים פעילים — אבל המבנה, השדות והקישור למקור הם בדיוק אלה
+          שהמערכת מייצרת.
+        </p>
+      </div>
+
+      <div class="demo-grid">
+        <div>
+          <div class="filters" role="group" aria-label="סינון הפיד">
+            <button class="filter" type="button" data-filter="all" aria-pressed="true">הכל</button>
+            <button class="filter" type="button" data-filter="urgent" aria-pressed="false">נסגר בשבוע הקרוב</button>
+            <button class="filter" type="button" data-filter="defense" aria-pressed="false">ביטחוני</button>
+            <button class="filter" type="button" data-filter="civil" aria-pressed="false">אזרחי</button>
+            <button class="filter" type="button" data-filter="match" aria-pressed="false">התאמה גבוהה</button>
+          </div>
+
+          <div class="board">
+            <div class="board-head">
+              <h3 class="board-title">תוצאות</h3>
+              <span class="board-count mono" id="demoCount"></span>
+            </div>
+            <ul class="rows" id="demoRows"></ul>
+            <p id="demoEmpty" class="null-note" style="display:none; padding:26px; text-align:center;">
+              אין מכרזים שעונים על הסינון הזה.
+            </p>
+          </div>
+        </div>
+
+        <aside class="detail" id="detail" aria-live="polite" aria-atomic="false">
+          <!-- populated by script -->
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ROADMAP ===================== -->
+  <section id="roadmap" class="band" aria-labelledby="roadmap-h">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">מפת דרכים</p>
+        <h2 id="roadmap-h">מה פעיל היום, ומה בדרך</h2>
+        <p>
+          אנחנו מעדיפים לומר במדויק מה כבר עובד. השאר מסומן כמה שהוא — עבודה בתהליך.
+        </p>
+      </div>
+
+      <div class="roadmap">
+        <article class="phase" data-state="now">
+          <p class="phase-state">פעיל עכשיו</p>
+          <h3>ליבה ומקור ראשון</h3>
+          <ul>
+            <li>סוכן רשימת המכרזים של משרד הביטחון — מאומת מול הפורטל החי</li>
+            <li>חילוץ PEGS עם אכיפת סכמה ובדיקה אנושית לכשלים</li>
+            <li>מנוע התאמה היברידי והתראות</li>
+            <li>סביבת עבודה מאוחדת עם ניהול מחזור חיי הצעה</li>
+          </ul>
+        </article>
+
+        <article class="phase" data-state="next">
+          <p class="phase-state">בדרך</p>
+          <h3>עומק בשוק הישראלי</h3>
+          <ul>
+            <li>המשרדים האזרחיים — דרך ממשק רשמי, בכפוף לאישור גישה</li>
+            <li>חילוץ מלא ממסמכי מכרז, לא רק מכותרות</li>
+            <li>רשויות מקומיות וחברות ממשלתיות</li>
+            <li>מסך בדיקה ידנית לרשומות שסומנו</li>
+          </ul>
+        </article>
+
+        <article class="phase" data-state="later">
+          <p class="phase-state">בהמשך</p>
+          <h3>מעבר לישראל</h3>
+          <ul>
+            <li>מאגרי מכרזים אירופיים ובינלאומיים</li>
+            <li>התאמה חוצת-שווקים לאותו פרופיל חברה</li>
+            <li>ניתוח מגמות רכש לאורך זמן</li>
+            <li>הרחבה מעבר לביטחון — תשתיות, בריאות, אנרגיה</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== LEAD FORM ===================== -->
+  <section id="lead" aria-labelledby="lead-h">
+    <div class="wrap form-grid">
+      <div>
+        <p class="eyebrow">השארת פרטים</p>
+        <h2 id="lead-h" style="font-size:clamp(1.75rem,3.6vw,2.5rem); margin-block:14px 18px;">
+          נעדכן אתכם כשהכיסוי יגיע לתחום שלכם
+        </h2>
+        <p style="color:var(--steel); margin-block-end:28px; max-width:52ch;">
+          המערכת מתרחבת פורטל אחר פורטל. השאירו פרטים ונעדכן כשנוסיף מקור שרלוונטי
+          לתחום שלכם — או כשייפתח דמו עם נתונים חיים.
+        </p>
+
+        <ul class="value-list">
+          <li>
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            <div><strong>עדכון על מקורות חדשים</strong><span>הודעה כשנוסף פורטל בתחום שסימנתם</span></div>
+          </li>
+          <li>
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            <div><strong>גישה מוקדמת</strong><span>לדמו עם נתונים חיים, כשיהיה</span></div>
+          </li>
+          <li>
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            <div><strong>בלי דיוור</strong><span>רק עדכוני מוצר. אפשר להסיר בכל רגע</span></div>
+          </li>
+        </ul>
+      </div>
+
+      <form class="form-card" id="leadForm" novalidate>
+        <div class="two-up">
+          <div class="field" data-field="name">
+            <label for="f-name">שם מלא <span class="req" aria-hidden="true">*</span></label>
+            <input id="f-name" name="name" type="text" autocomplete="name" required
+                   aria-required="true" aria-describedby="e-name">
+            <p class="field-error" id="e-name">נא למלא שם מלא.</p>
+          </div>
+          <div class="field" data-field="company">
+            <label for="f-company">חברה <span class="req" aria-hidden="true">*</span></label>
+            <input id="f-company" name="company" type="text" autocomplete="organization" required
+                   aria-required="true" aria-describedby="e-company">
+            <p class="field-error" id="e-company">נא למלא שם חברה.</p>
+          </div>
+        </div>
+
+        <div class="two-up">
+          <div class="field" data-field="email">
+            <label for="f-email">דוא"ל בעבודה <span class="req" aria-hidden="true">*</span></label>
+            <input id="f-email" name="email" type="email" autocomplete="email" inputmode="email"
+                   required aria-required="true" aria-describedby="e-email">
+            <p class="field-error" id="e-email">נא למלא כתובת דוא"ל תקינה.</p>
+          </div>
+          <div class="field" data-field="phone">
+            <label for="f-phone">טלפון</label>
+            <input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel"
+                   aria-describedby="e-phone">
+            <p class="field-error" id="e-phone">מספר הטלפון אינו תקין.</p>
+          </div>
+        </div>
+
+        <div class="field" data-field="sector">
+          <label for="f-sector">תחום עיקרי</label>
+          <select id="f-sector" name="sector">
+            <option value="">בחרו תחום</option>
+            <option>ביטחון ותעופה</option>
+            <option>תקשורת ואלקטרוניקה</option>
+            <option>תשתיות והנדסה אזרחית</option>
+            <option>בריאות וציוד רפואי</option>
+            <option>אנרגיה</option>
+            <option>טכנולוגיות מידע</option>
+            <option>אחר</option>
+          </select>
+        </div>
+
+        <div class="field" data-field="notes">
+          <label for="f-notes">מה הייתם רוצים שנכסה?</label>
+          <textarea id="f-notes" name="notes" rows="3"
+                    placeholder="פורטלים, סוגי מכרזים או שווקים שרלוונטיים לכם"></textarea>
+        </div>
+
+        <div class="consent">
+          <input id="f-consent" name="consent" type="checkbox" required aria-required="true"
+                 aria-describedby="e-consent">
+          <label for="f-consent">
+            אני מאשר/ת שהפרטים שמסרתי יישמרו לצורך יצירת קשר בנוגע למוצר, בהתאם
+            ל<a href="#privacy">מדיניות הפרטיות</a>. אפשר לבקש עיון, תיקון או מחיקה בכל עת.
+            <span class="req" aria-hidden="true">*</span>
+          </label>
+        </div>
+        <p class="field-error" id="e-consent" style="margin-block-start:-10px;">יש לאשר את השימוש בפרטים כדי לשלוח.</p>
+
+        <button class="btn btn-primary" type="submit" style="width:100%;">שליחת פרטים</button>
+
+        <p class="form-status" id="formStatus" role="status" aria-live="polite"></p>
+
+        <p class="hint" style="margin-block-start:16px; font-size:.84rem; color:var(--steel);">
+          לא נשתמש בפרטים לשום מטרה אחרת ולא נעביר אותם לצד שלישי.
+        </p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===================== FAQ ===================== -->
+  <section id="faq" class="band" aria-labelledby="faq-h">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">שאלות נפוצות</p>
+        <h2 id="faq-h">מה שנשאלנו, ומה שכדאי לשאול</h2>
+      </div>
+
+      <div class="faq">
+        <details>
+          <summary>מאיפה מגיעים המכרזים?</summary>
+          <p>
+            מפורטלים ציבוריים, דרך סוכן ייעודי לכל מקור. כל מקור נבדק לפני חיבור:
+            אם כללי האתר אוסרים איסוף אוטומטי — לא מחברים אותו, ומחפשים הסדר גישה מסודר
+            מול המפעיל במקום. כרגע מחובר סוכן רשימת המכרזים של משרד הביטחון.
+          </p>
+        </details>
+        <details>
+          <summary>איך אתם מבטיחים שהנתונים נכונים?</summary>
+          <p>
+            אנחנו לא מבטיחים — אנחנו מאפשרים לבדוק. כל שדה מוצג לצד קישור לפרסום המקורי,
+            וכל חילוץ נאכף מול סכמה לפני שמירה. מה שלא עבר אימות מסומן לבדיקה אנושית
+            במקום להישמר כעובדה. ההחלטה אם לגשת למכרז נשארת אצלכם.
+          </p>
+        </details>
+        <details>
+          <summary>האם המתחרים שלנו יראו מה חיפשנו?</summary>
+          <p>
+            לא. פרופילי החיפוש, סטטוסי ההצעה וההערות מבודדים ברמת מסד הנתונים, לא ברמת
+            קוד האפליקציה — כך שגם באג ביישום לא חושף נתונים בין ארגונים. זו הנחת יסוד
+            בתכנון, לא תוספת.
+          </p>
+        </details>
+        <details>
+          <summary>מה קורה עם מכרזים שהמסמכים שלהם סגורים?</summary>
+          <p>
+            חלק מהפורטלים מפרסמים רק כותרת, מועד ומספר אסמכתא — והמפרט עצמו נמצא מאחורי
+            הרשמה כספק. במקרים כאלה נציג בדיוק את מה שפומבי, ונסמן שהחילוץ חלקי. לא נציג
+            רשומה דלה כאילו היא מלאה.
+          </p>
+        </details>
+        <details>
+          <summary>מתי יהיה כיסוי בינלאומי?</summary>
+          <p>
+            אחרי שהעומק בשוק הישראלי יהיה מלא. מאגרים בינלאומיים רבים מפרסמים נתונים
+            פתוחים ורשמיים, ולכן החיבור אליהם פשוט יותר טכנית — אבל הערך למשתמש הישראלי
+            מתחיל מהמקורות המקומיים. השאירו פרטים ונעדכן.
+          </p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ACCESSIBILITY ===================== -->
+  <section id="accessibility" aria-labelledby="a11y-h">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">נגישות</p>
+        <h2 id="a11y-h">הצהרת נגישות</h2>
+      </div>
+
+      <div class="a11y">
+        <p>
+          אנחנו רואים בנגישות חלק מהמוצר ולא תוספת אליו. דף זה נבנה בהתאם לתקן הישראלי
+          ת"י 5568 ולהנחיות <span dir="ltr">WCAG 2.2</span> ברמה <span dir="ltr">AA</span>,
+          ובהתאם לתקנות שוויון זכויות לאנשים עם מוגבלות (התאמות נגישות לשירות).
+        </p>
+
+        <h3>מה יושם בדף</h3>
+        <ul>
+          <li>מבנה סמנטי מלא עם אזורי ניווט, כותרות מדורגות וקישור דילוג לתוכן.</li>
+          <li>הפעלה מלאה במקלדת, כולל הפיד, הסינון והטופס, עם סימון מיקוד ברור.</li>
+          <li>יחסי ניגודיות העומדים ברמה <span dir="ltr">AA</span> בשתי ערכות הצבעים.</li>
+          <li>תמיכה בהעדפת המערכת לצמצום תנועה — הספירה לאחור נעצרת ומוצגת כערך קבוע.</li>
+          <li>שדות טופס עם תוויות מקושרות, סימון שדות חובה והודעות שגיאה מילוליות.</li>
+          <li>תמיכה בהגדלת טקסט עד <span dir="ltr">200%</span> בלי אובדן תוכן או פונקציונליות.</li>
+          <li>כיווניות <span dir="ltr">RTL</span> מלאה, כולל טיפול נכון במונחים ובמספרים בלועזית.</li>
+        </ul>
+
+        <h3>מגבלות ידועות</h3>
+        <p>
+          הדמו בדף מציג נתוני דוגמה מייצגים ולא מכרזים פעילים, וסימון זה מופיע בטקסט
+          לצד הדמו. אם נתקלתם ברכיב שאינו נגיש — נשמח שתעדכנו אותנו ונטפל בהקדם.
+        </p>
+
+        <h3>פנייה בנושא נגישות</h3>
+        <p>
+          ניתן לפנות דרך <a href="#lead">טופס יצירת הקשר</a> בציון "נגישות" בשדה ההערות,
+          ונחזור אליכם.
+        </p>
+
+        <h3 id="privacy">פרטיות</h3>
+        <p>
+          הפרטים בטופס נאספים אך ורק לצורך יצירת קשר בנוגע למוצר, נשמרים למשך הזמן
+          הנדרש לכך בלבד, ואינם מועברים לצד שלישי. בהתאם לחוק הגנת הפרטיות, ניתן לפנות
+          אלינו בכל עת בבקשה לעיין בפרטים שנשמרו, לתקן אותם או למחוק אותם.
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="foot-row">
+      <a class="brand" href="#main" aria-label="Tenders Finder">
+        <svg viewBox="0 0 132 104" role="img" aria-label="לוגו Tenders Finder">
+          <title>Tenders Finder</title>
+          <polygon points="26,8 126,8 116,34 16,34" fill="#12294D"/>
+          <path d="M62 34 L84 34 L70 86 Q66 100 50 100 L40 100 Q56 95 59 82 Z" fill="#12294D"/>
+          <polygon points="76,46 118,46 108,68 66,68" fill="#1668D8"/>
+          <polygon points="68,76 104,76 95,96 59,96" fill="#7A879B"/>
+          <circle cx="122" cy="57" r="13" fill="#1668D8"/>
+        </svg>
+        <span class="brand-name">Tenders<span>Finder</span></span>
+      </a>
+
+      <nav class="foot-links" aria-label="ניווט תחתון">
+        <a href="#how">איך זה עובד</a>
+        <a href="#demo">דמו</a>
+        <a href="#roadmap">מפת דרכים</a>
+        <a href="#accessibility">הצהרת נגישות</a>
+        <a href="#privacy">פרטיות</a>
+        <a href="#lead">יצירת קשר</a>
+      </nav>
+    </div>
+
+    <p class="foot-note">
+      הנתונים בדף זה הם דוגמה מייצגת לצורך הדגמה ואינם מכרזים פעילים.
+      מכרז שמופיע במערכת מוצג תמיד לצד קישור לפרסום המקורי — הפרסום הרשמי הוא המקור הקובע.
+    </p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Theme ---------- */
+  var root = document.documentElement;
+  try {
+    var saved = localStorage.getItem("tf-theme");
+    if (saved === "dark" || saved === "light") root.setAttribute("data-theme", saved);
+  } catch (e) { /* private mode: fall through to system preference */ }
+
+  document.getElementById("themeToggle").addEventListener("click", function () {
+    var current = root.getAttribute("data-theme");
+    if (!current) {
+      current = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    var next = current === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("tf-theme", next); } catch (e) { /* not critical */ }
+  });
+
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- Demo data -------------------------------------------------
+     Representative sample, not live notices. Deadlines are expressed as
+     hours from load so the countdowns stay meaningful whenever the page is
+     opened, rather than going negative on a fixed date.
+     -------------------------------------------------------------------- */
+  var HOUR = 3600 * 1000;
+  function inHours(h) { return new Date(Date.now() + h * HOUR); }
+
+  var TENDERS = [
+    {
+      id: "t1", ref: "1000957926", sector: "defense", match: 0.91,
+      title: "אספקת מערכות קשר טקטיות ניידות ואביזרים נלווים",
+      buyer: "משרד הביטחון — אגף הרכש",
+      deadline: inHours(74), source: "רשימת המכרזים של משרד הביטחון",
+      pegs: {
+        participation: [
+          "הסמכת <strong>AS9100D</strong> בתוקף במועד ההגשה",
+          "סיווג ביטחוני למתקן ברמה 3 ומעלה",
+          "שלושה פרויקטים דומים בחמש השנים האחרונות"
+        ],
+        evaluation: [
+          "עמידה טכנית — <strong>45%</strong>",
+          "מחיר — <strong>35%</strong>",
+          "לוח זמנים לאספקה — <strong>10%</strong>",
+          "השתתפות תעשייתית מקומית — <strong>10%</strong>"
+        ],
+        guidelines: [
+          "480 מכשירי קשר ידניים",
+          "טווח טמפרטורות <span dir=\"ltr\">-30°C</span> עד <span dir=\"ltr\">+60°C</span>",
+          "כמות מינימלית להזמנה חוזרת: 24 יחידות"
+        ],
+        standards: ["MIL-STD-810H", "MIL-STD-461G", "IP67"],
+        selection: "הניקוד המשוקלל הגבוה ביותר · זוכה יחיד"
+      }
+    },
+    {
+      id: "t2", ref: "MUNI-2026-0088", sector: "civil", match: 0.64,
+      title: "הסכם מסגרת לשיקום קווי מים עירוניים",
+      buyer: "תאגיד המים המטרופוליני",
+      deadline: inHours(196), source: "אוסף הפרסומים הממשלתי",
+      pegs: {
+        participation: [
+          "סיווג קבלני <strong>ג'-4</strong> ומעלה לעבודות מים וביוב",
+          "הסמכות <strong>ISO 9001:2015</strong> ו-<strong>ISO 45001</strong>",
+          "ביטוח אחריות מקצועית בסך 2,000,000 אירו"
+        ],
+        evaluation: [
+          "מחיר — <strong>60%</strong>",
+          "מתודולוגיה טכנית — <strong>25%</strong>",
+          "תוכנית ניהול סביבתי — <strong>15%</strong>"
+        ],
+        guidelines: [
+          "כ-60 ק\"מ קווים בקטרים <span dir=\"ltr\">DN100–DN400</span>",
+          "חומרי ריפוד מאושרים למגע עם מי שתייה",
+          "משך ההסכם: ארבע שנים"
+        ],
+        standards: ["EN 805", "EN ISO 11295"],
+        selection: "ההצעה הכדאית ביותר · עד שלושה זוכים במסגרת"
+      }
+    },
+    {
+      id: "t3", ref: "NASA-CUAS-2026-11", sector: "defense", match: 0.78,
+      title: "מערכות גילוי ומעקב אחר כלי טיס בלתי מאוישים",
+      buyer: "רשות ביטחון שדות התעופה",
+      deadline: inHours(19), source: "אוסף הפרסומים הממשלתי",
+      pegs: {
+        participation: [
+          "ספק רשום במדינה החברה באיחוד האירופי",
+          "אישור ביטחוני לעבודה בתשתיות קריטיות",
+          "הסמכת <strong>ISO 27001</strong>"
+        ],
+        evaluation: [
+          "ביצועי גילוי ושיעור התרעות שווא — <strong>40%</strong>",
+          "אינטגרציה עם מערכות שליטה קיימות — <strong>30%</strong>",
+          "מחיר — <strong>30%</strong>"
+        ],
+        guidelines: [
+          "12 עמדות גילוי קבועות",
+          "3 ערכות ניידות",
+          "גילוי בטווח שאינו נמוך מ-5 ק\"מ"
+        ],
+        standards: ["EN 303 883"],
+        selection: "הניקוד האיכותי הגבוה ביותר · זוכה יחיד"
+      },
+      unclear: "נספח רישוי תדרים — סריקה חלקית, סומן לבדיקה אנושית"
+    },
+    {
+      id: "t4", ref: "JASC-MRO-2026-03", sector: "defense", match: null,
+      title: "שירותי אחזקה, תיקון ושיפוץ לצי מסוקים",
+      buyer: "פיקוד התמיכה האווירית",
+      deadline: inHours(-52), source: "רשימת המכרזים של משרד הביטחון",
+      needsReview: true
+    },
+    {
+      id: "t5", ref: "HLTH-2026-214", sector: "civil", match: 0.55,
+      title: "אספקת ציוד ניטור למחלקות טיפול נמרץ",
+      buyer: "מרכז רפואי אזורי",
+      deadline: inHours(430), source: "אוסף הפרסומים הממשלתי",
+      pegs: {
+        participation: [
+          "רישום אמ\"ר בפנקס הציוד הרפואי",
+          "נציגות שירות מקומית עם זמן תגובה של עד 24 שעות"
+        ],
+        evaluation: [
+          "מחיר — <strong>50%</strong>",
+          "מפרט טכני — <strong>30%</strong>",
+          "שירות ואחריות — <strong>20%</strong>"
+        ],
+        guidelines: [
+          "48 מוניטורים רב-פרמטריים",
+          "אינטגרציה למערכת ניהול חולים קיימת"
+        ],
+        standards: ["IEC 60601-1", "MDR 2017/745"],
+        selection: "הניקוד המשוקלל הגבוה ביותר"
+      }
+    }
+  ];
+
+  /* ---------- Countdown ---------- */
+  function severity(t) {
+    var ms = t.deadline - Date.now();
+    if (ms < 0) return "closed";
+    if (ms < 7 * 24 * HOUR) return "urgent";
+    if (ms < 21 * 24 * HOUR) return "soon";
+    return "open";
+  }
+
+  function countdownText(t) {
+    var ms = t.deadline - Date.now();
+    if (ms < 0) return "נסגר";
+    var d = Math.floor(ms / (24 * HOUR));
+    var h = Math.floor((ms % (24 * HOUR)) / HOUR);
+    var m = Math.floor((ms % HOUR) / 60000);
+    var s = Math.floor((ms % 60000) / 1000);
+    // Days read as words; the final day reads as a clock. Mixing a Hebrew
+    // abbreviation into a monospaced LTR number ("3ד 01:59") parses badly
+    // in RTL, and this is the one number on the page that has to be
+    // unambiguous.
+    if (d >= 2) return d + " ימים";
+    if (d === 1) return "יום " + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+
+  function fmtDate(d) {
+    return d.toLocaleDateString("he-IL", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  /* ---------- Row rendering ---------- */
+  function rowHTML(t, interactive) {
+    var sev = severity(t);
+    var chip = "";
+    if (t.needsReview) {
+      chip = '<span class="chip chip-soon">ממתין לבדיקה</span>';
+    } else if (sev === "closed") {
+      chip = '<span class="chip chip-live" style="opacity:.6">נסגר</span>';
+    } else if (sev === "urgent") {
+      chip = '<span class="chip chip-urgent">נסגר בקרוב</span>';
+    } else {
+      chip = '<span class="chip chip-live">פתוח</span>';
+    }
+    var match = t.match !== null && t.match !== undefined
+      ? '<span class="chip chip-match">' + Math.round(t.match * 100) + '% התאמה</span>'
+      : "";
+
+    return '' +
+      '<span class="row-rail" aria-hidden="true"></span>' +
+      '<span class="row-main">' +
+        '<span class="row-title">' + t.title + '</span>' +
+        '<span class="row-meta">' +
+          '<span class="mono">' + t.ref + '</span>' +
+          '<span>' + t.buyer + '</span>' +
+          chip + match +
+        '</span>' +
+      '</span>' +
+      '<span class="row-side">' +
+        '<span class="countdown" data-deadline="' + t.id + '">' + countdownText(t) + '</span>' +
+        '<span class="countdown-label">' + (severity(t) === "closed" ? fmtDate(t.deadline) : "עד ההגשה") + '</span>' +
+      '</span>';
+  }
+
+  function renderRows(listEl, items, interactive) {
+    listEl.textContent = "";
+    items.forEach(function (t) {
+      var li = document.createElement("li");
+      var el = document.createElement(interactive ? "button" : "div");
+      el.className = "row";
+      el.setAttribute("data-sev", t.needsReview ? "soon" : severity(t));
+      el.setAttribute("data-id", t.id);
+      if (interactive) {
+        el.type = "button";
+        el.setAttribute("aria-expanded", "false");
+        el.setAttribute("aria-controls", "detail");
+      }
+      el.innerHTML = rowHTML(t, interactive);
+      li.appendChild(el);
+      listEl.appendChild(li);
+    });
+  }
+
+  /* ---------- Hero feed ---------- */
+  var heroItems = TENDERS.filter(function (t) { return !t.needsReview; }).slice(0, 4);
+  renderRows(document.getElementById("heroRows"), heroItems, false);
+  document.getElementById("feedCount").textContent = heroItems.length + " מכרזים";
+
+  /* ---------- Demo ---------- */
+  var demoRows = document.getElementById("demoRows");
+  var demoEmpty = document.getElementById("demoEmpty");
+  var demoCount = document.getElementById("demoCount");
+  var detail = document.getElementById("detail");
+  var activeFilter = "all";
+  var activeId = TENDERS[0].id;
+
+  function matches(t) {
+    if (activeFilter === "all") return true;
+    if (activeFilter === "urgent") return severity(t) === "urgent";
+    if (activeFilter === "match") return t.match !== null && t.match !== undefined && t.match >= 0.7;
+    return t.sector === activeFilter;
+  }
+
+  function renderDetail(t) {
+    if (!t) { detail.innerHTML = '<p class="null-note">בחרו מכרז מהרשימה.</p>'; return; }
+
+    var head =
+      '<h3>' + t.title + '</h3>' +
+      '<p class="detail-buyer">' + t.buyer + ' · <span class="mono">' + t.ref + '</span></p>' +
+      '<a class="source-link" href="#demo" data-demo-link="1">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">' +
+        '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>' +
+        'פתיחת הפרסום המקורי' +
+      '</a>' +
+      '<p class="null-note" style="margin-block-start:10px;">מקור: ' + t.source + '</p>';
+
+    if (t.needsReview) {
+      detail.innerHTML = head +
+        '<div class="pegs"><div class="pegs-block">' +
+        '<p class="pegs-key">מצב החילוץ</p>' +
+        '<p class="null-note">' +
+        'החילוץ האוטומטי לא עבר אימות עבור מכרז זה, ולכן לא נשמרו שדות. ' +
+        'המסמך סומן לבדיקה אנושית. עד אז — הפרסום המקורי הוא המקור היחיד.' +
+        '</p></div></div>';
+      return;
+    }
+
+    var p = t.pegs;
+    var stds = p.standards.map(function (s) {
+      return '<span class="std" dir="ltr">' + s + '</span>';
+    }).join("");
+
+    detail.innerHTML = head +
+      '<div class="pegs">' +
+        '<div class="pegs-block"><p class="pegs-key">תנאי השתתפות</p><ul>' +
+          p.participation.map(function (x) { return "<li>" + x + "</li>"; }).join("") +
+        '</ul></div>' +
+        '<div class="pegs-block"><p class="pegs-key">קריטריוני ניקוד</p><ul>' +
+          p.evaluation.map(function (x) { return "<li>" + x + "</li>"; }).join("") +
+        '</ul></div>' +
+        '<div class="pegs-block"><p class="pegs-key">מפרט וכמויות</p><ul>' +
+          p.guidelines.map(function (x) { return "<li>" + x + "</li>"; }).join("") +
+        '</ul><p style="margin-block-start:10px;">' + stds + '</p></div>' +
+        '<div class="pegs-block"><p class="pegs-key">קריטריון זכייה</p>' +
+          '<p style="font-size:.94rem; color:var(--steel);">' + p.selection + '</p></div>' +
+        (t.unclear
+          ? '<div class="pegs-block"><p class="pegs-key">סומן כלא ברור</p>' +
+            '<p class="null-note">' + t.unclear + '</p></div>'
+          : '') +
+      '</div>';
+  }
+
+  function renderDemo() {
+    var items = TENDERS.filter(matches);
+    renderRows(demoRows, items, true);
+    demoCount.textContent = items.length + " מתוך " + TENDERS.length;
+    demoEmpty.style.display = items.length ? "none" : "block";
+
+    var active = demoRows.querySelector('[data-id="' + activeId + '"]');
+    if (!active && items.length) { activeId = items[0].id; }
+    var current = demoRows.querySelector('[data-id="' + activeId + '"]');
+    if (current) current.setAttribute("aria-expanded", "true");
+
+    renderDetail(TENDERS.filter(function (t) { return t.id === activeId; })[0] || items[0]);
+  }
+
+  demoRows.addEventListener("click", function (ev) {
+    var btn = ev.target.closest(".row");
+    if (!btn) return;
+    activeId = btn.getAttribute("data-id");
+    Array.prototype.forEach.call(demoRows.querySelectorAll(".row"), function (r) {
+      r.setAttribute("aria-expanded", String(r === btn));
+    });
+    renderDetail(TENDERS.filter(function (t) { return t.id === activeId; })[0]);
+  });
+
+  detail.addEventListener("click", function (ev) {
+    var link = ev.target.closest("[data-demo-link]");
+    if (!link) return;
+    ev.preventDefault();
+    var status = link.nextElementSibling;
+    if (status) {
+      status.textContent =
+        "בדמו אין קישור חי — במערכת עצמה הכפתור פותח את הפרסום המקורי בפורטל.";
+    }
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll(".filter"), function (b) {
+    b.addEventListener("click", function () {
+      activeFilter = b.getAttribute("data-filter");
+      Array.prototype.forEach.call(document.querySelectorAll(".filter"), function (o) {
+        o.setAttribute("aria-pressed", String(o === b));
+      });
+      renderDemo();
+    });
+  });
+
+  renderDemo();
+
+  /* ---------- Ticking ---------- */
+  if (!reduceMotion) {
+    setInterval(function () {
+      Array.prototype.forEach.call(document.querySelectorAll("[data-deadline]"), function (el) {
+        var t = TENDERS.filter(function (x) { return x.id === el.getAttribute("data-deadline"); })[0];
+        if (t) el.textContent = countdownText(t);
+      });
+    }, 1000);
+  }
+
+  /* ---------- Lead form ------------------------------------------------
+     Deliberately does not store submissions in the page. Contact details
+     embedded in a shareable page would be readable by every visitor.
+     Set ENDPOINT to your own backend; until then the form composes an
+     email so a submission is never silently lost.
+     ------------------------------------------------------------------ */
+  var ENDPOINT = "";            // e.g. "https://api.example.com/leads"
+  var FALLBACK_EMAIL = "hello@tendersfinder.example";
+
+  var form = document.getElementById("leadForm");
+  var status = document.getElementById("formStatus");
+
+  function setInvalid(name, invalid) {
+    var f = form.querySelector('[data-field="' + name + '"]');
+    if (f) f.setAttribute("data-invalid", String(invalid));
+  }
+
+  function validate() {
+    var bad = [];
+    var v = {
+      name: form.name.value.trim(),
+      company: form.company.value.trim(),
+      email: form.email.value.trim(),
+      phone: form.phone.value.trim()
+    };
+
+    setInvalid("name", !v.name);      if (!v.name) bad.push("f-name");
+    setInvalid("company", !v.company); if (!v.company) bad.push("f-company");
+
+    var emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.email);
+    setInvalid("email", !emailOk);    if (!emailOk) bad.push("f-email");
+
+    var phoneOk = !v.phone || /^[0-9+\-() ]{9,20}$/.test(v.phone);
+    setInvalid("phone", !phoneOk);    if (!phoneOk) bad.push("f-phone");
+
+    var consentOk = form.consent.checked;
+    document.getElementById("e-consent").style.display = consentOk ? "none" : "block";
+    if (!consentOk) bad.push("f-consent");
+
+    return bad;
+  }
+
+  form.addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    status.removeAttribute("data-kind");
+    status.textContent = "";
+
+    var bad = validate();
+    if (bad.length) {
+      status.setAttribute("data-kind", "err");
+      status.textContent = bad.length === 1
+        ? "יש שדה אחד שדורש תיקון. המיקוד הועבר אליו."
+        : "יש " + bad.length + " שדות שדורשים תיקון. המיקוד הועבר לראשון שבהם.";
+      var first = document.getElementById(bad[0]);
+      if (first) first.focus();
+      return;
+    }
+
+    var payload = {
+      name: form.name.value.trim(),
+      company: form.company.value.trim(),
+      email: form.email.value.trim(),
+      phone: form.phone.value.trim(),
+      sector: form.sector.value,
+      notes: form.notes.value.trim()
+    };
+
+    if (ENDPOINT) {
+      status.setAttribute("data-kind", "ok");
+      status.textContent = "שולח…";
+      fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        status.setAttribute("data-kind", "ok");
+        status.textContent = "הפרטים התקבלו. נחזור אליכם בקרוב.";
+        form.reset();
+      }).catch(function () {
+        status.setAttribute("data-kind", "err");
+        status.textContent = "השליחה נכשלה. נסו שוב, או כתבו לנו ישירות ל-" + FALLBACK_EMAIL + ".";
+      });
+      return;
+    }
+
+    // No endpoint configured: hand the details to the user's mail client
+    // rather than pretending they were received.
+    var body =
+      "שם: " + payload.name + "\n" +
+      "חברה: " + payload.company + "\n" +
+      'דוא"ל: ' + payload.email + "\n" +
+      "טלפון: " + (payload.phone || "—") + "\n" +
+      "תחום: " + (payload.sector || "—") + "\n" +
+      "הערות: " + (payload.notes || "—");
+
+    window.location.href = "mailto:" + FALLBACK_EMAIL +
+      "?subject=" + encodeURIComponent("פנייה מדף הנחיתה — " + payload.company) +
+      "&body=" + encodeURIComponent(body);
+
+    status.setAttribute("data-kind", "ok");
+    status.textContent =
+      "הדף הזה עדיין לא מחובר לשרת, ולכן הפרטים לא נשלחו מעצמם — " +
+      "נפתחה טיוטת מייל עם הפרטים שמילאתם. שליחתה תגיע אלינו.";
+  });
+})();
+</script>
