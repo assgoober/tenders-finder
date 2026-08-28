@@ -1,11 +1,50 @@
 # Landing page
 
-Single self-contained HTML file — no build step, no dependencies. Open
-`index.html` directly, or serve the directory from any static host.
+Single self-contained HTML file — no build step, no bundler. `index.html`
+plus two static assets (`og.png`, `favicon.svg`). Serve the directory from
+any static host.
 
 ```bash
-python3 -m http.server 8080   # then http://localhost:8080/
+npm run serve     # http://localhost:4173
 ```
+
+## Deploying to Vercel
+
+Vercel needs an account this repository cannot authenticate for you, so
+these are run from your machine. Nothing here is built — Vercel serves the
+directory as-is, with the headers in `vercel.json`.
+
+```bash
+cd tenders-finder/landing
+npx vercel login          # once
+npx vercel deploy --prod  # answer: use current directory, framework "Other"
+```
+
+The deploy prints the URL. Then, once, point the sharing card at it:
+
+```bash
+npm run stamp -- https://<the-url-vercel-printed>
+npx vercel deploy --prod
+```
+
+That second step exists because link previews are fetched by crawlers that
+do not run JavaScript, so `og:image` has to be an absolute URL in the served
+HTML — and the domain is not knowable until the deployment exists. Slack and
+Facebook will resolve the relative one without it; X will not.
+
+### Regenerating the sharing card
+
+`og.png` is a rendered file, not a live one, so it goes stale silently when
+the headline or the source list changes:
+
+```bash
+npm install     # playwright, used only by this script
+npm run og
+```
+
+The committed `og.png` was rendered where no fonts could be fetched, so it
+fell back to system faces. Running this once on a networked machine bakes it
+in Heebo.
 
 ## Before it goes live
 

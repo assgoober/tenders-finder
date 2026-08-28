@@ -1,4 +1,9 @@
 <meta charset="utf-8">
+<!-- Load-bearing once this is served as a standalone page rather than inside
+     the artifact wrapper, which injects its own. Without it a phone lays the
+     page out at the 980px fallback viewport and then zooms out, so every
+     phone visit opens on unreadable 6px text. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tenders Finder</title>
 <script>
   /* The artifact wrapper owns <html>, so language and direction are set
@@ -9,6 +14,27 @@
 </script>
 <meta name="description" content="אגרגציית מכרזים ביטחוניים ואזרחיים: איסוף אוטומטי מפורטלים מבודדים, חילוץ תנאי הסף, והתראה כשמכרז מתאים לפרופיל שלכם.">
 <meta name="theme-color" content="#05070C">
+
+<!-- Sharing card. This page's job is to be sent to someone — in WhatsApp, in
+     an email, in a Slack channel — and a link that unfurls as a bare URL
+     reads as broken before anyone opens it.
+
+     og:image is relative. Slack and Facebook resolve that against the page
+     URL; some crawlers, X among them, want it absolute. Link previews are
+     read by crawlers that do not run JavaScript, so this cannot be fixed at
+     runtime — `npm run stamp -- https://your-domain` rewrites it to an
+     absolute URL at deploy time. -->
+<meta property="og:type" content="website">
+<meta property="og:locale" content="he_IL">
+<meta property="og:site_name" content="Tenders Finder">
+<meta property="og:title" content="Tenders Finder — המכרז הבא שלכם כבר פורסם">
+<meta property="og:description" content="מכרזי רכש מפוזרים על פני פורטלים מבודדים ואף אחד מהם לא שולח התראה. אנחנו אוספים אותם, מחלצים את תנאי הסף והמועדים, ומתריעים בזמן שעוד אפשר להגיש.">
+<meta property="og:image" content="og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Tenders Finder — פיד מכרזים מאוחד עם מועדי הגשה רצים">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -193,6 +219,13 @@ a { color: inherit; }
 .skip:focus { transform: translate(50%, 0); }
 
 .wrap { width: min(1180px, 100% - 40px); margin-inline: auto; }
+
+/* The header is sticky, so an anchor jump parks the target's top edge
+   underneath it. Section padding happens to keep most headings clear, but
+   the hero's eyebrow lands behind it when the logo is clicked. This is the
+   offset the browser should leave above any jump target — 84px clears the
+   73px header at its tallest. */
+:target, section[id], #main { scroll-margin-block-start: 84px; }
 
 .eyebrow {
   font-family: "IBM Plex Mono", monospace;
@@ -783,8 +816,20 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 /* Footer */
 .site-foot { border-block-start: 1px solid var(--line); padding-block: 40px; background: var(--surface); }
 .foot-row { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; }
-.foot-links { display: flex; flex-wrap: wrap; gap: 20px; font-size: .9rem; }
-.foot-links a { color: var(--steel); text-decoration: none; }
+.foot-links { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: .9rem; }
+/* WCAG 2.2 §2.5.8 wants 24×24 CSS px. These sat exactly on the line, and the
+   shortest ("דמו") came to 22px wide — under it. Padding puts every one
+   clear of the minimum rather than balanced on it. The inline links inside
+   sentences elsewhere on the page are covered by the spec's own exception
+   for targets in a block of text, and are left as running text. */
+.foot-links a {
+  color: var(--steel);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding-inline: 8px;
+}
 .foot-links a:hover { color: var(--paper); text-decoration: underline; }
 .foot-note { font-size: .84rem; color: var(--steel); margin-block-start: 22px; max-width: 80ch; }
 

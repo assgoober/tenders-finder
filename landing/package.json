@@ -1,0 +1,17 @@
+{
+  "name": "tenders-finder-landing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tenders Finder landing page — a single static HTML file, no build step.",
+  "type": "module",
+  "scripts": {
+    "deploy": "vercel deploy --prod",
+    "preview": "vercel deploy",
+    "stamp": "node tools/stamp-origin.mjs",
+    "og": "node tools/build-og.mjs",
+    "serve": "python3 -m http.server 4173"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

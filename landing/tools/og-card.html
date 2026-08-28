@@ -1,0 +1,55 @@
+<meta charset="utf-8">
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Heebo:wght@700;900&family=Assistant:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap");
+  /* body's overflow propagates to the viewport rather than clipping, so in
+     RTL the off-canvas glow shifts the scroll origin and crops the card. */
+  html { direction: rtl; overflow: hidden; }
+  body {
+    margin:0; width:1200px; height:630px; overflow:hidden;
+    background:#05070C; color:#E9EEF7;
+    font-family:"Assistant","Segoe UI",system-ui,sans-serif;
+    display:flex; flex-direction:column; justify-content:center;
+    padding:0 84px; box-sizing:border-box; position:relative;
+  }
+  .grid { position:absolute; inset:0;
+    background-image:linear-gradient(to left,rgba(44,123,238,.075) 1px,transparent 1px),
+                     linear-gradient(to bottom,rgba(44,123,238,.075) 1px,transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image:radial-gradient(120% 90% at 80% 10%,#000 0%,transparent 70%); }
+  .glow { position:absolute; top:-320px; left:-200px; width:840px; height:840px;
+    background:radial-gradient(circle,rgba(44,123,238,.20) 0%,transparent 62%); }
+  .in { position:relative; }
+  .brand { display:flex; align-items:center; gap:16px; margin-bottom:38px; }
+  .brand svg { width:60px; height:48px; }
+  .brand span { font-family:"Heebo",sans-serif; font-weight:900; font-size:30px; letter-spacing:-.02em; }
+  .brand b { color:#2C7BEE; font-weight:900; }
+  h1 { font-family:"Heebo",sans-serif; font-weight:900; font-size:66px; line-height:1.1;
+       letter-spacing:-.025em; margin:0 0 26px; max-width:19ch; }
+  h1 em { font-style:normal; color:#2C7BEE; }
+  p { font-size:27px; color:#8C9BB3; margin:0; max-width:40ch; line-height:1.5; }
+  .rail { display:flex; gap:12px; margin-top:44px; }
+  .pill { display:flex; align-items:center; gap:10px; padding:10px 20px; border-radius:999px;
+    border:1px solid #1A2436; background:#0B111C;
+    font-family:"IBM Plex Mono",monospace; font-size:18px; color:#E9EEF7; }
+  .d { width:10px; height:10px; border-radius:50%; }
+</style>
+<div class="grid"></div><div class="glow"></div>
+<div class="in">
+  <div class="brand">
+    <svg viewBox="0 0 132 104">
+      <polygon points="26,8 126,8 116,34 16,34" fill="#2C7BEE"/>
+      <path d="M62 34 L84 34 L70 86 Q66 100 50 100 L40 100 Q56 95 59 82 Z" fill="#2C7BEE"/>
+      <polygon points="76,46 118,46 108,68 66,68" fill="#1668D8"/>
+      <polygon points="68,76 104,76 95,96 59,96" fill="#7A879B"/>
+      <circle cx="122" cy="57" r="13" fill="#1668D8"/>
+    </svg>
+    <span>Tenders<b>Finder</b></span>
+  </div>
+  <h1>המכרז הבא שלכם כבר פורסם. השאלה היא <em>אם ראיתם אותו</em>.</h1>
+  <p>איסוף אוטומטי מפורטלי רכש מבודדים · חילוץ תנאי סף ומועדים · התראה בזמן שעוד אפשר להגיש</p>
+  <div class="rail">
+    <div class="pill"><span class="d" style="background:#34C77B"></span>online.mod.gov.il</div>
+    <div class="pill"><span class="d" style="background:#E9A93A"></span>gov.il</div>
+    <div class="pill"><span class="d" style="background:#7E8BA3"></span>sapakim.mod.gov.il</div>
+  </div>
+</div>

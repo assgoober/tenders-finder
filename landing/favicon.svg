@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 104" role="img" aria-label="Tenders Finder">
+  <title>Tenders Finder</title>
+  <!-- The page's own mark, unchanged. A favicon that drifts from the logo in
+       the header is a favicon nobody associates with the product. -->
+  <polygon points="26,8 126,8 116,34 16,34" fill="#12294D"/>
+  <path d="M62 34 L84 34 L70 86 Q66 100 50 100 L40 100 Q56 95 59 82 Z" fill="#12294D"/>
+  <polygon points="76,46 118,46 108,68 66,68" fill="#1668D8"/>
+  <polygon points="68,76 104,76 95,96 59,96" fill="#7A879B"/>
+  <circle cx="122" cy="57" r="13" fill="#1668D8"/>
+</svg>
