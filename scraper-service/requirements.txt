@@ -4,8 +4,15 @@ uvicorn[standard]==0.34.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
 
-# Anthropic — structured outputs via client.messages.parse()
-anthropic>=0.69.0
+# Anthropic — structured outputs via beta.messages.parse(output_format=...).
+# The 1.x floor is load-bearing, not cosmetic: `fallbacks` does not exist on
+# 0.x, so a 0.x install would silently extract without refusal fallbacks
+# (caught by the TypeError guard in extractor.py, but only at runtime, once
+# per document). 0.x also carries the httpx2 / awaited-raw-response breaking
+# changes. Verified against 1.2.0: `beta.messages.parse` accepts
+# `output_format`, `betas` and `fallbacks`, and `BetaFallbacksParam` types
+# the scalar "default" form explicitly.
+anthropic>=1.2.0
 
 # Scraping
 playwright==1.49.1

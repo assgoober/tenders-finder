@@ -268,8 +268,8 @@ class TenderExtractor:
             # on every subsequent document — the operator should upgrade.
             logger.error(
                 "this anthropic SDK does not accept `fallbacks` (%s); extracting without "
-                "refusal fallbacks — upgrade the SDK or set ANTHROPIC_FALLBACKS=false to "
-                "silence this",
+                "refusal fallbacks — `pip install -U 'anthropic>=1.2.0'`, or set "
+                "ANTHROPIC_FALLBACKS=false to silence this",
                 exc,
             )
             return await self.client.messages.parse(**request)

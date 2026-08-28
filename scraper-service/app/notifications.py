@@ -94,6 +94,39 @@ def build_digest(reports: list[IngestReport]) -> tuple[str, str]:
     return subject, "\n".join(lines)
 
 
+def explain_smtp_failure(exc: Exception) -> str:
+    """Turn an SMTP failure into the thing to actually go and change.
+
+    Lives here rather than in the diagnostic tool so the pipeline's own error
+    log carries the same advice — the run log is where someone looks first
+    when a digest stops arriving.
+    """
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return (
+            "The server rejected the credentials. On Gmail this is almost always the "
+            "account password being used instead of an App Password (Google Account → "
+            "Security → App passwords, after enabling 2-Step Verification)."
+        )
+    if isinstance(exc, smtplib.SMTPSenderRefused):
+        return (
+            "The server refused the From address. Most providers only allow a From they "
+            "own — set NOTIFY_FROM_EMAIL to the SMTP_USERNAME address."
+        )
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        return "The server refused the recipient. Check NOTIFY_EMAIL for a typo."
+    if isinstance(exc, smtplib.SMTPNotSupportedError):
+        return (
+            "The server does not support STARTTLS on this port. Try SMTP_USE_TLS=false, "
+            "or port 465."
+        )
+    if isinstance(exc, (TimeoutError, OSError)):
+        return (
+            "Could not reach the server. Check SMTP_HOST and SMTP_PORT, and whether "
+            "outbound SMTP is blocked from this machine — many networks block port 587."
+        )
+    return "Unexpected failure; the exception itself is the detail."
+
+
 class EmailNotifier:
     """Sends the digest over SMTP."""
 
@@ -132,11 +165,15 @@ class EmailNotifier:
             # smtplib is blocking; the pipeline runs on the event loop.
             await asyncio.to_thread(self._send, message)
         except Exception as exc:  # noqa: BLE001 - never abort a run over mail
+            # The digest goes into the log verbatim: if it could not be
+            # delivered, this is the only remaining record that tenders are
+            # waiting. The diagnosis goes with it so nobody has to guess.
             logger.error(
-                "failed to send the run digest to %s: %s: %s\n%s",
+                "failed to send the run digest to %s: %s: %s\n%s\nundelivered digest:\n%s",
                 self.settings.notify_email,
                 type(exc).__name__,
                 exc,
+                explain_smtp_failure(exc),
                 body,
             )
             return False

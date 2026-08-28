@@ -8,6 +8,7 @@ dual-use claim that a non-defense tender needs no special handling.
 
 from __future__ import annotations
 
+import smtplib
 from datetime import datetime, timezone
 
 import pytest
@@ -16,7 +17,12 @@ from app.agents import get_agent
 from app.config import Settings
 from app.nlp.embeddings import HashEmbeddingProvider
 from app.nlp.extractor import FALLBACK_BETA, TenderExtractor
-from app.notifications import EmailNotifier, build_digest, needs_attention
+from app.notifications import (
+    EmailNotifier,
+    build_digest,
+    explain_smtp_failure,
+    needs_attention,
+)
 from app.pipeline import IngestionPipeline, IngestReport
 from app.schemas.tender import TenderExtraction
 
@@ -441,3 +447,15 @@ async def test_old_sdk_without_fallbacks_still_extracts():
 
     assert result.ok
     assert "fallbacks" not in client.messages.calls[-1]
+
+
+async def test_smtp_failures_are_explained_not_just_reported():
+    """A digest that fails to send is the one time the log has to be
+    actionable — it is the only remaining record that tenders are waiting."""
+    auth = smtplib.SMTPAuthenticationError(535, b"bad credentials")
+    assert "App Password" in explain_smtp_failure(auth)
+
+    sender = smtplib.SMTPSenderRefused(553, b"not owned", "x@y.test")
+    assert "NOTIFY_FROM_EMAIL" in explain_smtp_failure(sender)
+
+    assert "SMTP_HOST" in explain_smtp_failure(ConnectionRefusedError(111, "refused"))

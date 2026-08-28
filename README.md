@@ -102,8 +102,39 @@ It stays silent on a clean run unless `NOTIFY_ON_SUCCESS=true` — a message
 that always arrives stops being read. **Without `SMTP_HOST` nothing is
 sent**: the digest is logged at WARNING and the run continues, because a
 pipeline that aborts over an unreachable mail server has traded the job for
-a notice about it. For Gmail use `smtp.gmail.com:587` with an **App
-Password**, not the account password.
+a notice about it.
+
+**Setting it up with Gmail.** Gmail rejects the account password over SMTP;
+it needs an App Password, and that option only appears once 2-Step
+Verification is on:
+
+1. Google Account → Security → enable **2-Step Verification**.
+2. Google Account → Security → **App passwords** → generate one.
+3. Put the 16 characters in `SMTP_PASSWORD`, no spaces.
+
+```ini
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=you@gmail.com
+SMTP_PASSWORD=<app password>
+NOTIFY_EMAIL=you@gmail.com
+```
+
+That password goes in `.env` (gitignored) and nowhere else — it grants
+access to the account that owns it.
+
+**Prove it before trusting it:**
+
+```bash
+python tools/check_notifications.py           # report config, send nothing
+python tools/check_notifications.py --send    # deliver a real test digest
+```
+
+Exit 0 means delivered, 1 means the config is incomplete, 2 means the server
+rejected it — and the tool names the specific setting to change for each
+common SMTP failure. Without this the first sign of a misconfiguration is a
+run that parks thirty tenders and tells nobody, which is exactly what the
+digest exists to prevent.
 
 ### 3. Dashboard
 
