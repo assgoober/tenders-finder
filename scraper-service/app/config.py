@@ -32,6 +32,31 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-opus-5"
     anthropic_max_tokens: int = 16000
     extraction_timeout_seconds: float = 300.0
+    # Opt into server-side refusal fallbacks. A safety classifier can decline
+    # a request — HTTP 200 with stop_reason "refusal", not an exception — and
+    # defense procurement is exactly the adjacent-to-restricted material that
+    # draws a false positive. With this on, the API re-runs the declined
+    # request on Anthropic's recommended substitute inside the same call, so
+    # the tender is extracted instead of parked. Turn it off only to observe
+    # raw refusal rates.
+    anthropic_fallbacks: bool = True
+
+    # --- Notifications ---
+    # A needs_review tender is invisible until a human opens it, and there is
+    # no review queue in the dashboard yet, so this digest is currently the
+    # only thing that says "something is waiting". Without smtp_host nothing
+    # is sent and the digest is logged instead — the pipeline never fails
+    # because mail is unconfigured.
+    notify_email: str | None = "omer200338@gmail.com"
+    notify_from_email: str | None = None
+    # Send even when a run is entirely clean. Off by default: a mail that
+    # always arrives stops being read, and this one exists to be noticed.
+    notify_on_success: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
 
     # --- Embeddings ---
     # "voyage" for production, "hash" for offline development and tests.
@@ -69,6 +94,19 @@ class Settings(BaseSettings):
     @property
     def has_supabase(self) -> bool:
         return bool(self.supabase_url and self.supabase_service_role_key)
+
+    @property
+    def has_email_notifications(self) -> bool:
+        return bool(self.notify_email and self.smtp_host)
+
+    @property
+    def mail_from(self) -> str | None:
+        """Envelope sender. Falls back to the SMTP user, then the recipient.
+
+        Most providers reject a From they do not own, so guessing an address
+        here would produce mail that silently never arrives.
+        """
+        return self.notify_from_email or self.smtp_username or self.notify_email
 
 
 @lru_cache

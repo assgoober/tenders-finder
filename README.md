@@ -71,6 +71,40 @@ Endpoints:
 | POST | `/extract` | Extract one document without persisting — used for prompt iteration |
 | POST | `/profiles/embed` | Backfill embeddings for profiles created in the dashboard |
 
+#### Refusals and fallbacks
+
+A safety classifier can decline a request. That arrives as a **successful
+HTTP 200** with `stop_reason: "refusal"` and an empty body — not an
+exception — so it has to be checked for explicitly, or it reads as an empty
+answer. Tender documents describe munitions, sensors and secure comms, which
+is exactly the material adjacent to what the classifiers decline, so false
+positives are expected rather than exotic.
+
+`ANTHROPIC_FALLBACKS=true` (the default) re-runs a declined request on a
+substitute model server-side, inside the same call. If the whole chain still
+declines, the tender goes to `needs_review` with the category recorded in
+`metadata.extraction.refusal_category`, and is **not** retried — the same
+prompt over the same document draws the same decline.
+
+`/health` reports `refusal_fallbacks`; `/extract` returns `refusal_category`
+and `served_by` (which model actually answered — it differs from the
+configured model when a fallback rescued the request).
+
+#### Run digest
+
+A `needs_review` tender is deliberately left unembedded, so it raises no
+alerts and appears nowhere in the feed. There is no review queue in the
+dashboard yet, which means a run that parked a third of its tenders looks
+exactly like a run that worked. One digest per run goes to `NOTIFY_EMAIL`
+after every source finishes.
+
+It stays silent on a clean run unless `NOTIFY_ON_SUCCESS=true` — a message
+that always arrives stops being read. **Without `SMTP_HOST` nothing is
+sent**: the digest is logged at WARNING and the run continues, because a
+pipeline that aborts over an unreachable mail server has traded the job for
+a notice about it. For Gmail use `smtp.gmail.com:587` with an **App
+Password**, not the account password.
+
 ### 3. Dashboard
 
 ```bash

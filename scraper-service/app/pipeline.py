@@ -17,6 +17,7 @@ from .agents import FetchedTender, TenderSourceAgent, get_agents
 from .config import Settings, get_settings
 from .nlp.embeddings import EmbeddingProvider, get_embedding_provider
 from .nlp.extractor import ExtractionResult, TenderExtractor
+from .notifications import Notifier, get_notifier
 from .storage.supabase_repo import SupabaseRepository
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,11 @@ class IngestReport:
     found: int = 0
     ingested: int = 0
     needs_review: int = 0
+    #: Subset of `needs_review` that a safety classifier declined rather than
+    #: failed schema validation. Counted separately because the two call for
+    #: different responses: a schema failure is a prompt or a document
+    #: problem, a wall of refusals is a policy boundary.
+    refused: int = 0
     failed: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -37,6 +43,7 @@ class IngestReport:
             "found": self.found,
             "ingested": self.ingested,
             "needs_review": self.needs_review,
+            "refused": self.refused,
             "failed": self.failed,
             "errors": self.errors[:10],
         }
@@ -50,11 +57,13 @@ class IngestionPipeline:
         extractor: TenderExtractor | None = None,
         embedder: EmbeddingProvider | None = None,
         repository: SupabaseRepository | None = None,
+        notifier: Notifier | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.extractor = extractor or TenderExtractor(self.settings)
         self.embedder = embedder or get_embedding_provider(self.settings)
         self.repository = repository or SupabaseRepository(self.settings)
+        self.notifier = notifier or get_notifier(self.settings)
 
     async def run(
         self, source_keys: list[str] | None = None, *, limit: int = 25
@@ -68,7 +77,14 @@ class IngestionPipeline:
             async with semaphore:
                 return await self.run_source(agent, limit=limit)
 
-        return list(await asyncio.gather(*(guarded(agent) for agent in agents)))
+        reports = list(await asyncio.gather(*(guarded(agent) for agent in agents)))
+
+        # After every source has finished, so one mail covers the whole run.
+        # Never inside the try of a source: a mail failure must not be able to
+        # mark a successful scrape as failed.
+        await self.notifier.send_run_digest(reports)
+
+        return reports
 
     async def run_source(self, agent: TenderSourceAgent, *, limit: int = 25) -> IngestReport:
         report = IngestReport(source_key=agent.key)
@@ -146,7 +162,11 @@ class IngestionPipeline:
         elif result.status == "needs_review":
             # Deliberately unembedded: an unvalidated tender must not enter
             # the matching corpus and generate alerts a human never checked.
+            # A declined document is unvalidated for a different reason but
+            # lands in the same place — nobody has read it.
             report.needs_review += 1
+            if result.refused:
+                report.refused += 1
         else:
             report.failed += 1
             if result.error:
@@ -215,6 +235,11 @@ class IngestionPipeline:
             "truncated_input": result.truncated_input,
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
+            # Both null on the ordinary path. Present so the review queue can
+            # tell a reviewer why a tender is in front of them, and so a
+            # fallback rescue is visible rather than invisible.
+            "refusal_category": result.refusal_category,
+            "served_by": result.served_by,
         }
         metadata["listing"] = stub.listing_metadata
         row["metadata"] = metadata

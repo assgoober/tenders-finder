@@ -42,6 +42,13 @@ def validate_configuration() -> None:
         logger.warning("ANTHROPIC_API_KEY is not set — extraction endpoints will fail")
     if not settings.has_supabase and not settings.dry_run:
         logger.warning("Supabase is not configured — set DRY_RUN=true to run without a database")
+    if not settings.has_email_notifications:
+        # Worth a startup warning rather than a surprise later: without mail,
+        # a tender parked in needs_review has nothing announcing it.
+        logger.warning(
+            "email notifications are off (set SMTP_HOST and NOTIFY_EMAIL) — run digests "
+            "will only be logged"
+        )
 
     logger.info("registered agents: %s", ", ".join(available_keys()) or "(none)")
 
@@ -85,8 +92,10 @@ def health() -> dict:
         "prompt_version": PROMPT_VERSION,
         "embedding_provider": settings.embedding_provider,
         "embedding_dim": settings.embedding_dim,
+        "refusal_fallbacks": settings.anthropic_fallbacks,
         "anthropic_configured": settings.has_anthropic,
         "supabase_configured": settings.has_supabase,
+        "email_notifications": settings.has_email_notifications,
         "dry_run": settings.dry_run,
         "agents": available_keys(),
     }
@@ -152,6 +161,10 @@ async def extract(request: ExtractRequest) -> dict:
         "model": result.model,
         "prompt_version": result.prompt_version,
         "error": result.error,
+        # Null unless a safety classifier declined the document. Surfaced so
+        # the review screen can say why a tender is in front of a human.
+        "refusal_category": result.refusal_category,
+        "served_by": result.served_by,
         "truncated_input": result.truncated_input,
         "extraction": result.extraction.model_dump(mode="json") if result.extraction else None,
     }

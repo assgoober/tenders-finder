@@ -15,8 +15,9 @@ import pytest
 from app.agents import get_agent
 from app.config import Settings
 from app.nlp.embeddings import HashEmbeddingProvider
-from app.nlp.extractor import TenderExtractor
-from app.pipeline import IngestionPipeline
+from app.nlp.extractor import FALLBACK_BETA, TenderExtractor
+from app.notifications import EmailNotifier, build_digest, needs_attention
+from app.pipeline import IngestionPipeline, IngestReport
 from app.schemas.tender import TenderExtraction
 
 pytestmark = pytest.mark.asyncio
@@ -51,10 +52,29 @@ class FakeUsage:
 class FakeResponse:
     """Mimics the shape the SDK's `messages.parse` returns."""
 
-    def __init__(self, parsed_output, text: str = "{}"):
+    def __init__(
+        self,
+        parsed_output,
+        text: str = "{}",
+        *,
+        stop_reason: str | None = None,
+        stop_details=None,
+        model: str | None = None,
+    ):
         self.parsed_output = parsed_output
         self.usage = FakeUsage()
         self.content = [type("Block", (), {"type": "text", "text": text})()]
+        self.stop_reason = stop_reason
+        self.stop_details = stop_details
+        self.model = model
+
+
+def refusal(category: str | None = "cyber", **kwargs) -> FakeResponse:
+    """A declined request: HTTP 200, empty content, no parsed output."""
+    details = None if category is None else type("Details", (), {"category": category})()
+    response = FakeResponse(None, stop_reason="refusal", stop_details=details, **kwargs)
+    response.content = []  # a pre-output decline carries nothing
+    return response
 
 
 class FakeMessages:
@@ -73,8 +93,16 @@ class FakeMessages:
 
 
 class FakeClient:
+    """Exposes `messages` and `beta.messages` over one recorder.
+
+    The extractor calls the beta namespace when fallbacks are enabled and the
+    stable one when they are not; sharing the recorder keeps both paths under
+    the same assertions.
+    """
+
     def __init__(self, responses):
         self.messages = FakeMessages(responses)
+        self.beta = type("Beta", (), {"messages": self.messages})()
 
 
 # --- Extractor ---------------------------------------------------------------
@@ -162,6 +190,62 @@ async def test_system_prompt_is_cached_and_document_is_not():
     call = client.messages.calls[0]
     assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "tender text" in call["messages"][0]["content"]
+
+
+# --- Refusals ----------------------------------------------------------------
+
+
+async def test_refusal_routes_to_review_and_is_not_retried():
+    """A policy decline is a 200 with empty content, not an exception.
+
+    It must not be retried: the same prompt over the same document draws the
+    same decline, so a repair round only spends money. And it must not be
+    reported as a malformed answer — that would send someone hunting for a
+    schema bug that does not exist.
+    """
+    client = FakeClient([refusal("cyber")])
+    extractor = TenderExtractor(make_settings(), client=client)
+
+    result = await extractor.extract("SOLICITATION: secure comms subsystem ...")
+
+    assert result.status == "needs_review"
+    assert result.refused
+    assert result.refusal_category == "cyber"
+    assert result.attempts == 1
+    assert len(client.messages.calls) == 1, "a refusal must not trigger a repair round"
+
+
+async def test_refusal_without_a_category_is_still_a_refusal():
+    """stop_details is informational and can be absent. Branching on it
+    instead of stop_reason would let this one through as an empty answer."""
+    client = FakeClient([refusal(None)])
+    result = await TenderExtractor(make_settings(), client=client).extract("text")
+
+    assert result.status == "needs_review"
+    assert result.refusal_category == "unspecified"
+    assert "no structured output" not in (result.error or "")
+
+
+async def test_fallbacks_are_requested_by_default():
+    client = FakeClient([FakeResponse(VALID_EXTRACTION, model="claude-opus-4-8")])
+    result = await TenderExtractor(make_settings(), client=client).extract("text")
+
+    call = client.messages.calls[0]
+    assert call["fallbacks"] == "default"
+    assert call["betas"] == [FALLBACK_BETA]
+    # A rescue must be visible: `served_by` differs from the configured model.
+    assert result.served_by == "claude-opus-4-8"
+    assert result.ok
+
+
+async def test_fallbacks_can_be_switched_off():
+    client = FakeClient([FakeResponse(VALID_EXTRACTION)])
+    settings = make_settings(anthropic_fallbacks=False)
+    result = await TenderExtractor(settings, client=client).extract("text")
+
+    assert result.ok
+    assert "fallbacks" not in client.messages.calls[0]
+    assert "betas" not in client.messages.calls[0]
 
 
 # --- Embeddings --------------------------------------------------------------
@@ -279,3 +363,81 @@ async def test_embedding_text_excludes_boilerplate():
     assert "MIL-STD-810H" in text
     assert "480 handheld" in text
     assert "Turnover" not in text
+
+
+# --- Run digest --------------------------------------------------------------
+
+
+def report(**kwargs) -> IngestReport:
+    return IngestReport(source_key=kwargs.pop("source_key", "mod-balam"), **kwargs)
+
+
+async def test_digest_is_silent_on_a_clean_run():
+    """A mail that always arrives stops being read."""
+    notifier = EmailNotifier(make_settings())
+    sent = await notifier.send_run_digest([report(found=20, ingested=20)])
+
+    assert sent is False
+
+
+async def test_digest_fires_when_tenders_are_waiting_for_a_human():
+    assert needs_attention([report(found=20, ingested=18, needs_review=2)])
+    assert needs_attention([report(found=5, failed=1)])
+    assert not needs_attention([report(found=5, ingested=5)])
+
+
+async def test_digest_names_the_refusals_separately_from_schema_failures():
+    """A wall of policy declines and a wall of unparseable scans call for
+    different responses, so the digest must not merge them."""
+    subject, body = build_digest(
+        [report(found=10, ingested=6, needs_review=4, refused=3, errors=["x: boom"])]
+    )
+
+    assert "4 for review" in subject
+    assert "3 declined by policy" in body
+    assert "raise no" in body, "the digest must say review tenders generate no alerts"
+    assert "x: boom" in body
+
+
+async def test_unconfigured_smtp_does_not_raise():
+    """Mail is an operational convenience. A pipeline that aborts because a
+    mail server is unreachable has traded the job for a notice about it."""
+    notifier = EmailNotifier(make_settings(smtp_host=None))
+    sent = await notifier.send_run_digest([report(found=3, needs_review=3)])
+
+    assert sent is False
+
+
+async def test_smtp_failure_does_not_abort_the_run():
+    class ExplodingNotifier(EmailNotifier):
+        def _send(self, message):
+            raise OSError("connection refused")
+
+    notifier = ExplodingNotifier(
+        make_settings(smtp_host="smtp.example.test", notify_email="ops@example.test")
+    )
+    assert await notifier.send_run_digest([report(found=1, needs_review=1)]) is False
+
+
+async def test_old_sdk_without_fallbacks_still_extracts():
+    """Losing the fallback is a degradation; losing extraction is an outage.
+
+    An SDK too old to know the `fallbacks` kwarg raises TypeError. The
+    extractor must fall through to the stable call rather than turn every
+    document into a failure.
+    """
+
+    class PickyMessages(FakeMessages):
+        async def parse(self, **kwargs):
+            if "fallbacks" in kwargs:
+                raise TypeError("unexpected keyword argument 'fallbacks'")
+            return await super().parse(**kwargs)
+
+    client = FakeClient([FakeResponse(VALID_EXTRACTION)])
+    client.messages = PickyMessages([FakeResponse(VALID_EXTRACTION)])
+    client.beta = type("Beta", (), {"messages": client.messages})()
+
+    result = await TenderExtractor(make_settings(), client=client).extract("text")
+
+    assert result.ok
+    assert "fallbacks" not in client.messages.calls[-1]
