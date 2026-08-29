@@ -8,17 +8,24 @@
  * original notice.
  *
  * Cognitive-load decisions, all deliberate:
- *   - Two views, not seven. Feed answers "what is out there"; Pipeline
- *     answers "what are we doing about it". Nothing else earns a tab.
+ *   - Three views, not seven. Feed answers "what is out there"; Pipeline
+ *     answers "what are we doing about it"; Review answers "what did the
+ *     machine refuse to answer". Nothing else earns a tab.
  *   - Four summary figures, chosen because each one can change what a BD
  *     lead does this morning.
  *   - Detail opens in a side panel, so the feed and its filters stay put.
+ *
+ * The review tab earns its place because its contents are invisible
+ * everywhere else: a tender that failed extraction is deliberately left
+ * unembedded, so it raises no alert and matches no profile. Counting it in a
+ * tile without offering anywhere to go was the gap this closes.
  */
 
 import { useState } from "react";
 
 import { AlertsPanel } from "@/components/alerts-panel";
 import { PipelineBoard } from "@/components/pipeline-board";
+import { ReviewQueue } from "@/components/review-queue";
 import { TenderDetail } from "@/components/tender-detail";
 import { TenderFeed } from "@/components/tender-feed";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,7 +52,11 @@ export function Workspace({
   const inFlight = pipeline.filter((entry) =>
     ["evaluating", "drafting", "submitted"].includes(entry.status),
   ).length;
-  const needsReview = tenders.filter((t) => t.extraction_status === "needs_review").length;
+  // Matches the review queue's own filter exactly: a figure that disagrees
+  // with the list it links to is worse than no figure.
+  const needsReview = tenders.filter(
+    (t) => t.extraction_status === "needs_review" || t.extraction_status === "failed",
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -67,6 +78,9 @@ export function Workspace({
           <TabsList>
             <TabsTrigger value="feed">Tender feed</TabsTrigger>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+            <TabsTrigger value="review">
+              Review{needsReview > 0 ? ` (${needsReview})` : ""}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="feed">
@@ -75,6 +89,10 @@ export function Workspace({
 
           <TabsContent value="pipeline">
             <PipelineBoard tenders={tenders} entries={pipeline} onSelect={setSelected} />
+          </TabsContent>
+
+          <TabsContent value="review">
+            <ReviewQueue tenders={tenders} onSelect={setSelected} />
           </TabsContent>
         </Tabs>
 

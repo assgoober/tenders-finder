@@ -40,6 +40,8 @@ export const MOCK_TENDERS: Tender[] = [
     estimated_value: 14200000,
     currency: "USD",
     extraction_status: "extracted",
+    extraction_error: null,
+    extraction_model: "claude-opus-5",
     metadata: {
       reference_number: "MOD-2026-0417",
       language: "en",
@@ -127,6 +129,8 @@ export const MOCK_TENDERS: Tender[] = [
     estimated_value: 18500000,
     currency: "EUR",
     extraction_status: "extracted",
+    extraction_error: null,
+    extraction_model: "claude-opus-5",
     metadata: {
       reference_number: "MUNI-2026-0088",
       language: "en",
@@ -202,6 +206,8 @@ export const MOCK_TENDERS: Tender[] = [
     estimated_value: 6800000,
     currency: "EUR",
     extraction_status: "extracted",
+    extraction_error: null,
+    extraction_model: "claude-opus-5",
     metadata: {
       reference_number: "NASA-CUAS-2026-11",
       language: "en",
@@ -271,6 +277,9 @@ export const MOCK_TENDERS: Tender[] = [
     // Scanned PDF with no text layer: two constrained attempts failed, so it
     // was routed to a human instead of persisting a guess (REPOMIX.md ADR-2).
     extraction_status: "needs_review",
+    extraction_error:
+      "3 validation errors for TenderExtraction: title (field required), participation.eligibility_summary (none is not an allowed value), guidelines.scope_summary (none is not an allowed value)",
+    extraction_model: "claude-opus-5",
     metadata: {
       reference_number: "JASC-MRO-2026-03",
       language: null,
@@ -305,6 +314,78 @@ export const MOCK_TENDERS: Tender[] = [
       },
       key_dates: [],
       sector_specific: {},
+      extraction: {
+        prompt_version: "pegs-v1",
+        attempts: 2,
+        truncated_input: false,
+        input_tokens: 41280,
+        output_tokens: 612,
+        refusal_category: null,
+        served_by: "claude-opus-5",
+      },
+    },
+  },
+  {
+    id: "t-5",
+    title: "Counter-UAS Detection and Tracking Systems — Airport Perimeter",
+    summary: null,
+    buyer_name: "Airport Security Authority",
+    source_url: "https://example.gov/tenders/ASA-CUAS-2026-11",
+    source_name: "Government Publications Collector",
+    publication_date: daysAgo(6),
+    deadline: daysFromNow(11),
+    status: "open",
+    estimated_value: null,
+    currency: null,
+    // The other way into the review queue, and the reason the queue
+    // distinguishes them: a safety classifier declined this document and the
+    // server-side fallback chain declined it too. Nothing was retried — the
+    // same prompt over the same document draws the same decline — so no
+    // fields were extracted and no embedding was written.
+    extraction_status: "needs_review",
+    extraction_error: "request declined by policy (category=cyber)",
+    extraction_model: "claude-opus-5",
+    metadata: {
+      reference_number: "ASA-CUAS-2026-11",
+      language: null,
+      extraction_confidence: "low",
+      unclear_sections: [],
+      participation: {
+        eligibility_summary: null,
+        mandatory_prerequisites: [],
+        required_certifications: [],
+        required_experience: null,
+        financial_requirements: null,
+        geographic_restrictions: null,
+      },
+      evaluation: { method: null, criteria: [], price_weight_percent: null },
+      guidelines: {
+        scope_summary: null,
+        technical_specs: [],
+        referenced_standards: [],
+        line_items: [],
+        minimum_order_quantity: null,
+        delivery_terms: null,
+        contract_duration: null,
+        warranty_terms: null,
+      },
+      selection: {
+        award_basis: null,
+        decisive_metric: null,
+        number_of_awards: null,
+        framework_agreement: null,
+      },
+      key_dates: [],
+      sector_specific: {},
+      extraction: {
+        prompt_version: "pegs-v1",
+        attempts: 1,
+        truncated_input: false,
+        input_tokens: null,
+        output_tokens: null,
+        refusal_category: "cyber",
+        served_by: "claude-opus-5",
+      },
     },
   },
 ];

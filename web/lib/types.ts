@@ -87,6 +87,29 @@ export interface KeyDate {
  * `sector_specific` is the dual-use pressure valve: defense clearance levels
  * today, medical device classes tomorrow, with no type change here.
  */
+/**
+ * What the pipeline records about the extraction run itself, written to
+ * `metadata.extraction`. Everything here is diagnostic — it says how the
+ * fields above were arrived at, which is what a reviewer needs in order to
+ * decide whether to trust them or open the original notice.
+ */
+export interface ExtractionRun {
+  prompt_version: string;
+  attempts: number;
+  /** The document was longer than the extractor's ceiling and was cut. Real
+   *  information loss, so it is recorded rather than done silently. */
+  truncated_input: boolean;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  /** Policy category when a safety classifier declined the request, e.g.
+   *  "cyber". Null on the ordinary path. A decline and a schema failure both
+   *  land in `needs_review`, and this is what tells them apart. */
+  refusal_category: string | null;
+  /** Which model actually answered. Differs from the configured model when a
+   *  fallback rescued a declined request. */
+  served_by: string | null;
+}
+
 export interface TenderMetadata {
   participation: ParticipationConditions;
   evaluation: EvaluationFramework;
@@ -98,6 +121,8 @@ export interface TenderMetadata {
   language: string | null;
   extraction_confidence: "high" | "medium" | "low";
   unclear_sections: string[];
+  /** Absent on rows written before this field existed, so optional. */
+  extraction?: ExtractionRun;
 }
 
 export interface Tender {
@@ -115,6 +140,9 @@ export interface Tender {
   estimated_value: number | null;
   currency: string | null;
   extraction_status: ExtractionStatus;
+  /** Why the extraction did not complete. Null when it did. */
+  extraction_error: string | null;
+  extraction_model: string | null;
   metadata: TenderMetadata;
 }
 
