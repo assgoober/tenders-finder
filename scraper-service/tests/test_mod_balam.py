@@ -12,6 +12,7 @@ bugs live, and none of it needs Chromium to test.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import datetime
 
@@ -79,7 +80,6 @@ def test_row_becomes_a_normalized_stub():
         title="רכש דלקני מתכת 20 ליטר ריקים המשך...",
         publication_text="06/08/2026",
         deadline_text="16:00 26/08/2026",
-        contact_text="03-6977476",
     )
 
     assert stub.external_id == "1000957926"
@@ -87,7 +87,46 @@ def test_row_becomes_a_normalized_stub():
     assert stub.buyer_name == "משרד הביטחון"
     assert stub.deadline == datetime(2026, 8, 26, 16, 0, tzinfo=ISRAEL_TZ)
     assert stub.publication_date.date().isoformat() == "2026-08-06"
-    assert stub.listing_metadata["contact_phone"] == "03-6977476"
+
+
+def test_the_contact_phone_is_not_stored_anywhere_in_the_payload():
+    """The listing publishes a contact phone. Nothing in this system reads,
+    displays or matches on it, so collecting it is personal data held for no
+    purpose.
+
+    Asserting on the absence of one key would not be enough: the raw row is
+    a join of every cell, so the number would simply reappear under a
+    different key. This searches the whole serialized payload instead, which
+    is what actually has to be free of it.
+    """
+    phone = "03-6977476"
+    texts = [
+        "",                       # 0 icon column
+        "1000957926",             # 1 reference
+        "רכש דלקני מתכת 20 ליטר", # 2 title
+        "",                       # 3
+        "16:00 26/08/2026",       # 4 deadline
+        "06/08/2026",             # 5 publication
+        phone,                    # 6 contact — must not survive
+    ]
+    a = agent()
+
+    row = a._redacted_row(texts)
+    assert phone not in row
+    # The diagnostic value of the raw row is the point of keeping it, so the
+    # other cells must still be there.
+    assert "1000957926" in row and "16:00 26/08/2026" in row
+
+    stub = a.build_stub(
+        source_url="https://x/y",
+        reference=texts[1],
+        title=texts[2],
+        deadline_text=texts[4],
+        publication_text=texts[5],
+        row_text=row,
+    )
+    assert phone not in json.dumps(stub.listing_metadata, ensure_ascii=False)
+    assert "contact_phone" not in stub.listing_metadata
 
 
 def test_portal_deadline_format_keeps_the_submission_time():

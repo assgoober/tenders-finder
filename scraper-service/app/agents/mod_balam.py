@@ -61,7 +61,8 @@ because that control only renders on titles long enough to be clipped.
 
 Worth being plain about, because it bounds what the rest of the pipeline can
 do. The public listing carries: reference number, title, submission
-deadline, publication date, and a contact phone. `BalamHeaderText.aspx`
+deadline, publication date, and a contact phone (published by the portal,
+deliberately not collected — see `col_contact`). `BalamHeaderText.aspx`
 serves the tender's **full title** and nothing more — it is a read-more
 dialog, not a specification page.
 
@@ -154,6 +155,11 @@ class BalamContract:
     #: No status column on the listing. Status is inferred from the deadline
     #: by the pipeline, or read from the detail page.
     col_status: int | None = None
+    #: Observed at index 6, and deliberately NOT extracted. The column holds
+    #: a contact phone number: personal data under the Israeli privacy
+    #: regulations, which nothing in this system reads, displays or matches
+    #: on. Recorded here so the column map stays a complete description of
+    #: the page; used by `_redacted_row` to exclude it from the raw row.
     col_contact: int | None = 6
 
     #: Confirmed by probe: the row's only link is the "המשך..." read-more
@@ -353,8 +359,7 @@ class ModBalamAgent(PlaywrightPortalAgent):
                     publication_text=self._column(texts, self.contract.col_publication_date),
                     deadline_text=self._column(texts, self.contract.col_deadline),
                     status_text=self._column(texts, self.contract.col_status),
-                    contact_text=self._column(texts, self.contract.col_contact),
-                    row_text=" | ".join(t for t in texts if t),
+                    row_text=self._redacted_row(texts),
                 )
             )
 
@@ -399,6 +404,20 @@ class ModBalamAgent(PlaywrightPortalAgent):
             return None
         return urljoin(
             self.base_url, self.contract.detail_url_template.format(reference=reference.strip())
+        )
+
+    def _redacted_row(self, texts: list[str | None]) -> str:
+        """The row as seen, minus the contact column.
+
+        `raw_row` is a diagnostic: when the column map drifts, it is what
+        shows you what the row actually said. But joining every cell would
+        put the contact phone back into the database under a different key,
+        which would make dropping `contact_phone` theatre rather than a
+        removal. The one column carrying personal data is excluded here.
+        """
+        contact = self.contract.col_contact
+        return " | ".join(
+            text for index, text in enumerate(texts) if text and index != contact
         )
 
     @staticmethod
@@ -500,7 +519,6 @@ class ModBalamAgent(PlaywrightPortalAgent):
         publication_text: str | None = None,
         deadline_text: str | None = None,
         status_text: str | None = None,
-        contact_text: str | None = None,
         row_text: str | None = None,
     ) -> TenderStub:
         raw_title = clean_text(title)
@@ -522,7 +540,6 @@ class ModBalamAgent(PlaywrightPortalAgent):
                 "reference_number": reference,
                 "raw_status": clean_text(status_text),
                 "normalized_status": parse_status(status_text),
-                "contact_phone": clean_text(contact_text),
                 # The listing clipped this title; `enrich` recovers the full
                 # text from the detail page.
                 "title_truncated": was_truncated,
