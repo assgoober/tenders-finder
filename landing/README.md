@@ -57,7 +57,15 @@ in Heebo.
    Submissions are deliberately **not** stored in the page. Contact details
    embedded in a shareable page are readable by everyone who opens it.
 
-2. **`FALLBACK_EMAIL`** — currently a placeholder address.
+2. **`FALLBACK_EMAIL`** — set to `omeritzhaki10@gmail.com`. Deliberately a
+   different address from the one the scraper service sends run digests
+   to: this one is published in the page source of a public site and will
+   be found by address harvesters, and the address that collects that
+   should not be the one operational alerts arrive at.
+
+   Verified by submitting the real form in a browser and capturing the
+   `mailto:` the page navigates to — recipient, subject and all six body
+   fields arrive intact, Hebrew included.
 
 3. **The logo** is an SVG recreation of the supplied mark, so it stays crisp
    at any size and inherits no raster artefacts. Swap in the original asset

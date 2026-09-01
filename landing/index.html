@@ -1930,7 +1930,11 @@ section { padding-block: clamp(60px, 8vw, 100px); }
      email so a submission is never silently lost.
      ------------------------------------------------------------------ */
   var ENDPOINT = "";            // e.g. "https://api.example.com/leads"
-  var FALLBACK_EMAIL = "hello@tendersfinder.example";
+  // Deliberately a different address from the one the scraper service sends
+  // run digests to: this one is published in the page source of a public
+  // site and will be found by address harvesters, and an address that
+  // collects spam should not be the one operational alerts arrive at.
+  var FALLBACK_EMAIL = "omeritzhaki10@gmail.com";
 
   var form = document.getElementById("leadForm");
   var status = document.getElementById("formStatus");
