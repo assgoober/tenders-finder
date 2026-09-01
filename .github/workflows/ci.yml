@@ -48,12 +48,6 @@ jobs:
           # with a stray .env cannot mask a test that secretly needs a key.
           EMBEDDING_PROVIDER: hash
           DRY_RUN: "true"
-          # Pinned for the same reason. A developer who switches provider in
-          # their own .env would otherwise run a different suite than CI does,
-          # and the divergence shows up as a test that fails only on one of
-          # the two machines.
-          EXTRACTION_PROVIDER: anthropic
-          GEMINI_MODEL: gemini-3.6-flash
         run: pytest -q
 
   web:
