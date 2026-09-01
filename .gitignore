@@ -24,6 +24,10 @@ venv/
 # tooling / local agent state
 .gstack/
 .claude/
+# MCP server config — local only. It is OAuth-based, so the cloud session
+# cannot authenticate against it; committing it would advertise access
+# that does not exist there.
+.mcp.json
 
 # repomix packed output
 repomix-output.xml
