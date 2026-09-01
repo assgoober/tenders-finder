@@ -1,7 +1,12 @@
 # Service
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-pydantic==2.10.4
+# 2.10.4 until supabase 2.31.0 arrived: it pulls realtime 2.31.0, which
+# requires pydantic>=2.11.7, and the two pins cannot both hold. pip
+# silently upgraded pydantic in the developer environment, so the suite
+# went green against a version this file did not declare -- CI, which
+# installs clean, is what refused. Pinned to the version actually tested.
+pydantic==2.13.5
 pydantic-settings==2.7.0
 
 # Anthropic — structured outputs via beta.messages.parse(output_format=...).
