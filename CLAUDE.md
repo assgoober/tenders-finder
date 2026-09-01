@@ -1,0 +1,136 @@
+# CLAUDE.md — Tenders Finder Agent Contract
+
+This repository holds one project. Everything in it is Tenders Finder.
+
+| Path | Piece | Stack |
+|---|---|---|
+| `web/` | Dashboard | Next.js 14 |
+| `scraper-service/` | Aggregation agents + NLP extraction | Python · FastAPI · Playwright |
+| `supabase/` | Schema, RLS, matching engine | PostgreSQL + pgvector |
+| `landing/` | Public landing page | Single static HTML file, no build step |
+
+Project knowledge base: `REPOMIX.md` at the repository root. Read it before
+making architectural decisions.
+
+## Product
+
+Tenders Finder solves the extreme fragmentation of defense procurement
+tenders, which are scattered across hundreds of isolated government and
+military portals. Business-development teams currently search them manually
+and lose opportunities.
+
+Three pillars:
+
+1. **Automated aggregation agents** — harvest tenders from many portals.
+2. **AI alert engine** — semantic matching of new tenders to a company profile.
+3. **Unified workspace** — one dashboard replacing dozens of portal logins.
+
+Optimize every UI decision for reduced cognitive load. Optimize every data
+decision for trust: always show the extracted field next to a link to the
+original source document.
+
+## Architecture rules
+
+### Dual-use (B2G today, B2B later)
+
+Model tenders content-agnostically. Put domain-specific extracted fields in
+the `metadata` JSONB column, never in dedicated defense-only SQL columns.
+A civilian infrastructure or medical-procurement tender must flow through the
+same tables, the same extraction pipeline, and the same matching function
+without a schema migration.
+
+Concretely: `tenders` carries only universal columns (`title`, `source_url`,
+`publication_date`, `deadline`, `status`, `buyer_name`, `metadata`,
+`embedding`). Anything sector-specific — security clearance level, ITAR
+classification, medical device class — lives inside `metadata`.
+
+### Multi-tenancy and isolation
+
+Every tenant-scoped table carries `organization_id` and has Row Level
+Security **enabled and forced**. Defense contractors compete with each other:
+one organization must never observe another's alert profiles, pipeline
+statuses, or notes. Write an RLS policy in the same migration that creates
+the table — never in a follow-up.
+
+Service-role code (the scraper service) writes shared tender records; it must
+not write tenant-scoped rows on behalf of a tenant without an explicit
+`organization_id`.
+
+### LLM output is never trusted
+
+The LLM's job is semantic understanding and extraction, not judgment. It never
+decides whether to bid, who wins, or what a requirement "really means".
+
+Validate every LLM response against a Pydantic model (Python) or Zod schema
+(TypeScript) before it reaches the database. Use structured outputs
+(`client.messages.parse(..., output_format=Model)`) rather than asking for
+JSON in prose. On validation failure: retry once with the validation error fed
+back, then flag the tender `needs_review` for a human. Never persist an
+unvalidated payload.
+
+Instruct the model to return `null` for fields it cannot confidently extract.
+A `null` is a correct answer; a guess is a defect.
+
+A refusal is not an exception. It arrives as a successful HTTP 200 with
+`stop_reason: "refusal"` and empty content, so branch on `stop_reason` — never
+on the presence of `stop_details`, which is absent on some refusals.
+
+### Extraction prompt structure — PEGS
+
+Every extraction prompt must organize the tender document along PEGS:
+
+- **P**articipation — eligibility, mandatory prerequisites, certifications.
+- **E**valuation — how bids are scored.
+- **G**uidelines — technical specification, BOM, quantities, delivery terms.
+- **S**election — award criteria and decisive metrics.
+
+PEGS gives the model contextual cues that a generic "extract the
+requirements" prompt does not, and it measurably improves extraction quality.
+
+### Scraper agents
+
+Separate navigation logic from extraction logic so a portal redesign breaks
+only one of them. Register every source through the agent registry
+(`app/agents/registry.py`) — adding a portal must never require editing core
+pipeline code. Use exponential backoff with jitter on every outbound request;
+government portals rate-limit and IP-ban aggressively.
+
+Before enabling a portal in production, check its terms of use and
+`robots.txt`. `sapakim.mod.gov.il` serves a genuine blanket disallow and is
+off limits. The gov.il JSON API is gated by an `x-client-id` the front end
+embeds — do not lift it; request one from the operator.
+
+## Commands
+
+```bash
+# Web
+cd web && npm install && npm run dev
+cd web && npm run typecheck && npm run lint
+
+# Scraper / NLP service
+cd scraper-service && pip install -r requirements.txt
+cd scraper-service && uvicorn app.main:app --reload
+cd scraper-service && pytest -q
+
+# Landing page
+cd landing && npm run serve
+```
+
+## Done criteria
+
+A task is not complete until:
+
+1. `npm run typecheck` passes in `web` (for web changes).
+2. `pytest -q` passes in `scraper-service` (for service changes).
+3. New SQL lives in a new numbered file under `supabase/migrations/` — never
+   edit an applied migration.
+4. Any new tenant-scoped table has an RLS policy in the same migration.
+5. `REPOMIX.md` is updated when an architectural decision changes.
+
+Do not commit code that has not passed the checks above.
+
+## Model usage
+
+Use `claude-opus-5` for extraction. Set the model through
+`ANTHROPIC_MODEL` in the service config — never hardcode a model ID at a
+call site.

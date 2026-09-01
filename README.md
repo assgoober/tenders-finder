@@ -8,8 +8,8 @@ replaces portal-by-portal searching.
 Built B2G-first (defense procurement) on a content-agnostic data model, so the
 same pipeline handles civilian and commercial tenders without a schema change.
 
-Full architecture, decision records, and rationale: [`../REPOMIX.md`](../REPOMIX.md).
-Agent working rules: [`../CLAUDE.md`](../CLAUDE.md).
+Full architecture, decision records, and rationale: [`REPOMIX.md`](REPOMIX.md).
+Agent working rules: [`CLAUDE.md`](CLAUDE.md).
 
 ## Layout
 
@@ -18,6 +18,7 @@ supabase/migrations/   PostgreSQL schema: pgvector, RLS, hybrid matching engine
 supabase/seed.sql      Local development data (never run in production)
 scraper-service/       Python · FastAPI · Playwright · Claude extraction
 web/                   Next.js 14 dashboard
+landing/               Public landing page — one static HTML file, no build
 ```
 
 ## Status
@@ -50,7 +51,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium     # only needed for real portal agents
 
-cp ../.env.example ../.env      # then fill it in
+cp ../.env.example ../.env      # repo root; then fill it in
 uvicorn app.main:app --reload
 ```
 
@@ -319,9 +320,7 @@ Playwright — not the service's full `requirements.txt`.
 **macOS / Linux:**
 
 ```bash
-git clone https://github.com/omer-izhaki/ai-trainer-cal-counter.git
-cd ai-trainer-cal-counter
-git checkout claude/tenders-finder-architecture-piz4ft
+git clone https://github.com/omer-izhaki/tenders-finder.git
 cd tenders-finder/scraper-service
 
 pip install playwright
@@ -334,9 +333,7 @@ python tools/probe_portal.py --url "https://www.gov.il/he/collectors/publication
 (PowerShell 5.1 does not accept `&&`):
 
 ```powershell
-git clone https://github.com/omer-izhaki/ai-trainer-cal-counter.git
-cd ai-trainer-cal-counter
-git checkout claude/tenders-finder-architecture-piz4ft
+git clone https://github.com/omer-izhaki/tenders-finder.git
 cd tenders-finder\scraper-service
 
 pip install playwright

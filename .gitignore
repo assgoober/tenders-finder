@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+
+# env  (NEVER commit — the SMTP app password and the Supabase service-role
+# key live here, and the service-role key bypasses RLS entirely)
+.env
+.env.*
+!.env.example
+secrets/
+
+# next.js (web/)
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# python (scraper-service/)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# tooling / local agent state
+.gstack/
+.claude/
+
+# repomix packed output
+repomix-output.xml
+
+# os / editor
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.*
+yarn-error.*

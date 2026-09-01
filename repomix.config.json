@@ -1,0 +1,27 @@
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "output": {
+    "filePath": "repomix-output.xml",
+    "style": "xml",
+    "headerText": "Tenders Finder — B2G/B2B tender aggregation platform. Read REPOMIX.md and CLAUDE.md first: they carry the architecture contract (dual-use content-agnostic data model, forced RLS, schema-constrained LLM extraction via PEGS).",
+    "removeComments": false,
+    "showLineNumbers": true,
+    "directoryStructure": true,
+    "compress": false
+  },
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/__pycache__/**",
+      "**/*.pyc",
+      "**/.venv/**",
+      "**/package-lock.json"
+    ]
+  },
+  "security": {
+    "enableSecurityCheck": true
+  }
+}
