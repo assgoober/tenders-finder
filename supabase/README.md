@@ -68,7 +68,7 @@ where u.email = 'you@example.com';
 
 ## Row level security
 
-Nine tables, RLS enabled on all of them. Five are tenant-scoped — they carry
+Ten tables, RLS enabled on all of them. Five are tenant-scoped — they carry
 `organization_id` and RLS is additionally **forced**, so even the table owner
 is subject to it:
 
@@ -80,11 +80,23 @@ is subject to it:
 | `tender_matches` | `organization_id` |
 | `tender_pipeline` | `organization_id` |
 
-The other four — `tenders`, `tender_documents`, `tender_sources`,
-`scrape_runs` — hold shared records, carry no `organization_id`, and are
-readable by any signed-in user. Note the role: those policies grant to
-**`authenticated`**, not `anon`, so an anonymous caller reads nothing at all,
-including tenders.
+Three of the rest — `tenders`, `tender_documents` and `tender_sources` —
+hold shared records, carry no `organization_id`, and are readable by any
+signed-in user. Note the role: those policies grant to **`authenticated`**,
+not `anon`, so an anonymous caller reads nothing at all, including tenders.
+
+`scrape_runs` was previously listed here as readable by any signed-in user.
+**It is not, and never was.** Migration 0003 enables RLS on it and writes no
+policy, which the comment there states is deliberate: it is operational
+telemetry, and only the service role — which bypasses RLS — reads or writes
+it. A UI that queried `scrape_runs` as a signed-in user would get zero rows
+and no error, which is the failure this project keeps finding: the wrong
+answer, arriving quietly, in a shape indistinguishable from the right one.
+
+`leads` (migration 0006) is the tenth table and the only one an unauthenticated
+visitor writes to. `anon` holds INSERT and nothing else — no SELECT policy
+exists for any browser-facing role — so the landing page can submit a contact
+form and cannot read back what it or anyone else submitted.
 
 This was tested rather than assumed, against PostgreSQL 16 with pgvector: two
 organizations with one alert profile each, then queried as each member. Each
