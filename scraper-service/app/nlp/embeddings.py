@@ -84,6 +84,89 @@ class VoyageEmbeddingProvider:
         return vectors
 
 
+class GeminiEmbeddingProvider:
+    """Google provider, for deployments already using Gemini for extraction.
+
+    Exists so that choosing Gemini does not also mean signing up for a third
+    vendor just to embed. It is the same swappable-provider point ADR-6
+    describes; nothing else in the pipeline changes.
+
+    Two measured facts shape this class, both confirmed against the live API
+    rather than read off a page:
+
+    **1024 dimensions are reachable, so no migration is needed.**
+    `gemini-embedding-001` accepts `output_dimensionality`, and 1024 -- the
+    width `supabase/migrations/0001_extensions.sql` declares -- comes back
+    exactly. A provider that could only emit its native width would have
+    forced `ALTER TABLE ... TYPE vector(N)` plus a full re-embedding.
+
+    **A truncated vector is not normalized, and this class normalizes it.**
+    At the native 3072 the returned vector has L2 norm 1.0; asked for 1024 it
+    comes back at ~0.62, because Matryoshka truncation drops magnitude with
+    the tail. Today that is harmless: every operator in
+    `0005_matching_engine.sql` is `<=>`, pgvector's cosine distance, which
+    normalizes internally -- so `min_score` thresholds still mean what they
+    say. It is harmless *one layer away*, though. Switching to `<#>` (inner
+    product) is the ordinary optimization once vectors are known-normalized,
+    and against un-normalized vectors it would scale every score down by ~0.62
+    -- pushing real matches under the 0.72 default threshold and producing no
+    alerts at all. Zero alerts is indistinguishable from a quiet week in
+    procurement, which is the failure this project keeps having to design
+    against. Normalizing here costs one pass over 1024 floats and removes the
+    trap, and it matches what Voyage already returns.
+    """
+
+    #: The API accepts a list and returns embeddings in input order (checked:
+    #: an element of a batch equals the same text embedded alone). Chunked
+    #: anyway, so one oversized run cannot become one oversized request.
+    MAX_BATCH = 96
+
+    def __init__(self, settings: Settings, client=None) -> None:
+        if not settings.gemini_api_key:
+            raise ValueError(
+                "GEMINI_API_KEY is required for the 'gemini' embedding provider. "
+                "Set EMBEDDING_PROVIDER=hash for offline development."
+            )
+        self._settings = settings
+        self._client = client
+        self.model_name = settings.gemini_embedding_model
+        self.dimension = settings.embedding_dim
+
+    @property
+    def client(self):
+        if self._client is None:
+            from google import genai
+
+            self._client = genai.Client(api_key=self._settings.gemini_api_key)
+        return self._client
+
+    async def embed(
+        self, texts: list[str], *, input_type: InputType = "document"
+    ) -> list[list[float]]:
+        from google.genai import types
+
+        # The corpus and the query must be embedded with matching task types,
+        # or the two vectors land in comparable-looking but different spaces
+        # and the similarity is noise wearing a score.
+        task_type = "RETRIEVAL_QUERY" if input_type == "query" else "RETRIEVAL_DOCUMENT"
+
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), self.MAX_BATCH):
+            batch = texts[start : start + self.MAX_BATCH]
+            response = await self.client.aio.models.embed_content(
+                model=self.model_name,
+                contents=batch,
+                config=types.EmbedContentConfig(
+                    output_dimensionality=self.dimension,
+                    task_type=task_type,
+                ),
+            )
+            vectors.extend(_normalize(list(e.values)) for e in response.embeddings)
+
+        _assert_dimensions(vectors, self.dimension)
+        return vectors
+
+
 class HashEmbeddingProvider:
     """Deterministic local provider for development and tests.
 
@@ -121,6 +204,19 @@ class HashEmbeddingProvider:
         return [v / norm for v in vector]
 
 
+def _normalize(vector: list[float]) -> list[float]:
+    """Scale to unit length. A zero vector is returned unchanged.
+
+    Dividing by a zero norm would produce NaNs, and a row of NaNs in a vector
+    column fails at INSERT with an error about the column rather than about
+    the empty input that caused it.
+    """
+    norm = math.sqrt(sum(x * x for x in vector))
+    if norm == 0:
+        return vector
+    return [x / norm for x in vector]
+
+
 def _assert_dimensions(vectors: list[list[float]], expected: int) -> None:
     for vector in vectors:
         if len(vector) != expected:
@@ -137,6 +233,8 @@ def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvide
 
     if provider == "voyage":
         return VoyageEmbeddingProvider(settings)
+    if provider == "gemini":
+        return GeminiEmbeddingProvider(settings)
     if provider == "hash":
         logger.warning("using the hash embedding provider — development only, not semantic")
         return HashEmbeddingProvider(settings)

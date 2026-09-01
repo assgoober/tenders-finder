@@ -38,8 +38,19 @@ def validate_configuration() -> None:
             "full re-embedding (REPOMIX.md ADR-6)."
         )
 
-    if not settings.has_anthropic:
-        logger.warning("ANTHROPIC_API_KEY is not set — extraction endpoints will fail")
+    if not settings.has_extraction:
+        key = "GEMINI_API_KEY" if settings.extraction_provider == "gemini" else "ANTHROPIC_API_KEY"
+        logger.warning(
+            "EXTRACTION_PROVIDER=%s but %s is not set — extraction endpoints will fail",
+            settings.extraction_provider,
+            key,
+        )
+    else:
+        logger.info(
+            "extraction provider: %s (model %s)",
+            settings.extraction_provider,
+            settings.extraction_model,
+        )
     if not settings.has_supabase and not settings.dry_run:
         logger.warning("Supabase is not configured — set DRY_RUN=true to run without a database")
     if not settings.has_email_notifications:
@@ -56,6 +67,17 @@ def validate_configuration() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     validate_configuration()
+
+    # One metadata request, in the only place it can still be cheap. A model
+    # id that does not exist is otherwise discovered per document, ~190 times
+    # a sweep, as an opaque failure with the real cause nowhere in it.
+    settings = get_settings()
+    if settings.extraction_provider == "gemini" and settings.gemini_verify_model:
+        if settings.has_gemini:
+            from .nlp.gemini import verify_gemini_model
+
+            await verify_gemini_model(settings)
+
     yield
 
 

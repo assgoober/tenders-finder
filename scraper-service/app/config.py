@@ -8,6 +8,7 @@ a call site, so swapping a model or an embedding provider is a config change
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,6 +41,35 @@ class Settings(BaseSettings):
     # the tender is extracted instead of parked. Turn it off only to observe
     # raw refusal rates.
     anthropic_fallbacks: bool = True
+
+    # --- Extraction provider ---
+    # Which backend performs schema-constrained extraction. The
+    # validate-repair-review ladder (ADR-2) and the refusal routing (ADR-13)
+    # are provider-independent and run identically either way; only the
+    # transport and the response shape differ.
+    #
+    # "anthropic" is the documented default (ADR-7). "gemini" exists because
+    # the operator asked for it; the tradeoffs it carries are recorded in
+    # REPOMIX.md ADR-20 rather than argued here.
+    extraction_provider: Literal["anthropic", "gemini"] = "anthropic"
+
+    # --- Google Gemini ---
+    gemini_api_key: str | None = None
+    # Never referenced at a call site — the model is configuration, per
+    # CLAUDE.md. The default is the model the operator named; if Google's API
+    # spells it differently, `validate_configuration` fails at startup with
+    # the list of ids the key can actually see, rather than letting every
+    # document fail one at a time against a name nobody checked.
+    gemini_model: str = "gemini-3.6-flash"
+    gemini_max_output_tokens: int = 16000
+    # Embeddings, for deployments that do not want a third vendor. Reaches
+    # 1024 via `output_dimensionality`, which is the width the schema
+    # declares -- so selecting it needs no migration and no re-embedding.
+    gemini_embedding_model: str = "gemini-embedding-001"
+    # Verify the model id against ListModels when the service starts. Costs
+    # one metadata request and converts a typo from ~190 identical per-tender
+    # failures into one refusal to start.
+    gemini_verify_model: bool = True
 
     # --- Notifications ---
     # A needs_review tender is invisible until a human opens it, and there is
@@ -90,6 +120,30 @@ class Settings(BaseSettings):
     @property
     def has_anthropic(self) -> bool:
         return bool(self.anthropic_api_key)
+
+    @property
+    def has_gemini(self) -> bool:
+        return bool(self.gemini_api_key)
+
+    @property
+    def has_extraction(self) -> bool:
+        """Whether the *selected* provider has what it needs.
+
+        Asked instead of `has_anthropic` everywhere the question is "can this
+        run at all". A key for the provider you are not using is not a
+        configured pipeline, and an Anthropic key present while
+        EXTRACTION_PROVIDER=gemini must not read as ready.
+        """
+        if self.extraction_provider == "gemini":
+            return self.has_gemini
+        return self.has_anthropic
+
+    @property
+    def extraction_model(self) -> str:
+        """The model id for the selected provider, for logs and stored rows."""
+        if self.extraction_provider == "gemini":
+            return self.gemini_model
+        return self.anthropic_model
 
     @property
     def has_supabase(self) -> bool:

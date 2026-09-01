@@ -16,7 +16,11 @@ import pytest
 from app.agents import get_agent
 from app.config import Settings
 from app.nlp.embeddings import HashEmbeddingProvider
-from app.nlp.extractor import FALLBACK_BETA, TenderExtractor
+from app.nlp.extractor import (
+    FALLBACK_BETA,
+    ExtractionNotConfigured,
+    TenderExtractor,
+)
 from app.notifications import (
     EmailNotifier,
     build_digest,
@@ -31,6 +35,11 @@ pytestmark = pytest.mark.asyncio
 
 def make_settings(**overrides) -> Settings:
     base = {
+        # Pinned, not inherited. `Settings()` reads the developer's .env, so
+        # without this an EXTRACTION_PROVIDER set on the machine silently
+        # changes which backend these tests exercise -- and the suite starts
+        # passing or failing on ambient configuration. Same reason CI pins it.
+        "extraction_provider": "anthropic",
         "anthropic_api_key": "test-key",
         "embedding_provider": "hash",
         "dry_run": True,
@@ -459,3 +468,69 @@ async def test_smtp_failures_are_explained_not_just_reported():
     assert "NOTIFY_FROM_EMAIL" in explain_smtp_failure(sender)
 
     assert "SMTP_HOST" in explain_smtp_failure(ConnectionRefusedError(111, "refused"))
+
+
+# --- Missing ANTHROPIC_API_KEY is a configuration error, not a transport one ---
+#
+# Found by running the pipeline with no keys against the live BALAM portal:
+# it scraped five real tenders and then failed all five with the Anthropic
+# SDK's header error, `TypeError: "Could not resolve authentication method"`.
+# Accurate about the SDK, silent about the cause, and repeated once per row —
+# a nine-page sweep would produce ~190 of them and read like a client-library
+# bug. These lock in the loud, correct failure instead.
+
+
+async def test_run_refuses_before_touching_a_portal_without_a_key(monkeypatch):
+    """The gate is in run(), not per tender.
+
+    Asserted through an agent that fails the test if it is contacted at all:
+    the point is not only that the run raises, but that it raises before the
+    portal is asked for anything. A per-tender check would still make ~190
+    requests to a government site to learn something knowable at startup.
+    """
+    contacted = []
+
+    class Tripwire:
+        key = "tripwire"
+        display_name = "should never be reached"
+        base_url = "https://example.invalid"
+        country = "IL"
+
+        async def discover(self, *a, **k):
+            contacted.append(True)
+            return []
+
+    monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [Tripwire()])
+
+    pipeline = IngestionPipeline(settings=make_settings(anthropic_api_key=""))
+
+    with pytest.raises(ExtractionNotConfigured) as err:
+        await pipeline.run(["tripwire"], limit=5)
+
+    assert contacted == [], "the portal was contacted despite no API key"
+    # The message has to name the variable; that is the whole repair.
+    assert "ANTHROPIC_API_KEY" in str(err.value)
+
+
+async def test_extractor_client_reports_the_cause_not_the_sdk_error():
+    """Second layer, for callers that bypass the pipeline.
+
+    `TenderExtractor` is reachable from the /extract route and from scripts,
+    so the pipeline gate alone would leave the confusing error in place on
+    those paths.
+    """
+    extractor = TenderExtractor(make_settings(anthropic_api_key=""))
+
+    with pytest.raises(ExtractionNotConfigured):
+        _ = extractor.client
+
+
+async def test_a_mocked_client_still_bypasses_the_gate():
+    """The guard must not break the way every other test here runs.
+
+    An injected client means the key is irrelevant, and that has to keep
+    being true or the suite would need a real credential to run.
+    """
+    sentinel = object()
+    extractor = TenderExtractor(make_settings(anthropic_api_key=""), client=sentinel)
+    assert extractor.client is sentinel
