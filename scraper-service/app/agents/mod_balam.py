@@ -348,10 +348,29 @@ class ModBalamAgent(PlaywrightPortalAgent):
         stubs: list[TenderStub] = []
         rows = await self._data_rows(page)
 
+        skipped_pager = 0
+
         for row in rows:
             cells = await row.query_selector_all("td")
             if len(cells) < 2:
-                # Header, pager, or spacer row.
+                # Header or spacer row.
+                continue
+
+            # The pager is not one row, it is two, and both survive the cell
+            # count above. WebForms wraps the page links in a nested table:
+            # the outer row carries 10 cells, and the inner <tr> carries one
+            # cell per page number -- 9 of them, reading "1", "2", "3"... A
+            # cell-count filter cannot tell that apart from a tender whose
+            # reference happens to be short, and it did not: rows with
+            # external_id "1" and "2" reached the database and failed
+            # extraction with "empty document text", which describes the
+            # symptom and not the cause.
+            #
+            # What separates them structurally is the pager link, and the
+            # contract already names that selector for the walk itself. Reused
+            # here rather than adding a second definition of "this is a pager".
+            if await row.query_selector(self.contract.pager_link_selector):
+                skipped_pager += 1
                 continue
 
             texts = [clean_text(await cell.inner_text()) for cell in cells]
@@ -386,6 +405,19 @@ class ModBalamAgent(PlaywrightPortalAgent):
                     status_text=self._column(texts, self.contract.col_status),
                     row_text=self._redacted_row(texts),
                 )
+            )
+
+        if skipped_pager:
+            logger.debug(
+                "[%s] skipped %d pager row(s) on this listing page", self.key, skipped_pager
+            )
+        elif rows:
+            # Every listing page this portal serves carries a pager. None found
+            # means the markup moved, and the next thing to break quietly is
+            # the walk itself.
+            logger.warning(
+                "[%s] no pager row found on a listing page — re-run tools/probe_portal.py",
+                self.key,
             )
 
         return stubs

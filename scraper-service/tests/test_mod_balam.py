@@ -536,3 +536,98 @@ async def test_pagination_stops_when_no_pager_exists():
 @pytest.mark.asyncio
 async def test_contract_records_the_probed_grid_control_id():
     assert CONTRACT.grid_control_id == "ctl00$ContentPlaceHolder1$gvBalam"
+
+
+# --- pager rows are not tenders --------------------------------------------
+#
+# Observed in the database after a live sweep: rows with external_id "1" and
+# "2", both `failed` with "empty document text" -- a message describing the
+# symptom (their detail page is blank) and not the cause (they were never
+# tenders). Confirmed against the live DOM: WebForms renders the pager as two
+# rows that both clear a cell-count filter. The outer row carries 10 cells and
+# wraps a nested table; the inner <tr> carries one cell per page number, so its
+# reference column reads "1".
+
+
+class _Cell:
+    def __init__(self, text):
+        self._text = text
+
+    async def inner_text(self):
+        return self._text
+
+
+class _ListingRow:
+    """A row that answers the three questions _read_listing_page asks."""
+
+    def __init__(self, cells, *, pager: bool = False, href: str | None = None):
+        self._cells = [_Cell(c) for c in cells]
+        self._pager = pager
+        self._href = href
+
+    async def query_selector_all(self, selector):
+        return self._cells if selector == "td" else []
+
+    async def query_selector(self, selector):
+        if "Page$" in selector:
+            return object() if self._pager else None
+        if self._href and ("ShowDialog" in selector or "BalamId" in selector):
+            return _Anchor(self._href)
+        return None
+
+
+class _Anchor:
+    def __init__(self, href):
+        self._href = href
+
+    async def get_attribute(self, _name):
+        return self._href
+
+
+class _ListingPage:
+    def __init__(self, rows):
+        self._rows = rows
+
+    async def query_selector(self, _selector):
+        return self
+
+    async def query_selector_all(self, _selector):
+        return self._rows
+
+
+@pytest.mark.asyncio
+async def test_pager_rows_are_not_read_as_tenders():
+    a = agent()
+
+    real = _ListingRow(
+        ["", "1000971864", "שירותי פיקוח מטווח 24", "", "16:00 02/09/2026", "24/08/2026", "03-6975080"],
+        href="BalamHeaderText.aspx?BalamId=1000971864",
+    )
+    # The outer pager row: many cells, a nested table's text in the first one.
+    outer = _ListingRow(["1\t2\t3\t4", "1", "2", "3", "4", "5", "6", "7", "8", "9"], pager=True)
+    # The inner pager <tr>: one cell per page number. Its "reference" is "1".
+    inner = _ListingRow(["1", "2", "3", "4", "5", "6", "7", "8", "9"], pager=True)
+
+    stubs = await a._read_listing_page(_ListingPage([real, outer, inner]))
+
+    ids = [s.external_id for s in stubs]
+    assert ids == ["1000971864"], f"pager rows leaked in as tenders: {ids}"
+    assert "1" not in ids and "2" not in ids
+
+
+@pytest.mark.asyncio
+async def test_a_short_reference_is_still_read_when_it_is_not_a_pager_row():
+    """The fix keys on structure, not on the reference looking long enough.
+
+    A cell-count or reference-length heuristic would also throw away a real
+    tender whose reference is short, and portals are free to issue those.
+    """
+    a = agent()
+    odd = _ListingRow(
+        ["", "42", "מכרז עם אסמכתא קצרה", "", "16:00 02/09/2026", "24/08/2026", ""],
+        href="BalamHeaderText.aspx?BalamId=42",
+    )
+
+    stubs = await a._read_listing_page(_ListingPage([odd]))
+
+    assert [s.external_id for s in stubs] == ["42"]
