@@ -109,7 +109,24 @@ class Settings(BaseSettings):
     scrape_max_retries: int = 4
     scrape_backoff_base_seconds: float = 2.0
     scrape_backoff_max_seconds: float = 60.0
-    scrape_user_agent: str = "TendersFinderBot/0.1 (+https://tendersfinder.example/bot)"
+    # Carries a browser token AND our own identifier, deliberately.
+    #
+    # ASP.NET does browser-capability detection. Handed an unrecognised
+    # user-agent it serves a "downlevel" page that omits the script
+    # defining __doPostBack -- so the BALAM pager links render, and do
+    # nothing. Measured on the live portal: identical URL, `undefined`
+    # under the bare bot string, `function` under a browser one. The
+    # agent was reading page one nine times and reporting nine pages.
+    #
+    # This is not a disguise. The name and contact URL stay in the
+    # string, so the operator can still see who we are and reach us in
+    # their logs; what the browser token buys is a page whose pagination
+    # functions at all. robots.txt permits this path either way -- the
+    # probe re-checks it before every run.
+    scrape_user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36 TendersFinderBot/0.1 (+https://tendersfinder.example/bot)"
+    )
     playwright_headless: bool = True
 
     # --- Service ---

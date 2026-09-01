@@ -109,6 +109,31 @@ from .registry import register_agent
 logger = logging.getLogger(__name__)
 
 
+#: One definition of "what the first data row says", evaluated in the page for
+#: both the before-snapshot and the after-comparison.
+#:
+#: It used to be two definitions. Python took the signature from `_data_rows()`
+#: -- data rows only, run through `clean_text()` -- while the waiting predicate
+#: walked every `tr` including the header and compared raw `innerText`. The two
+#: could never be equal, so the predicate returned true on its first evaluation
+#: whatever the postback had done. The guard that exists to notice a page which
+#: did not turn reported "changed" every single time, and a listing read nine
+#: times over reported nine pages.
+#:
+#: Sharing one expression removes the possibility of that drift rather than
+#: fixing this instance of it: there is nothing left to keep in step.
+_ROW_SIGNATURE_JS = """(selector) => {
+  for (const row of document.querySelectorAll(selector)) {
+    // A data row has at least two cells -- the same rule _read_listing_page
+    // uses to skip header, pager and spacer rows.
+    if (row.querySelectorAll('td').length < 2) continue;
+    const text = (row.innerText || '').replace(/\s+/g, ' ').trim();
+    if (text) return text;
+  }
+  return '';
+}"""
+
+
 @dataclass(frozen=True)
 class BalamContract:
     """Everything about the BALAM list that must be observed, not reasoned.
@@ -457,7 +482,8 @@ class ModBalamAgent(PlaywrightPortalAgent):
             )
             return False
 
-        before = await self._first_row_signature(page)
+        row_scope = f"{self.contract.table_selector} {self.contract.row_selector}"
+        before = await page.evaluate(_ROW_SIGNATURE_JS, row_scope)
 
         await self.with_backoff(
             lambda: next_link.click(), description=f"postback to page {target_page}"
@@ -465,15 +491,12 @@ class ModBalamAgent(PlaywrightPortalAgent):
 
         try:
             await page.wait_for_function(
-                """([selector, previous]) => {
-                    const rows = document.querySelectorAll(selector + ' tr');
-                    for (const row of rows) {
-                        const text = row.innerText.trim();
-                        if (text) return text !== previous;
-                    }
-                    return false;
-                }""",
-                arg=[self.contract.table_selector, before],
+                "([selector, previous, sig]) => {"
+                "  const signature = new Function('return ' + sig)();"
+                "  const now = signature(selector);"
+                "  return now !== '' && now !== previous;"
+                "}",
+                arg=[row_scope, before, _ROW_SIGNATURE_JS],
                 timeout=self.contract.postback_timeout_ms,
             )
         except Exception:  # noqa: BLE001

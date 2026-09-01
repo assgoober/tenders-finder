@@ -444,9 +444,27 @@ class FakePage:
             return self._links
         return [FakeRow(self._rows)]
 
-    async def wait_for_function(self, *args, **kwargs):
+    async def evaluate(self, expression, arg=None):
+        """The before-snapshot. Returns whatever the first data row says now."""
+        return self._rows
+
+    async def wait_for_function(self, predicate, arg=None, timeout=None):
+        """Actually compare, instead of consulting a flag.
+
+        The previous double raised or returned based on `row_changes` alone and
+        never looked at the value it had been handed. That made a predicate
+        which always reported "changed" indistinguishable from a correct one --
+        which is exactly the bug that shipped: the before-snapshot and the
+        waiting predicate read different things, could never be equal, and the
+        guard passed every time. A double that models the flag rather than the
+        contract cannot fail on that.
+        """
         self.waited = True
-        if not self._row_changes:
+        previous = arg[1] if arg and len(arg) > 1 else None
+        if self._row_changes:
+            # The postback landed and the grid re-rendered.
+            self._rows = self._rows + "+turned"
+        if self._rows == previous:
             raise TimeoutError("row set unchanged")
 
     def clicked_hrefs(self):
