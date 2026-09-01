@@ -1823,12 +1823,12 @@ section { padding-block: clamp(60px, 8vw, 100px); }
     var head =
       '<h3>' + t.title + '</h3>' +
       '<p class="detail-buyer">' + t.buyer + ' · <span class="mono">' + t.ref + '</span></p>' +
-      '<a class="source-link" href="#demo" data-demo-link="1">' +
+      '<a class="source-link" href="https://www.online.mod.gov.il/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1" target="_blank" rel="noopener noreferrer">' +
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">' +
         '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>' +
-        'פתיחת הפרסום המקורי' +
+        'פתיחת פורטל המקור' +
       '</a>' +
-      '<p class="null-note" style="margin-block-start:10px;">מקור: ' + t.source + '</p>';
+      '<p class="null-note" style="margin-block-start:10px;">מקור: ' + t.source + ' · המכרז שלמעלה הוא דוגמה מייצגת; הקישור פותח את הפורטל האמיתי ' + 'שממנו המערכת קוצרת. במערכת עצמה הכפתור מוביל לעמוד המכרז הספציפי.</p>';
 
     if (t.needsReview) {
       detail.innerHTML = head +
@@ -1891,14 +1891,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   });
 
   detail.addEventListener("click", function (ev) {
-    var link = ev.target.closest("[data-demo-link]");
-    if (!link) return;
-    ev.preventDefault();
-    var status = link.nextElementSibling;
-    if (status) {
-      status.textContent =
-        "בדמו אין קישור חי — במערכת עצמה הכפתור פותח את הפרסום המקורי בפורטל.";
-    }
+    return;
   });
 
   Array.prototype.forEach.call(document.querySelectorAll(".filter"), function (b) {
@@ -1939,7 +1932,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   //
   // NEVER put the service-role key here. It bypasses RLS entirely.
   var SUPABASE_URL = "https://vixuawfbayglbgitzqbj.supabase.co";
-  var SUPABASE_ANON_KEY = "";   // ← paste the project's anon/publishable key
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZpeHVhd2ZiYXlnbGJnaXR6cWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNTU3NjQsImV4cCI6MjEwMzgzMTc2NH0.aOzwF7R-lYFWcpS6OhgjAMf4hGOoA_071nqLkwqxW2E";
 
   // Empty until the key is filled in, which keeps the mailto fallback as the
   // behaviour rather than shipping a form that posts to a 401.
