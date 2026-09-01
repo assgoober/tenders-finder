@@ -1929,7 +1929,21 @@ section { padding-block: clamp(60px, 8vw, 100px); }
      Set ENDPOINT to your own backend; until then the form composes an
      email so a submission is never silently lost.
      ------------------------------------------------------------------ */
-  var ENDPOINT = "";            // e.g. "https://api.example.com/leads"
+  // Supabase PostgREST, writing to the `leads` table (migration 0006).
+  // The table grants `anon` INSERT and nothing else — no SELECT policy
+  // exists for any browser-facing role — so this key cannot read back what
+  // it writes, cannot enumerate other submissions, and cannot touch any
+  // other table. That is why publishing it here is safe: it is the anon
+  // key, which is designed to be readable, and the database is what
+  // enforces the boundary.
+  //
+  // NEVER put the service-role key here. It bypasses RLS entirely.
+  var SUPABASE_URL = "https://vixuawfbayglbgitzqbj.supabase.co";
+  var SUPABASE_ANON_KEY = "";   // ← paste the project's anon/publishable key
+
+  // Empty until the key is filled in, which keeps the mailto fallback as the
+  // behaviour rather than shipping a form that posts to a 401.
+  var ENDPOINT = SUPABASE_ANON_KEY ? SUPABASE_URL + "/rest/v1/leads" : "";
   // Deliberately a different address from the one the scraper service sends
   // run digests to: this one is published in the page source of a public
   // site and will be found by address harvesters, and an address that
@@ -1985,13 +1999,18 @@ section { padding-block: clamp(60px, 8vw, 100px); }
       return;
     }
 
+    // An untouched optional field arrives as "". It is stored as null, not
+    // as an empty string: null reads as "not stated", "" reads as "stated,
+    // and empty" — the same distinction the extraction pipeline keeps.
+    function orNull(v) { return v ? v : null; }
+
     var payload = {
-      name: form.name.value.trim(),
+      full_name: form.name.value.trim(),
       company: form.company.value.trim(),
       email: form.email.value.trim(),
-      phone: form.phone.value.trim(),
-      sector: form.sector.value,
-      notes: form.notes.value.trim()
+      phone: orNull(form.phone.value.trim()),
+      sector: orNull(form.sector.value),
+      notes: orNull(form.notes.value.trim())
     };
 
     if (ENDPOINT) {
@@ -1999,7 +2018,17 @@ section { padding-block: clamp(60px, 8vw, 100px); }
       status.textContent = "שולח…";
       fetch(ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+          // Load-bearing. PostgREST otherwise returns the inserted row,
+          // which means it SELECTs it back — and `leads` grants anon no
+          // SELECT at all, so the insert would succeed and the response
+          // would still fail. Asking for no representation keeps the
+          // write-only grant and a 201 consistent with each other.
+          "Prefer": "return=minimal"
+        },
         body: JSON.stringify(payload)
       }).then(function (r) {
         if (!r.ok) throw new Error(String(r.status));
@@ -2016,7 +2045,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
     // No endpoint configured: hand the details to the user's mail client
     // rather than pretending they were received.
     var body =
-      "שם: " + payload.name + "\n" +
+      "שם: " + payload.full_name + "\n" +
       "חברה: " + payload.company + "\n" +
       'דוא"ל: ' + payload.email + "\n" +
       "טלפון: " + (payload.phone || "—") + "\n" +
