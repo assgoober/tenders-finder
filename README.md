@@ -145,10 +145,39 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-The dashboard renders from `lib/mock-data.ts`, so it works before the database
-exists. Wiring live data means replacing the imports in `app/page.tsx` with
-Supabase queries under the user's session — RLS scopes them to the caller's
-organization, so no component needs an organization filter of its own.
+With no credentials it renders `lib/mock-data.ts` and says so in the page, so
+a fresh checkout works before the database does.
+
+**Live data needs its own env file.** Next.js reads env from the `web/`
+directory, not the repository root, so the root `.env` the scraper service
+uses is invisible to it. Create `web/.env.local`:
+
+```ini
+NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon / publishable key>
+```
+
+Anon key only. The service-role key bypasses RLS entirely, and anything
+prefixed `NEXT_PUBLIC_` is compiled into the browser bundle where every
+visitor can read it.
+
+These are read **at build time**, not at runtime — that is what `NEXT_PUBLIC_`
+means. A build made without them serves demo data regardless of what the
+environment holds later, so on Vercel they must be set before the deploy that
+is meant to read live data.
+
+Every query runs through the signed-in user's session, so RLS scopes it and no
+component carries an organization filter of its own. Three consequences worth
+knowing before concluding something is broken:
+
+| What you see | Why |
+|---|---|
+| Redirected to `/login` | Every policy keys on `auth.uid()`, so signed out reads as an empty database rather than an error. The app refuses to render one |
+| Signed in, but no alerts and no pipeline | Your account belongs to no organization. Both are scoped to membership. See [`supabase/README.md`](supabase/README.md) |
+| Signed in, no tenders at all | Nothing has been scraped into this project yet |
+
+Accounts are created in the Supabase dashboard, not through a sign-up form —
+access to a tender workspace is granted, not claimed.
 
 ## Israeli portal agents
 
