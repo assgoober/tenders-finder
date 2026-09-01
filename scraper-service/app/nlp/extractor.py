@@ -92,18 +92,72 @@ class ExtractionResult:
         return self.refusal_category is not None
 
 
+class ExtractionQuotaExhausted(RuntimeError):
+    """The provider's request quota is gone for the rest of the period.
+
+    Lives here rather than beside the backend that raises it, because the
+    pipeline has to catch it and importing it from `gemini` would load the
+    Google SDK on every deployment -- including Anthropic-only ones, which
+    need never have it installed.
+
+    Distinct from an ordinary failure because the correct response differs. A
+    429 is not a property of the document: retrying on the next tender
+    produces the same 429, and the loop then marks every remaining row
+    `failed`, overwriting good extractions with a transient error. One
+    aborted run reporting "quota exhausted after N tenders" is strictly more
+    useful than 169 identical per-tender failures.
+    """
+
+
+class ExtractionNotConfigured(RuntimeError):
+    """Raised when extraction is attempted with no ANTHROPIC_API_KEY set.
+
+    Without this, the SDK is handed `api_key=None` and refuses at the point
+    it assembles request headers:
+
+        TypeError: "Could not resolve authentication method. Expected one of
+        api_key, auth_token, or credentials to be set..."
+
+    That message is accurate about the SDK and useless about the cause. It
+    arrives once per tender, so a sweep of a portal produces one identical
+    header error per row and reads like a transport bug — sending whoever
+    investigates into the client library rather than into the environment.
+    Same failure class as ADR-13's refusal-reported-as-empty-output, and the
+    same fix: say what actually happened.
+    """
+
+
 class TenderExtractor:
     """Turns raw tender text into a validated `TenderExtraction`."""
+
+    #: Human-readable provider label, used in log lines and error messages.
+    provider_name = "anthropic"
 
     def __init__(self, settings: Settings | None = None, client=None) -> None:
         self.settings = settings or get_settings()
         self._client = client
 
     @property
+    def model_name(self) -> str:
+        """The model recorded on every ExtractionResult.
+
+        A property rather than a literal so the validate-repair-review ladder
+        below stays provider-agnostic — subclasses swap the transport, not
+        the ladder.
+        """
+        return self.settings.anthropic_model
+
+    @property
     def client(self):
         # Imported lazily so the module (and the tests that mock the client)
         # load without the SDK installed or an API key present.
         if self._client is None:
+            if not self.settings.has_anthropic:
+                raise ExtractionNotConfigured(
+                    "ANTHROPIC_API_KEY is not set, so tender text cannot be extracted. "
+                    "Set it in the service's .env. DRY_RUN does not skip extraction — "
+                    "it only skips the database write."
+                )
             from anthropic import AsyncAnthropic
 
             self._client = AsyncAnthropic(
@@ -148,12 +202,21 @@ class TenderExtractor:
         for attempt in (1, 2):
             try:
                 response = await self._call(messages)
+            except (ExtractionQuotaExhausted, ExtractionNotConfigured):
+                # Both mean "this run cannot proceed", not "this document
+                # failed". Turning them into a `failed` result is what the
+                # broad clause below would do, and that is precisely the
+                # defect: the caller would keep going, fail every remaining
+                # tender the same way, and overwrite each one's stored
+                # extraction with the transient error. They belong to the run,
+                # so they leave by the run's path.
+                raise
             except Exception as exc:  # noqa: BLE001 - surfaced on the result
                 logger.exception("extraction call failed on attempt %d", attempt)
                 return ExtractionResult(
                     status="failed",
                     error=f"{type(exc).__name__}: {exc}",
-                    model=self.settings.anthropic_model,
+                    model=self.model_name,
                     attempts=attempt,
                     truncated_input=truncated,
                 )
@@ -174,7 +237,7 @@ class TenderExtractor:
                 return ExtractionResult(
                     status="needs_review",
                     error=f"request declined by policy (category={category})",
-                    model=self.settings.anthropic_model,
+                    model=self.model_name,
                     attempts=attempt,
                     input_tokens=usage[0],
                     output_tokens=usage[1],
@@ -189,7 +252,7 @@ class TenderExtractor:
                 return ExtractionResult(
                     status="extracted",
                     extraction=parsed,
-                    model=self.settings.anthropic_model,
+                    model=self.model_name,
                     attempts=attempt,
                     input_tokens=usage[0],
                     output_tokens=usage[1],
@@ -212,7 +275,7 @@ class TenderExtractor:
         return ExtractionResult(
             status="needs_review",
             error=last_error,
-            model=self.settings.anthropic_model,
+            model=self.model_name,
             attempts=2,
             input_tokens=usage[0],
             output_tokens=usage[1],
@@ -328,3 +391,20 @@ class TenderExtractor:
         if usage is None:
             return None, None
         return getattr(usage, "input_tokens", None), getattr(usage, "output_tokens", None)
+
+
+def get_extractor(settings: Settings | None = None, client=None) -> TenderExtractor:
+    """The extractor for the configured provider.
+
+    The import is local so `extractor` does not import `gemini`, which
+    imports `extractor` -- and so a deployment that never selects Gemini
+    never needs the Google SDK installed.
+    """
+    settings = settings or get_settings()
+
+    if settings.extraction_provider == "gemini":
+        from .gemini import GeminiExtractor
+
+        return GeminiExtractor(settings, client=client)
+
+    return TenderExtractor(settings, client=client)

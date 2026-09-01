@@ -16,7 +16,13 @@ from datetime import datetime
 from .agents import FetchedTender, TenderSourceAgent, get_agents
 from .config import Settings, get_settings
 from .nlp.embeddings import EmbeddingProvider, get_embedding_provider
-from .nlp.extractor import ExtractionResult, TenderExtractor
+from .nlp.extractor import (
+    ExtractionNotConfigured,
+    ExtractionQuotaExhausted,
+    ExtractionResult,
+    TenderExtractor,
+    get_extractor,
+)
 from .notifications import Notifier, get_notifier
 from .storage.supabase_repo import SupabaseRepository
 
@@ -60,7 +66,7 @@ class IngestionPipeline:
         notifier: Notifier | None = None,
     ) -> None:
         self.settings = settings or get_settings()
-        self.extractor = extractor or TenderExtractor(self.settings)
+        self.extractor = extractor or get_extractor(self.settings)
         self.embedder = embedder or get_embedding_provider(self.settings)
         self.repository = repository or SupabaseRepository(self.settings)
         self.notifier = notifier or get_notifier(self.settings)
@@ -68,6 +74,24 @@ class IngestionPipeline:
     async def run(
         self, source_keys: list[str] | None = None, *, limit: int = 25
     ) -> list[IngestReport]:
+        # Checked before a single request leaves the machine. Extraction runs
+        # per tender, so without this a sweep of a nine-page portal contacts
+        # it ~190 times, extracts every row, and then fails every one of them
+        # for a reason that was knowable before the first request. Refusing up
+        # front costs the portal nothing and reports the real cause once.
+        #
+        # Deliberately not conditioned on `dry_run`: a dry run still extracts,
+        # and pretending otherwise is how "the pipeline ran clean" comes to
+        # mean "the pipeline did not run".
+        if not self.settings.has_extraction:
+            provider = self.settings.extraction_provider
+            key = "GEMINI_API_KEY" if provider == "gemini" else "ANTHROPIC_API_KEY"
+            raise ExtractionNotConfigured(
+                f"EXTRACTION_PROVIDER is {provider!r} but {key} is not set, so this run "
+                "would scrape every source and then fail to extract every tender. Set it "
+                "in the service's .env before running the pipeline."
+            )
+
         agents = get_agents(source_keys, self.settings)
         # Bounded concurrency: several portals at once, but never enough
         # simultaneous traffic at one of them to look like an attack.
@@ -104,6 +128,7 @@ class IngestionPipeline:
             run_id = self.repository.start_run(source_id)
 
         try:
+            quota_exhausted = False
             stubs = await agent.discover(limit=limit)
             report.found = len(stubs)
             logger.info("[%s] discovered %d tenders", agent.key, report.found)
@@ -112,6 +137,23 @@ class IngestionPipeline:
                 try:
                     fetched = await agent.fetch(stub)
                     await self._ingest_one(fetched, source_id, report)
+                except ExtractionQuotaExhausted as exc:
+                    # Deliberately breaks the loop that the clause below
+                    # deliberately does not. A bad document is local to one
+                    # tender; an exhausted quota is a property of the run, so
+                    # continuing would fail every remaining row for the same
+                    # reason and overwrite whatever each already holds. Stop,
+                    # say how far we got, and mark the run not-ok so the digest
+                    # and scrape_runs both show a partial sweep rather than a
+                    # complete one.
+                    report.errors.append(f"run aborted: {exc}")
+                    logger.error(
+                        "[%s] %s -- stopping after %d of %d tenders",
+                        agent.key, exc, report.ingested + report.needs_review + report.failed,
+                        report.found,
+                    )
+                    quota_exhausted = True
+                    break
                 except Exception as exc:  # noqa: BLE001
                     # One bad tender must not abort the run — the remaining
                     # tenders in this portal are still worth ingesting.
@@ -124,7 +166,7 @@ class IngestionPipeline:
                     run_id,
                     items_found=report.found,
                     items_ingested=report.ingested,
-                    ok=True,
+                    ok=not quota_exhausted,
                 )
         except Exception as exc:  # noqa: BLE001
             report.errors.append(f"discover: {type(exc).__name__}: {exc}")
