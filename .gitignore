@@ -29,6 +29,15 @@ venv/
 # that does not exist there.
 .mcp.json
 
+# Probe output: raw HTML captured from a live portal. Never committed.
+# The BALAM listing carries a contact-phone column, and a saved page holds
+# real numbers -- 14 in the first capture. REPOMIX.md ADR/risk table records
+# that `contact_phone` was dropped for exactly that reason, and that removing
+# the field alone was theatre because `raw_row` still carried it; the same
+# logic applies here, one layer further out. Fixtures are for running tests
+# locally, not for the repository.
+scraper-service/tests/fixtures/
+
 # repomix packed output
 repomix-output.xml
 
