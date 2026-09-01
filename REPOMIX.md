@@ -497,8 +497,9 @@ supabase/migrations/
 ├── 0002_organizations_users.sql   ארגונים, חברות, RLS
 ├── 0003_tenders.sql               מכרזים, מסמכים, אינדקסים (HNSW + FTS)
 ├── 0004_alert_profiles.sql        פרופילי התראה + pipeline + matches
-├── 0005_matching_engine.sql       פונקציות חיפוש היברידי + טריגר התראות
-└── 0006_seed_dev.sql              נתוני דמו לפיתוח בלבד
+└── 0005_matching_engine.sql       פונקציות חיפוש היברידי + טריגר התראות
+supabase/seed.sql                  נתוני דמו לפיתוח בלבד — לא מיגרציה, ולא
+                                   לרוץ על ייצור
 
 scraper-service/               Python · FastAPI · Playwright · Claude
 ├── app/
