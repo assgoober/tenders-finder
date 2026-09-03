@@ -1,7 +1,7 @@
 # Landing page
 
 Single self-contained HTML file — no build step, no bundler. `index.html`
-plus two static assets (`og.png`, `favicon.svg`). Serve the directory from
+plus four static assets (`og.png`, `logo.png`, `favicon-32.png`, `apple-touch-icon.png`). Serve the directory from
 any static host.
 
 ```bash

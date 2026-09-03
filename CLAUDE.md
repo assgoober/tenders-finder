@@ -29,6 +29,41 @@ Optimize every UI decision for reduced cognitive load. Optimize every data
 decision for trust: always show the extracted field next to a link to the
 original source document.
 
+## Brand and visual identity
+
+`landing/index.html` is the single source of truth for the brand. It carries
+the logo SVG, the full colour token set for both themes, and a design plan in
+a comment at the top of the file explaining why each choice was made.
+
+Read it before producing anything the brand appears on -- a deck, a diagram,
+a report cover, a second page. Do not invent a palette or a typeface pairing;
+a venture that looks like two companies across two documents reads as one that
+has not decided what it is.
+
+The load-bearing parts:
+
+- **Logo:** `brand/logo.png` is the master, keyed from the operator's own
+  artwork; `landing/logo.png` is that file resized for the web, and the
+  favicon and the Apple touch icon are cut from it. Every mark on the site
+  comes from one image on purpose -- a favicon that drifts from the header
+  mark is a favicon nobody associates with the product. Its aspect ratio is
+  **1.567:1**; give it a height and let the width follow. Do not redraw it as
+  SVG. A hand-traced approximation was carried here for a while and was wrong
+  in both shape and proportion, which nobody caught until it was put beside
+  the real thing.
+- **Colour:** navy `#12294D`, blue `#1668D8` in the mark and `#2C7BEE` lifted
+  for AA on dark, steel, and a blue-biased near-black ground `#05070C` that is
+  the logo's own ground rather than a generic dark.
+- **Type:** Heebo 800/900 for display, Assistant for body, IBM Plex Mono for
+  identifiers. The mono is not decoration: reference numbers and standard
+  codes are matched character for character downstream.
+- **Semantic colour is separate from the accent.** `live` and `urgent` exist
+  so that status never competes with brand. Do not promote a status colour to
+  an accent, and do not tint the brand blue to signal state.
+
+Dark is the intended expression. A surface that must work in one theme only
+should be the dark one.
+
 ## Architecture rules
 
 ### Dual-use (B2G today, B2B later)

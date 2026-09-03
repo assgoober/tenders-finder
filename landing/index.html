@@ -34,7 +34,8 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Tenders Finder — פיד מכרזים מאוחד עם מועדי הגשה רצים">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -253,7 +254,7 @@ a { color: inherit; }
   min-height: 72px;
 }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex-shrink: 0; }
-.brand svg { width: 42px; height: 34px; display: block; }
+.brand-mark { height: 34px; width: auto; display: block; }
 .brand-name { font-family: "Heebo", sans-serif; font-weight: 900; font-size: 1.12rem; letter-spacing: -.02em; }
 .brand-name span { color: var(--blue); }
 
@@ -276,7 +277,7 @@ a { color: inherit; }
 @media (max-width: 560px) {
   .head-row { gap: 10px; min-height: 64px; }
   .brand-name { font-size: 1rem; }
-  .brand svg { width: 34px; height: 28px; }
+  .brand-mark { height: 28px; }
   .head-row .btn { padding: 0 14px; font-size: .92rem; }
   .theme-toggle { width: 40px; height: 40px; }
 }
@@ -895,14 +896,8 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 <header class="site-head">
   <div class="wrap head-row">
     <a class="brand" href="#main" aria-label="Tenders Finder — לראש הדף">
-      <svg viewBox="0 0 132 104" role="img" aria-label="לוגו Tenders Finder">
-        <title>Tenders Finder</title>
-        <polygon points="26,8 126,8 116,34 16,34" fill="#12294D"/>
-        <path d="M62 34 L84 34 L70 86 Q66 100 50 100 L40 100 Q56 95 59 82 Z" fill="#12294D"/>
-        <polygon points="76,46 118,46 108,68 66,68" fill="#1668D8"/>
-        <polygon points="68,76 104,76 95,96 59,96" fill="#7A879B"/>
-        <circle cx="122" cy="57" r="13" fill="#1668D8"/>
-      </svg>
+      <img class="brand-mark" src="logo.png" alt="" width="53" height="34"
+           decoding="async">
       <span class="brand-name">Tenders<span>Finder</span></span>
     </a>
 
@@ -1464,14 +1459,8 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   <div class="wrap">
     <div class="foot-row">
       <a class="brand" href="#main" aria-label="Tenders Finder">
-        <svg viewBox="0 0 132 104" role="img" aria-label="לוגו Tenders Finder">
-          <title>Tenders Finder</title>
-          <polygon points="26,8 126,8 116,34 16,34" fill="#12294D"/>
-          <path d="M62 34 L84 34 L70 86 Q66 100 50 100 L40 100 Q56 95 59 82 Z" fill="#12294D"/>
-          <polygon points="76,46 118,46 108,68 66,68" fill="#1668D8"/>
-          <polygon points="68,76 104,76 95,96 59,96" fill="#7A879B"/>
-          <circle cx="122" cy="57" r="13" fill="#1668D8"/>
-        </svg>
+        <img class="brand-mark" src="logo.png" alt="" width="53" height="34"
+             decoding="async">
         <span class="brand-name">Tenders<span>Finder</span></span>
       </a>
 
