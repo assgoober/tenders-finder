@@ -1,7 +1,8 @@
 # Landing page
 
 Single self-contained HTML file — no build step, no bundler. `index.html`
-plus four static assets (`og.png`, `logo.png`, `favicon-32.png`, `apple-touch-icon.png`). Serve the directory from
+plus its static assets (`og.png`, `logo.png`, `favicon-32.png`,
+`apple-touch-icon.png`) and the crawler files below. Serve the directory from
 any static host.
 
 ```bash
@@ -93,3 +94,29 @@ Built to IS 5568 / WCAG 2.2 AA. Verified in a browser, both themes:
 The accent needs two tokens: `--blue` reads as text on the ground, and
 `--blue-solid` sits behind white text. One value cannot pass AA for both —
 they pull in opposite directions.
+
+
+## Crawler and agent files
+
+| File | What it is |
+|---|---|
+| `robots.txt` | Allows everything and points at the sitemap. |
+| `sitemap.xml` | One entry, because the site is one page. |
+| `llms.txt` | A description for LLM agents, including the accuracy notes that stop a summariser overstating what is built. |
+| `404.html` | Served by Vercel with a 404 status. Marked `noindex`. |
+
+Two things were deliberately **not** added, and should stay that way unless
+the facts change:
+
+- **`LocalBusiness` structured data.** This is a B2B SaaS with no premises
+  the public visits. Declaring a local business in a machine-readable field
+  would be a false claim, and search engines treat fabricated structured data
+  as spam rather than as an error.
+- **`BreadcrumbList`.** The site is a single page. Markup describing a
+  hierarchy that does not exist is the same mistake in a different tag.
+
+The canonical URL and the absolute `og:image` both hardcode
+`https://tenders-finder.vercel.app`. **If a custom domain is ever attached,
+both must be updated** — `npm run stamp -- https://your-domain` handles the
+sharing card; the canonical tag, `og:url`, `robots.txt`, `sitemap.xml` and
+`llms.txt` are currently by hand.

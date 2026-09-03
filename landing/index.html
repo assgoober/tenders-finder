@@ -4,7 +4,7 @@
      page out at the 980px fallback viewport and then zooms out, so every
      phone visit opens on unreadable 6px text. -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tenders Finder</title>
+<title>Tenders Finder — כל מכרזי הרכש הביטחוניים במקום אחד</title>
 <script>
   /* The artifact wrapper owns <html>, so language and direction are set
      here rather than in markup. Assistive tech reads these attributes —
@@ -14,6 +14,8 @@
 </script>
 <meta name="description" content="אגרגציית מכרזים ביטחוניים ואזרחיים: איסוף אוטומטי מפורטלים מבודדים, חילוץ תנאי הסף, והתראה כשמכרז מתאים לפרופיל שלכם.">
 <meta name="theme-color" content="#05070C">
+<link rel="canonical" href="https://tenders-finder.vercel.app/">
+<meta name="robots" content="index, follow, max-image-preview:large">
 
 <!-- Sharing card. This page's job is to be sent to someone — in WhatsApp, in
      an email, in a Slack channel — and a link that unfurls as a bare URL
@@ -27,6 +29,7 @@
 <meta property="og:type" content="website">
 <meta property="og:locale" content="he_IL">
 <meta property="og:site_name" content="Tenders Finder">
+<meta property="og:url" content="https://tenders-finder.vercel.app/">
 <meta property="og:title" content="Tenders Finder — המכרז הבא שלכם כבר פורסם">
 <meta property="og:description" content="מכרזי רכש מפוזרים על פני פורטלים מבודדים ואף אחד מהם לא שולח התראה. אנחנו אוספים אותם, מחלצים את תנאי הסף והמועדים, ומתריעים בזמן שעוד אפשר להגיש.">
 <meta property="og:image" content="https://tenders-finder.vercel.app/og.png">
@@ -36,6 +39,45 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+<!-- Structured data. Organization and SoftwareApplication only: this is a
+     B2B SaaS with no premises the public visits, so LocalBusiness would be a
+     false claim in a machine-readable field, and Google treats fabricated
+     structured data as spam rather than as a mistake. No BreadcrumbList
+     either -- the site is one page, and markup describing a hierarchy that
+     does not exist is the same error in a different tag. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://tenders-finder.vercel.app/#organization",
+      "name": "Tenders Finder",
+      "url": "https://tenders-finder.vercel.app/",
+      "logo": "https://tenders-finder.vercel.app/logo.png",
+      "description": "פלטפורמה לאיסוף מכרזי רכש מפורטלים ממשלתיים מבודדים, חילוץ תנאי הסף והמועדים, והתאמה סמנטית לפרופיל היכולות של החברה."
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://tenders-finder.vercel.app/#website",
+      "url": "https://tenders-finder.vercel.app/",
+      "name": "Tenders Finder",
+      "inLanguage": "he-IL",
+      "publisher": { "@id": "https://tenders-finder.vercel.app/#organization" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Tenders Finder",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://tenders-finder.vercel.app/",
+      "publisher": { "@id": "https://tenders-finder.vercel.app/#organization" },
+      "description": "איסוף אוטומטי של מכרזי רכש, חילוץ מובנה של תנאי סף ומועדי הגשה, והתראה כשמכרז מתאים לפרופיל החברה."
+    }
+  ]
+}
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>הדף לא נמצא — Tenders Finder</title>
+<!-- A 404 must never be indexed. Vercel serves this with a 404 status, which
+     is the real signal, but crawlers that reach it another way should still
+     be told plainly. -->
+<meta name="robots" content="noindex, follow">
+<meta name="theme-color" content="#05070C">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@700;900&family=Assistant:wght@400;600&display=swap">
+<style>
+  /* Same tokens as index.html. Defined for both themes: the page is reached
+     by accident, and a 404 that renders black-on-black is how a visitor
+     decides the whole site is broken rather than the one URL. */
+  :root {
+    --ink:#FFFFFF; --surface:#F4F6FA; --line:#DCE3EE;
+    --paper:#10151F; --steel:#5A6779; --blue:#1668D8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:#05070C; --surface:#0B111C; --line:#1A2436;
+      --paper:#E9EEF7; --steel:#8C9BB3; --blue:#2C7BEE;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--ink); color: var(--paper);
+    font-family: "Assistant", system-ui, sans-serif;
+    display: grid; place-items: center; padding: 24px;
+  }
+  main { max-width: 30rem; text-align: center; }
+  img { height: 40px; width: auto; margin-bottom: 28px; }
+  .code {
+    font-family: "Heebo", sans-serif; font-weight: 900; font-size: 5rem;
+    line-height: 1; color: var(--blue); margin: 0 0 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  h1 { font-family: "Heebo", sans-serif; font-weight: 700; font-size: 1.5rem; margin: 0 0 12px; }
+  p { color: var(--steel); line-height: 1.6; margin: 0 0 28px; }
+  a.btn {
+    display: inline-flex; align-items: center; height: 46px; padding: 0 22px;
+    border-radius: 10px; background: var(--blue); color: #fff;
+    text-decoration: none; font-weight: 600;
+  }
+  a.btn:hover { filter: brightness(1.08); }
+  a.btn:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+</style>
+</head>
+<body>
+  <main>
+    <img src="logo.png" alt="Tenders Finder">
+    <p class="code">404</p>
+    <h1>הדף הזה לא קיים</h1>
+    <p>ייתכן שהקישור שגוי או שהעמוד הוסר. אפשר לחזור לעמוד הראשי ולהמשיך משם.</p>
+    <a class="btn" href="/">חזרה לעמוד הראשי</a>
+  </main>
+</body>
+</html>

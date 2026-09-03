@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One page, one entry. A sitemap padded with anchors (#problem, #how) is a
+     sitemap that reports the same URL several times: fragments are not
+     separate documents and crawlers discard them. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://tenders-finder.vercel.app/</loc>
+    <lastmod>2026-09-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

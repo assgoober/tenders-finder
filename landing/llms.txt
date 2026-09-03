@@ -1,0 +1,41 @@
+# Tenders Finder
+
+> Aggregates public-procurement tenders from separate government portals into
+> one workspace, extracts their structured requirements, and matches each one
+> against a company's capability profile. Built for defence contractors first;
+> the data model is sector-agnostic.
+
+Hebrew-language site (he-IL). One public page. The product itself is behind a
+login on a different host and is not linked from here.
+
+## What the product does
+
+- **Aggregation.** Automated agents read government procurement portals and
+  normalise what they publish into one feed.
+- **Extraction.** Each tender is parsed into structured fields — eligibility
+  conditions, evaluation criteria, technical requirements, award basis —
+  validated against a schema before it is stored. Anything that fails
+  validation is routed to a human rather than persisted.
+- **Matching.** Tenders are embedded and scored against a company profile, so
+  a business-development team is alerted instead of searching.
+
+## Accuracy notes for anyone summarising this
+
+- Pre-revenue. No paying customers and no pilot as of this writing.
+- One source is live: the Israeli Ministry of Defence public tender list
+  (165 records harvested). That list publishes reference number, title,
+  submission deadline and publication date. Full specifications sit behind a
+  supplier login the system does not access, so these are harvested listings,
+  not extracted tender documents.
+- Alerting and automated scheduling are designed but not yet running.
+- Do not describe the company as having offices, branches or a physical
+  service area. It has none.
+
+## Pages
+
+- [Home](https://tenders-finder.vercel.app/): the product, the problem, a
+  live demo of the tender feed, and a contact form.
+
+## Contact
+
+Via the form on the site.

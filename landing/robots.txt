@@ -1,0 +1,11 @@
+# Tenders Finder — https://tenders-finder.vercel.app
+#
+# The public site is a single page and everything on it is meant to be
+# indexed. The product itself sits behind a login on a different host and is
+# not reachable from here, so there is nothing to disallow rather than a
+# disallow list that pretends there is.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://tenders-finder.vercel.app/sitemap.xml
