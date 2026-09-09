@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .agents import available_keys, describe_agents
 from .config import EMBEDDING_DIM, get_settings
-from .nlp.extractor import TenderExtractor
+from .nlp.extractor import get_extractor
 from .nlp.prompts import PROMPT_VERSION
 from .pipeline import IngestionPipeline
 
@@ -110,12 +110,18 @@ def health() -> dict:
     settings = get_settings()
     return {
         "status": "ok",
-        "model": settings.anthropic_model,
+        # The model that will actually run, not the one for the provider we
+        # are not using. Reported wrong, this sends a human debugging a bad
+        # extraction to the wrong vendor's docs.
+        "model": settings.extraction_model,
         "prompt_version": PROMPT_VERSION,
         "embedding_provider": settings.embedding_provider,
         "embedding_dim": settings.embedding_dim,
         "refusal_fallbacks": settings.anthropic_fallbacks,
-        "anthropic_configured": settings.has_anthropic,
+        "extraction_provider": settings.extraction_provider,
+        # Whether the *selected* provider has what it needs. A key for the
+        # other one is not a configured pipeline.
+        "extraction_configured": settings.has_extraction,
         "supabase_configured": settings.has_supabase,
         "email_notifications": settings.has_email_notifications,
         "dry_run": settings.dry_run,
@@ -168,10 +174,15 @@ async def extract(request: ExtractRequest) -> dict:
     Used for prompt iteration and for the human-review screen.
     """
     settings = get_settings()
-    if not settings.has_anthropic:
-        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY is not configured")
+    if not settings.has_extraction:
+        key = "GEMINI_API_KEY" if settings.extraction_provider == "gemini" else "ANTHROPIC_API_KEY"
+        raise HTTPException(
+            status_code=503,
+            detail=f"EXTRACTION_PROVIDER is {settings.extraction_provider!r} but "
+                   f"{key} is not configured",
+        )
 
-    result = await TenderExtractor(settings).extract(
+    result = await get_extractor(settings).extract(
         request.raw_text,
         source_name=request.source_name,
         source_url=request.source_url,

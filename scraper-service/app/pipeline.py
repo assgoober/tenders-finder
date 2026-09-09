@@ -103,6 +103,22 @@ class IngestionPipeline:
 
         reports = list(await asyncio.gather(*(guarded(agent) for agent in agents)))
 
+        # Before the digest, so a mail failure cannot skip it, and never
+        # inside a source's try: the clock is a property of the corpus, not of
+        # any one portal. Failure here is logged, not raised -- a sweep that
+        # harvested correctly is not a failed sweep because a status refresh
+        # could not run.
+        # Unlike extraction, this one IS conditioned on dry_run: it is a write
+        # to shared rows, and a dry run that mutates the corpus is not a dry
+        # run.
+        if not self.settings.dry_run:
+            try:
+                aged = await asyncio.to_thread(self.repository.age_tender_status)
+                if any(aged.values()):
+                    logger.info("aged tender status: %s", aged)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("could not age tender status: %s", exc)
+
         # After every source has finished, so one mail covers the whole run.
         # Never inside the try of a source: a mail failure must not be able to
         # mark a successful scrape as failed.

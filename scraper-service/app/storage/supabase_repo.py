@@ -107,6 +107,23 @@ class SupabaseRepository:
         payload = [{**doc, "tender_id": tender_id} for doc in documents]
         self.client.table("tender_documents").insert(payload).execute()
 
+    def age_tender_status(self) -> dict[str, int]:
+        """Re-derive open / closing_soon / closed from each tender's deadline.
+
+        Migration 0011. The scheduled call is the one that matters -- a
+        deadline passes on the clock, not on a sweep -- but calling it at the
+        end of a run means the corpus is never stale for the interval between
+        the sweep and the next scheduled pass, which is when a human is most
+        likely to be looking at it.
+        """
+        result = self.client.rpc("age_tender_status", {}).execute()
+        row = (result.data or [{}])[0] if isinstance(result.data, list) else (result.data or {})
+        return {
+            "to_open": row.get("to_open", 0),
+            "to_closing_soon": row.get("to_closing_soon", 0),
+            "to_closed": row.get("to_closed", 0),
+        }
+
     def mark_needs_review(self, tender_id: str, error: str | None) -> None:
         self.client.table("tenders").update(
             {"extraction_status": "needs_review", "extraction_error": error}
