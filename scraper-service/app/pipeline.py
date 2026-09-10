@@ -41,6 +41,12 @@ class IngestReport:
     #: problem, a wall of refusals is a policy boundary.
     refused: int = 0
     failed: int = 0
+    #: True when the listing walk stopped because a page would not turn, not
+    #: because the listing ended. A run that harvested 60 of 185 tenders and
+    #: reported the same shape as a complete one is the failure this exists to
+    #: make visible -- it happened on 2026-09-09 and nothing in the report said
+    #: so.
+    partial: bool = False
     errors: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -51,6 +57,7 @@ class IngestReport:
             "needs_review": self.needs_review,
             "refused": self.refused,
             "failed": self.failed,
+            "partial": self.partial,
             "errors": self.errors[:10],
         }
 
@@ -147,7 +154,21 @@ class IngestionPipeline:
             quota_exhausted = False
             stubs = await agent.discover(limit=limit)
             report.found = len(stubs)
-            logger.info("[%s] discovered %d tenders", agent.key, report.found)
+            # A truncated walk is not an error -- the rows it did get are good
+            # -- but it must not be reported as a complete sweep. Without this
+            # the digest, the run row and the log all say the same thing for
+            # 60 of 185 tenders as they do for all 185.
+            report.partial = bool(getattr(agent, "pagination_truncated", False))
+            if report.partial:
+                report.errors.append(
+                    "listing pagination stopped early; this harvest is partial"
+                )
+                logger.warning(
+                    "[%s] PARTIAL harvest: %d tenders before pagination stopped",
+                    agent.key, report.found,
+                )
+            else:
+                logger.info("[%s] discovered %d tenders", agent.key, report.found)
 
             for stub in stubs:
                 try:

@@ -37,6 +37,12 @@ class PlaywrightPortalAgent(TenderSourceAgent):
     pagination_next_selector: str | None = None
     max_pages: int = 5
 
+    #: Set by `discover` when the walk ended because a postback did not land,
+    #: as opposed to running out of pages. Read by the pipeline: a partial
+    #: harvest that reports the same shape as a complete one is how a third of
+    #: a corpus goes missing without anything looking wrong.
+    pagination_truncated: bool = False
+
     # --- Extraction (override per portal) ---
     detail_body_selector: str = "body"
     detail_attachment_selector: str = "a[href$='.pdf']"
@@ -45,6 +51,7 @@ class PlaywrightPortalAgent(TenderSourceAgent):
         from playwright.async_api import async_playwright
 
         stubs: list[TenderStub] = []
+        self.pagination_truncated = False
 
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=self.settings.playwright_headless)
@@ -64,6 +71,10 @@ class PlaywrightPortalAgent(TenderSourceAgent):
                     if len(stubs) >= limit:
                         break
                     if not await self._go_to_next_page(page):
+                        # Distinguish "no more pages" from "the page would not
+                        # turn". Only the second is a truncated harvest.
+                        if getattr(self, "_last_page_had_a_next_link", False):
+                            self.pagination_truncated = True
                         break
                     logger.info("[%s] advanced to listing page %d", self.key, page_number + 1)
             finally:

@@ -58,7 +58,14 @@ def build_digest(reports: list[IngestReport]) -> tuple[str, str]:
     ingested = sum(r.ingested for r in reports)
     found = sum(r.found for r in reports)
 
-    if review or failed:
+    partial = [r.source_key for r in reports if getattr(r, "partial", False)]
+
+    if partial:
+        # Said first and said plainly. "60 ingested, clean" was true of every
+        # row that arrived and false about the run, which is the worst kind of
+        # subject line: it is not wrong enough to notice.
+        headline = f"PARTIAL harvest ({', '.join(partial)}) — {ingested} ingested"
+    elif review or failed:
         headline = f"{review} for review, {failed} failed"
     else:
         headline = f"{ingested} ingested, clean"

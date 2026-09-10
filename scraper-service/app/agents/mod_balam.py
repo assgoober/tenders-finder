@@ -509,41 +509,68 @@ class ModBalamAgent(PlaywrightPortalAgent):
         next_link = await self._pager_link(page, target_page)
 
         if next_link is None:
+            self._last_page_had_a_next_link = False
             logger.info(
                 "[%s] no pager link for page %d — end of listing", self.key, target_page
             )
             return False
 
+        # A link exists, so whatever happens next, this is not the end of the
+        # listing. The pipeline reads this to tell a short harvest from a
+        # complete one.
+        self._last_page_had_a_next_link = True
+
         row_scope = f"{self.contract.table_selector} {self.contract.row_selector}"
-        before = await page.evaluate(_ROW_SIGNATURE_JS, row_scope)
 
-        await self.with_backoff(
-            lambda: next_link.click(), description=f"postback to page {target_page}"
+        # One retry. Measured on the live portal: a page turn takes 0.5-2.7s,
+        # and ten consecutive turns landed on two runs back to back. The single
+        # failure that truncated a sweep at page 4 was one postback that did
+        # not answer inside 20s, and re-clicking the same link costs one more
+        # request against a portal that has already served nine.
+        for attempt in (1, 2):
+            before = await page.evaluate(_ROW_SIGNATURE_JS, row_scope)
+
+            await self.with_backoff(
+                lambda: next_link.click(), description=f"postback to page {target_page}"
+            )
+
+            try:
+                await page.wait_for_function(
+                    "([selector, previous, sig]) => {"
+                    "  const signature = new Function('return ' + sig)();"
+                    "  const now = signature(selector);"
+                    "  return now !== '' && now !== previous;"
+                    "}",
+                    arg=[row_scope, before, _ROW_SIGNATURE_JS],
+                    timeout=self.contract.postback_timeout_ms,
+                )
+            except Exception:  # noqa: BLE001
+                if attempt == 1:
+                    logger.info(
+                        "[%s] postback to page %d did not land in %dms — retrying once",
+                        self.key, target_page, self.contract.postback_timeout_ms,
+                    )
+                    # Re-resolve: the DOM may have been replaced under us, and a
+                    # handle from before the postback would click nothing.
+                    next_link = await self._pager_link(page, target_page)
+                    if next_link is None:
+                        break
+                    continue
+                # Rows did not change twice. Stop rather than re-ingesting the
+                # same page under a new page number — duplicates would dedupe
+                # on external_id, but the walk would never terminate on its own.
+                break
+
+            self._page_index = target_page
+            return True
+
+        logger.warning(
+            "[%s] postback to page %d did not change the row set after 2 attempts — "
+            "stopping pagination with a PARTIAL listing",
+            self.key,
+            target_page,
         )
-
-        try:
-            await page.wait_for_function(
-                "([selector, previous, sig]) => {"
-                "  const signature = new Function('return ' + sig)();"
-                "  const now = signature(selector);"
-                "  return now !== '' && now !== previous;"
-                "}",
-                arg=[row_scope, before, _ROW_SIGNATURE_JS],
-                timeout=self.contract.postback_timeout_ms,
-            )
-        except Exception:  # noqa: BLE001
-            # Rows did not change. Stop rather than re-ingesting the same page
-            # under a new page number — duplicates would dedupe on
-            # external_id, but the walk would never terminate on its own.
-            logger.warning(
-                "[%s] postback to page %d did not change the row set — stopping pagination",
-                self.key,
-                target_page,
-            )
-            return False
-
-        self._page_index = target_page
-        return True
+        return False
 
     async def _pager_link(self, page, page_number: int):
         """Find the pager link that posts back with exactly `Page$<n>`."""

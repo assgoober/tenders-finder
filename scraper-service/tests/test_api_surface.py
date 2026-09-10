@@ -201,3 +201,51 @@ async def test_a_failed_status_refresh_does_not_fail_the_sweep():
     reports = await pipeline.run([])          # must not raise
     assert repo.aged == 1
     assert reports == []
+
+
+# --- partial harvests must not look like complete ones ---------------------
+
+def test_a_truncated_walk_is_reported_as_partial():
+    """2026-09-09: a sweep stopped at page 4 of 10, harvested 60 of 185
+    tenders, and reported found=60 ingested=60 errors=[] -- the same shape a
+    complete run produces. The guard that stopped the walk was right; the
+    report that called it clean was not."""
+    from app.pipeline import IngestReport
+
+    r = IngestReport(source_key="mod-balam", found=60, ingested=60, partial=True)
+    assert r.as_dict()["partial"] is True
+
+    complete = IngestReport(source_key="mod-balam", found=185, ingested=185)
+    assert complete.as_dict()["partial"] is False
+
+
+def test_a_partial_harvest_reaches_the_digest_and_leads_the_subject():
+    from app.notifications import build_digest, needs_attention
+    from app.pipeline import IngestReport
+
+    reports = [IngestReport(source_key="mod-balam", found=60, ingested=60,
+                            partial=True, errors=["listing pagination stopped early"])]
+    assert needs_attention(reports) is True
+    subject, _ = build_digest(reports)
+    assert "PARTIAL" in subject and "mod-balam" in subject
+    assert "clean" not in subject
+
+
+def test_a_complete_run_still_reads_clean():
+    from app.notifications import build_digest
+    from app.pipeline import IngestReport
+
+    subject, _ = build_digest([IngestReport(source_key="mod-balam", found=185, ingested=185)])
+    assert "clean" in subject and "PARTIAL" not in subject
+
+
+@pytest.mark.asyncio
+async def test_running_out_of_pages_is_not_a_partial_harvest():
+    """The distinction the whole fix rests on: 'no more pages' and 'the page
+    would not turn' are different endings and must not report the same."""
+    from app.agents.mod_balam import ModBalamAgent
+
+    agent = ModBalamAgent.__new__(ModBalamAgent)
+    agent.pagination_truncated = False
+    agent._last_page_had_a_next_link = False
+    assert agent.pagination_truncated is False
