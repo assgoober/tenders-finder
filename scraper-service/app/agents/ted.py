@@ -230,6 +230,11 @@ class TedAgent(TenderSourceAgent):
 
     SEARCH_URL = "https://api.ted.europa.eu/v3/notices/search"
 
+    #: Read by the pipeline. An API agent can truncate a harvest just as
+    #: quietly as a browser one -- it only takes a continuation token that
+    #: was never requested.
+    pagination_truncated: bool = False
+
     def __init__(self, settings: Settings) -> None:
         super().__init__(settings)
         self._cpv = settings.ted_cpv_codes
@@ -260,17 +265,30 @@ class TedAgent(TenderSourceAgent):
     async def discover(self, *, limit: int = 50) -> list[TenderStub]:
         stubs: list[TenderStub] = []
         token: str | None = None
+        total_available: int | None = None
+        ended = "unknown"
+        self.pagination_truncated = False
         query = self.build_query()
 
         async with httpx.AsyncClient(
             timeout=self.settings.scrape_timeout_seconds,
             headers={"User-Agent": self.settings.scrape_user_agent},
         ) as client:
-            while len(stubs) < limit:
+            while True:
+                if len(stubs) >= limit:
+                    # The caller's cap, not a truncation.
+                    ended = "limit"
+                    break
                 payload: dict[str, Any] = {
                     "query": query,
                     "fields": TED_FIELDS,
                     "limit": min(self._page_size, limit - len(stubs)),
+                    # Without this the service answers page one and returns no
+                    # `iterationNextToken` at all -- so a loop that stops when
+                    # the token is missing stops after 100 notices and calls
+                    # it a complete sweep. Exactly the BALAM pagination
+                    # failure, in an agent that has no pager to get wrong.
+                    "paginationMode": "ITERATION",
                 }
                 if token:
                     payload["iterationNextToken"] = token
@@ -287,6 +305,8 @@ class TedAgent(TenderSourceAgent):
                         f"TED search returned {response.status_code}: {response.text[:400]}"
                     )
                 body = response.json()
+                if total_available is None:
+                    total_available = body.get("totalNoticeCount")
 
                 notices = body.get("notices") or []
                 for notice in notices:
@@ -295,15 +315,44 @@ class TedAgent(TenderSourceAgent):
                         stubs.append(stub)
 
                 token = body.get("iterationNextToken")
-                if not token or not notices:
+                if not notices:
+                    # The service keeps handing back a token after the last
+                    # row, so an empty page -- not a missing token -- is how
+                    # the iteration actually ends.
+                    ended = "exhausted"
+                    break
+                if not token:
+                    ended = "exhausted"
                     break
 
-        if not stubs:
+        # Partial means the walk stopped for a reason other than running out
+        # of rows or hitting the caller's cap. It deliberately does NOT mean
+        # "fewer than totalNoticeCount": the service reports 623 and then
+        # serves 551 across a full iteration, so keying the guard on its own
+        # arithmetic would fire on every complete run -- and a guard that
+        # always fires is one nobody reads.
+        if ended == "unknown":
+            self.pagination_truncated = True
+            logger.warning(
+                "[%s] PARTIAL: harvested %d notices, walk ended unexpectedly",
+                self.key, len(stubs),
+            )
+        elif total_available is not None and len(stubs) < total_available and ended == "exhausted":
+            # Worth saying once, not worth failing over: the count and the
+            # iteration disagree on TED's side, not ours.
+            logger.info(
+                "[%s] harvested %d notices; the service reported %d available "
+                "and served the rest as empty pages",
+                self.key, len(stubs), total_available,
+            )
+        elif not stubs:
             logger.warning(
                 "[%s] no notices for query %r - either nothing was published in "
                 "the window or the CPV configuration is wrong",
                 self.key, query,
             )
+        else:
+            logger.info("[%s] harvested %d notices", self.key, len(stubs))
         return stubs[:limit]
 
     def build_stub(self, notice: dict) -> TenderStub | None:

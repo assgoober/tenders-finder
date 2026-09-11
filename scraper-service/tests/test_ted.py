@@ -235,3 +235,107 @@ def test_the_default_harvests_wide():
     ranks low and costs a row -- while a defence lot dropped at ingestion is
     gone for good."""
     assert SETTINGS.ted_cpv_field == "classification-cpv"
+
+
+# --- pagination -------------------------------------------------------------
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self.status_code = 200
+        self._payload = payload
+    def json(self):
+        return self._payload
+
+
+class _FakeClient:
+    """Records what was asked for and serves scripted pages."""
+
+    def __init__(self, pages):
+        self.pages = list(pages)
+        self.payloads = []
+
+    async def __aenter__(self):
+        return self
+    async def __aexit__(self, *a):
+        return False
+
+    async def post(self, url, json=None, **kw):
+        self.payloads.append(json)
+        return _FakeResponse(self.pages.pop(0) if self.pages else
+                             {"notices": [], "totalNoticeCount": 0})
+
+
+def _notice(i):
+    return {"publication-number": f"{i}-2026", "notice-title": {"eng": f"n{i}"}}
+
+
+@pytest.fixture
+def fake_ted(monkeypatch):
+    def _install(pages):
+        client = _FakeClient(pages)
+        monkeypatch.setattr("app.agents.ted.httpx.AsyncClient", lambda **kw: client)
+        return client
+    return _install
+
+
+@pytest.mark.asyncio
+async def test_the_request_asks_for_the_continuation_token(fake_ted):
+    """Without paginationMode the service answers page one and returns no
+    iterationNextToken at all -- so a loop that stops when the token is
+    missing stops after 100 notices and calls it a complete sweep. The same
+    BALAM pagination failure, in an agent that has no pager to get wrong."""
+    client = fake_ted([{"notices": [_notice(1)], "totalNoticeCount": 1}])
+    await TedAgent(SETTINGS).discover(limit=10)
+    assert client.payloads[0]["paginationMode"] == "ITERATION"
+
+
+@pytest.mark.asyncio
+async def test_the_walk_follows_the_token_across_pages(fake_ted):
+    client = fake_ted([
+        {"notices": [_notice(1), _notice(2)], "iterationNextToken": "t1", "totalNoticeCount": 3},
+        {"notices": [_notice(3)], "iterationNextToken": "t2"},
+        {"notices": [], "iterationNextToken": "t3"},
+    ])
+    agent = TedAgent(SETTINGS)
+    stubs = await agent.discover(limit=100)
+
+    assert [s.external_id for s in stubs] == ["1-2026", "2-2026", "3-2026"]
+    assert client.payloads[1]["iterationNextToken"] == "t1"
+    assert agent.pagination_truncated is False
+
+
+@pytest.mark.asyncio
+async def test_an_empty_page_ends_the_walk_even_with_a_token(fake_ted):
+    """Measured live: the service keeps handing back a token after the last
+    row, so an empty page -- not a missing token -- is how it actually ends."""
+    agent = TedAgent(SETTINGS)
+    fake_ted([
+        {"notices": [_notice(1)], "iterationNextToken": "t1", "totalNoticeCount": 623},
+        {"notices": [], "iterationNextToken": "still-here"},
+    ])
+    await agent.discover(limit=100)
+    assert agent.pagination_truncated is False
+
+
+@pytest.mark.asyncio
+async def test_a_short_harvest_is_not_partial_just_because_the_count_disagrees(fake_ted):
+    """TED reports 623 available and serves 551 across a full iteration.
+    Keying the guard on its own arithmetic would fire on every complete run,
+    and a guard that always fires is one nobody reads."""
+    agent = TedAgent(SETTINGS)
+    fake_ted([
+        {"notices": [_notice(1)], "iterationNextToken": "t1", "totalNoticeCount": 623},
+        {"notices": []},
+    ])
+    await agent.discover(limit=1000)
+    assert agent.pagination_truncated is False
+
+
+@pytest.mark.asyncio
+async def test_hitting_the_caller_cap_is_not_a_truncation(fake_ted):
+    agent = TedAgent(SETTINGS)
+    fake_ted([{"notices": [_notice(i) for i in range(5)],
+               "iterationNextToken": "t1", "totalNoticeCount": 623}])
+    stubs = await agent.discover(limit=3)
+    assert len(stubs) == 3
+    assert agent.pagination_truncated is False
