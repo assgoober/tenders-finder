@@ -46,11 +46,15 @@ class IngestReport:
     #: model -- so re-fetching and re-extracting them would spend a browser
     #: launch and an LLM call to arrive at the row that is already there.
     skipped: int = 0
-    #: True when the listing walk stopped because a page would not turn, not
-    #: because the listing ended. A run that harvested 60 of 185 tenders and
-    #: reported the same shape as a complete one is the failure this exists to
-    #: make visible -- it happened on 2026-09-09 and nothing in the report said
-    #: so.
+    #: True when this run covers less than the source offered, for ANY
+    #: reason: a listing page that would not turn, a continuation token the
+    #: request never asked for, or a provider quota that ran out mid-run.
+    #:
+    #: The field started out meaning only the first of those, and on
+    #: 2026-09-11 a TED sweep that ingested 483 of 551 and aborted on quota
+    #: reported `partial: false` with `failed: 0`. Both were literally true
+    #: and the pair read as a complete run -- which is the third time in this
+    #: codebase that work not done failed to reach whoever read the result.
     partial: bool = False
     errors: list[str] = field(default_factory=list)
 
@@ -211,6 +215,11 @@ class IngestionPipeline:
                         report.found,
                     )
                     quota_exhausted = True
+                    # A run that stopped part-way through its own stub list is
+                    # a partial harvest. Leaving this to `errors` alone means
+                    # a reader sees partial=false, failed=0 and concludes the
+                    # sweep finished.
+                    report.partial = True
                     break
                 except Exception as exc:  # noqa: BLE001
                     # One bad tender must not abort the run — the remaining

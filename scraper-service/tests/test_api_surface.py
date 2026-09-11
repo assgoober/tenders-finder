@@ -321,3 +321,48 @@ def test_the_report_says_how_many_were_skipped():
     from app.pipeline import IngestReport
     r = IngestReport(source_key="mod-balam", found=185, ingested=7, skipped=178)
     assert r.as_dict()["skipped"] == 178
+
+
+def test_a_quota_abort_is_a_partial_harvest():
+    """2026-09-11: a TED sweep ingested 483 of 551 and aborted on the
+    provider's daily quota. It reported partial=false, failed=0. Both were
+    literally true, and together they read as a completed run -- the third
+    time in this codebase that work not done failed to reach the reader."""
+    from app.pipeline import IngestReport
+
+    r = IngestReport(source_key="ted-eu", found=551, ingested=483, partial=True,
+                     errors=["run aborted: per-day request quota is exhausted"])
+    assert r.as_dict()["partial"] is True
+
+
+@pytest.mark.asyncio
+async def test_the_quota_abort_sets_partial_on_the_real_path():
+    """Not just the dataclass: the pipeline has to set it where it breaks."""
+    from app.agents.base import FetchedTender, TenderStub
+    from app.nlp.extractor import ExtractionQuotaExhausted
+    from app.pipeline import IngestionPipeline
+
+    class _QuotaAgent:
+        key = "fake"
+        display_name = "fake"
+        base_url = ""
+        country = None
+        sector = "defense"
+        async def discover(self, *, limit=50):
+            return [TenderStub(external_id=str(i), title="t", source_url="u")
+                    for i in range(3)]
+        async def fetch(self, stub):
+            return FetchedTender(stub=stub, raw_text="x")
+
+    class _Blown(IngestionPipeline):
+        async def _ingest_one(self, fetched, source_id, report):
+            raise ExtractionQuotaExhausted("per-day request quota is exhausted")
+
+    pipeline = _Blown(
+        Settings(extraction_provider="gemini", gemini_api_key="k",
+                 embedding_provider="hash", dry_run=True),
+    )
+    report = await pipeline.run_source(_QuotaAgent(), limit=3)
+    assert report.partial is True
+    assert report.ingested == 0
+    assert any("quota" in e for e in report.errors)
