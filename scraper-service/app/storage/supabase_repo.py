@@ -107,6 +107,44 @@ class SupabaseRepository:
         payload = [{**doc, "tender_id": tender_id} for doc in documents]
         self.client.table("tender_documents").insert(payload).execute()
 
+    def extracted_fingerprints(self, source_id: str | None) -> dict[str, dict]:
+        """What is already extracted for this source, keyed by external_id.
+
+        One query for the whole source rather than one per tender: the point
+        of this index is to avoid work, and N round trips to decide whether to
+        skip N documents saves nothing.
+
+        Only rows that actually succeeded are returned. A `needs_review` row is
+        deliberately absent, so the next sweep retries it -- that is the ladder
+        in ADR-2 getting a second chance, not a cache miss.
+        """
+        if not source_id:
+            return {}
+
+        index: dict[str, dict] = {}
+        page, size = 0, 1000
+        while True:
+            result = (
+                self.client.table("tenders")
+                .select("external_id, extraction_model, metadata")
+                .eq("source_id", source_id)
+                .eq("extraction_status", "extracted")
+                .range(page * size, page * size + size - 1)
+                .execute()
+            )
+            rows = result.data or []
+            for row in rows:
+                meta = row.get("metadata") or {}
+                index[row["external_id"]] = {
+                    "model": row.get("extraction_model"),
+                    "prompt_version": (meta.get("extraction") or {}).get("prompt_version"),
+                    "raw_row": (meta.get("listing") or {}).get("raw_row"),
+                }
+            if len(rows) < size:
+                break
+            page += 1
+        return index
+
     def age_tender_status(self) -> dict[str, int]:
         """Re-derive open / closing_soon / closed from each tender's deadline.
 

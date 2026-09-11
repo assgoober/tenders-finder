@@ -249,3 +249,75 @@ async def test_running_out_of_pages_is_not_a_partial_harvest():
     agent.pagination_truncated = False
     agent._last_page_had_a_next_link = False
     assert agent.pagination_truncated is False
+
+
+# --- incremental extraction ------------------------------------------------
+
+def _pipeline(**over):
+    from app.pipeline import IngestionPipeline
+    base = dict(extraction_provider="gemini", gemini_api_key="k",
+                gemini_model="gemini-3.5-flash-lite", embedding_provider="hash")
+    base.update(over)
+    return IngestionPipeline(Settings(**base), repository=object())
+
+
+def _stub(raw_row="1000 a tender 16:00 01/10/2026 01/09/2026"):
+    from app.agents.base import TenderStub
+    return TenderStub(external_id="1000", title="a tender", source_url="u",
+                      listing_metadata={"raw_row": raw_row})
+
+
+def _fp(**over):
+    from app.nlp.prompts import PROMPT_VERSION
+    fp = {"raw_row": "1000 a tender 16:00 01/10/2026 01/09/2026",
+          "prompt_version": PROMPT_VERSION, "model": "gemini-3.5-flash-lite"}
+    fp.update(over)
+    return fp
+
+
+def test_an_unchanged_tender_is_skipped():
+    """Fetching a detail page launches a browser and extraction costs an LLM
+    call, both to arrive at the row already stored."""
+    assert _pipeline()._already_current(_stub(), _fp()) is True
+
+
+def test_a_tender_the_portal_edited_is_re_extracted():
+    """raw_row carries the portal's own last-updated column, which is what
+    makes it a change detector rather than a guess."""
+    edited = _fp(raw_row="1000 a tender 16:00 08/10/2026 09/09/2026")
+    assert _pipeline()._already_current(_stub(), edited) is False
+
+
+def test_a_new_prompt_version_re_extracts_the_corpus():
+    """Otherwise the corpus quietly becomes a mixture of two prompt
+    generations, and nothing says which row came from which."""
+    assert _pipeline()._already_current(_stub(), _fp(prompt_version="pegs-v0")) is False
+
+
+def test_a_model_change_re_extracts_the_corpus():
+    assert _pipeline()._already_current(_stub(), _fp(model="claude-opus-5")) is False
+
+
+def test_a_tender_that_was_never_extracted_is_not_skipped():
+    """needs_review rows are absent from the index on purpose: the next sweep
+    is their retry, not a cache miss."""
+    assert _pipeline()._already_current(_stub(), None) is False
+
+
+def test_anything_unknown_counts_as_a_mismatch():
+    """A wrong skip is invisible -- it looks exactly like a tender nobody
+    changed -- so the decision errs toward doing the work."""
+    p = _pipeline()
+    assert p._already_current(_stub(), _fp(raw_row=None)) is False
+    assert p._already_current(_stub(raw_row=None), _fp()) is False
+    assert p._already_current(_stub(), _fp(model=None)) is False
+    assert p._already_current(_stub(), {}) is False
+
+
+def test_the_report_says_how_many_were_skipped():
+    """Same lesson as `partial`: work not done has to be visible in the
+    result, or a run that skipped everything reads like a run that ingested
+    nothing."""
+    from app.pipeline import IngestReport
+    r = IngestReport(source_key="mod-balam", found=185, ingested=7, skipped=178)
+    assert r.as_dict()["skipped"] == 178

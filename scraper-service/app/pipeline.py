@@ -23,6 +23,7 @@ from .nlp.extractor import (
     TenderExtractor,
     get_extractor,
 )
+from .nlp.prompts import PROMPT_VERSION
 from .notifications import Notifier, get_notifier
 from .storage.supabase_repo import SupabaseRepository
 
@@ -41,6 +42,10 @@ class IngestReport:
     #: problem, a wall of refusals is a policy boundary.
     refused: int = 0
     failed: int = 0
+    #: Tenders already extracted, unchanged since, under the same prompt and
+    #: model -- so re-fetching and re-extracting them would spend a browser
+    #: launch and an LLM call to arrive at the row that is already there.
+    skipped: int = 0
     #: True when the listing walk stopped because a page would not turn, not
     #: because the listing ended. A run that harvested 60 of 185 tenders and
     #: reported the same shape as a complete one is the failure this exists to
@@ -57,6 +62,7 @@ class IngestReport:
             "needs_review": self.needs_review,
             "refused": self.refused,
             "failed": self.failed,
+            "skipped": self.skipped,
             "partial": self.partial,
             "errors": self.errors[:10],
         }
@@ -170,8 +176,23 @@ class IngestionPipeline:
             else:
                 logger.info("[%s] discovered %d tenders", agent.key, report.found)
 
+            # One query for the source, before the loop. Fetching a detail
+            # page launches a browser per tender, so the skip has to happen
+            # before the fetch to be worth anything.
+            fingerprints: dict[str, dict] = {}
+            if not self.settings.dry_run:
+                try:
+                    fingerprints = self.repository.extracted_fingerprints(source_id)
+                except Exception as exc:  # noqa: BLE001
+                    # Not being able to read the index is a reason to do the
+                    # work, never a reason to fail the run.
+                    logger.warning("[%s] could not load extraction index: %s", agent.key, exc)
+
             for stub in stubs:
                 try:
+                    if self._already_current(stub, fingerprints.get(stub.external_id)):
+                        report.skipped += 1
+                        continue
                     fetched = await agent.fetch(stub)
                     await self._ingest_one(fetched, source_id, report)
                 except ExtractionQuotaExhausted as exc:
@@ -198,6 +219,12 @@ class IngestionPipeline:
                     report.errors.append(f"{stub.external_id}: {type(exc).__name__}: {exc}")
                     logger.exception("[%s] ingest failed for %s", agent.key, stub.external_id)
 
+            if report.skipped:
+                logger.info(
+                    "[%s] skipped %d of %d already-current tenders",
+                    agent.key, report.skipped, report.found,
+                )
+
             if not self.settings.dry_run:
                 self.repository.finish_run(
                     run_id,
@@ -218,6 +245,37 @@ class IngestionPipeline:
                 )
 
         return report
+
+    def _already_current(self, stub, fingerprint: dict | None) -> bool:
+        """Whether this tender is already stored, extracted, and unchanged.
+
+        Four things must all agree, and each of them is a way the stored row
+        could be out of date:
+
+        * the tender was extracted successfully at all;
+        * the listing row is byte-identical, so the portal has not edited it
+          (the row carries the portal's own last-updated date, which is what
+          makes this a change detector rather than a guess);
+        * the prompt version matches, so a prompt change re-extracts the
+          corpus instead of leaving a mixture of two prompt generations;
+        * the model matches, for the same reason.
+
+        Anything unknown on either side counts as a mismatch and re-extracts.
+        A skip that is wrong is invisible -- it looks exactly like a tender
+        nobody changed -- so this errs toward doing the work.
+        """
+        if not fingerprint:
+            return False
+
+        stored_row = fingerprint.get("raw_row")
+        current_row = (stub.listing_metadata or {}).get("raw_row")
+        if not stored_row or not current_row or stored_row != current_row:
+            return False
+
+        if fingerprint.get("prompt_version") != PROMPT_VERSION:
+            return False
+
+        return fingerprint.get("model") == self.settings.extraction_model
 
     async def _ingest_one(
         self, fetched: FetchedTender, source_id: str | None, report: IngestReport
