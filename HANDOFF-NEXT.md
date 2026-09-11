@@ -5,22 +5,27 @@ measured, not assumed.
 
 ## Blocked on you, first thing
 
-**Five commits are waiting to be pushed.**
+**The five commits are pushed.** `main` is in sync with `origin/main`.
+
+**One file is not, and it is the one keeping CI red: `.github/workflows/ci.yml`.**
+GitHub refuses a workflow change from an OAuth App without `workflow` scope, so
+I rewrote the five commits to leave that file exactly as the remote has it and
+pushed the rest. The only difference between what was pushed and what I built
+is that one file — verified, not assumed.
+
+The full, final version of it is parked on a local branch. Two commands:
 
 ```bash
-git push origin main
+git checkout ci-workflow-fix -- .github/workflows/ci.yml
+git commit -m "Teach CI to check the rule, not one filename" && git push origin main
 ```
 
-My token cannot push `2a4979f` because it touches `.github/workflows/ci.yml`,
-and the other four are queued behind it. From your terminal it goes through.
-
-```
-eb991d3  Stop re-extracting tenders nothing has changed
-5371556  Stop a partial harvest from reporting itself as a complete one
-d66ec5f  Age a tender's status against the clock
-c95e0cf  Give the landing page the crawler surface it was missing
-2a4979f  Stop CI asserting a favicon that was deliberately deleted   <- the blocker
-```
+**Until that lands, CI is red on `main`** — and it was already red before this
+session's pushes: `295720e` deleted `landing/favicon.svg` while the workflow
+still asserts the file exists. That assertion is exactly what the parked
+version replaces: it now checks that no traced logo survives in the page and
+that both brand marks point at the real one, which is the rule the old check
+was standing guard over and could never actually enforce.
 
 ## State of the system
 
@@ -56,8 +61,8 @@ runs Gemini. `/health` announced `claude-opus-5`; `/extract` returned 503.
 
 ## Pick up here
 
-1. **`git push origin main`** — see above. Nothing else should start before CI
-   is green.
+1. **Land the workflow file** — the two commands above. Nothing else should
+   start before CI is green.
 2. **Finish a full sweep.** The last one was stopped mid-run by hand, not by a
    failure. Run it and confirm the report shows `skipped` high and `partial`
    false.
