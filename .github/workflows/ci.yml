@@ -106,6 +106,51 @@ jobs:
           check 'charset="utf-8"' "charset declared before any content"
           check 'document.documentElement.dir = "rtl"' "direction set for assistive tech"
           check 'property="og:image"' "sharing card declared"
-          test -f og.png     && echo "ok    og.png present"     || { echo "FAIL  og.png missing";     fail=1; }
-          test -f favicon.svg && echo "ok    favicon.svg present" || { echo "FAIL  favicon.svg missing"; fail=1; }
+
+          # Every mark on the page is cut from one image. The check that
+          # matters is not that a logo file exists but that the page uses
+          # *that* one: the defect this replaces was a hand-traced SVG that
+          # sat in the header for weeks looking plausible and being wrong.
+          absent() {
+            if grep -q "$1" index.html; then
+              echo "FAIL  $2"
+              fail=1
+            else
+              echo "ok    $2"
+            fi
+          }
+          absent 'viewBox="0 0 132 104"' "no traced logo left in the page"
+
+          marks=$(grep -c 'class="brand-mark"' index.html)
+          if [ "$marks" = "2" ]; then
+            echo "ok    both brand marks use logo.png"
+          else
+            echo "FAIL  expected 2 brand marks, found $marks"
+            fail=1
+          fi
+
+          check 'rel="canonical"' "canonical URL declared"
+          check 'application/ld+json' "structured data present"
+
+          for f in og.png logo.png favicon-32.png apple-touch-icon.png                    robots.txt sitemap.xml llms.txt 404.html; do
+            test -f "$f" && echo "ok    $f present" || { echo "FAIL  $f missing"; fail=1; }
+          done
+
+          # A 404 that search engines index is worse than no 404 page.
+          grep -q 'name="robots" content="noindex' 404.html             && echo "ok    404 page is noindex"             || { echo "FAIL  404 page is missing noindex"; fail=1; }
+
+          python3 - <<'PY' || fail=1
+          import json, re, sys, xml.dom.minidom
+          html = open("index.html", encoding="utf-8").read()
+          blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', html, re.S)
+          try:
+              for b in blocks: json.loads(b)
+              print("ok    JSON-LD parses (%d block(s))" % len(blocks))
+          except Exception as e:
+              print("FAIL  JSON-LD is not valid JSON: %s" % e); sys.exit(1)
+          try:
+              xml.dom.minidom.parse("sitemap.xml"); print("ok    sitemap.xml is well-formed")
+          except Exception as e:
+              print("FAIL  sitemap.xml is malformed: %s" % e); sys.exit(1)
+          PY
           exit $fail
