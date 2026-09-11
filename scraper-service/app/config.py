@@ -71,6 +71,39 @@ class Settings(BaseSettings):
     # failures into one refusal to start.
     gemini_verify_model: bool = True
 
+    # --- TED (EU) ---
+    # CPV 35000000 is "security, fire-fighting, police and defence equipment",
+    # the division the EU files defence procurement under. Configurable
+    # because narrowing or widening the corpus is a product decision, not a
+    # code change: a customer who makes field kitchens wants 39000000 too.
+    ted_cpv_codes: list[int] = [35000000]
+    # How far back a sweep reaches. Thirty days keeps the run bounded and
+    # still covers the 37-day legal minimum between a contract notice and the
+    # shortlist deadline, so nothing closes before we have seen it.
+    ted_lookback_days: int = 30
+    # Notices per API page. The service accepts larger, but a smaller page
+    # fails cheaper and resumes from a token rather than from the start.
+    ted_page_size: int = 100
+    # Measured on a 40-notice sample: 14 carried no deadline at all, and
+    # every one of those was `can-standard` -- a contract AWARD notice,
+    # announcing a deal already done. 47% of the raw defence-CPV feed is
+    # award notices. They are real procurement data and completely useless
+    # to a bid team, so the default asks for contract notices only.
+    ted_notice_types: list[str] = ["cn-standard"]
+    # Which CPV field the filter reads, and it is a recall/precision dial:
+    #   classification-cpv     623 notices -- ANY code on the notice
+    #   main-classification-lot 394 notices -- what the lot is actually FOR
+    # Measured on the same 30-day window. The 229-notice difference is
+    # things like a hospital supply order carrying one protective-clothing
+    # code among twenty-eight.
+    #
+    # Defaults to the broad field on purpose. Precision is not this stage
+    # job: the matching engine scores every tender against a capability
+    # profile downstream, so an irrelevant notice ranks low and costs a
+    # row, while a defence lot dropped at ingestion is gone for good.
+    # Filter late, harvest wide.
+    ted_cpv_field: str = "classification-cpv"
+
     # --- Notifications ---
     # A needs_review tender is invisible until a human opens it, and there is
     # no review queue in the dashboard yet, so this digest is currently the
