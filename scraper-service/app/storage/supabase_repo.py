@@ -107,16 +107,24 @@ class SupabaseRepository:
         payload = [{**doc, "tender_id": tender_id} for doc in documents]
         self.client.table("tender_documents").insert(payload).execute()
 
-    def extracted_fingerprints(self, source_id: str | None) -> dict[str, dict]:
-        """What is already extracted for this source, keyed by external_id.
+    def ingest_fingerprints(self, source_id: str | None) -> dict[str, dict]:
+        """What this source already holds, keyed by external_id.
 
         One query for the whole source rather than one per tender: the point
         of this index is to avoid work, and N round trips to decide whether to
         skip N documents saves nothing.
 
-        Only rows that actually succeeded are returned. A `needs_review` row is
-        deliberately absent, so the next sweep retries it -- that is the ladder
-        in ADR-2 getting a second chance, not a cache miss.
+        This used to filter `extraction_status = 'extracted'`, which was right
+        while an embedding could only come from an extraction. Under
+        listing-first ingestion it was silently catastrophic: a listing-embedded
+        row is `pending`, so it never appeared in the index, so every sweep
+        re-embedded every tender it had already seen. Nothing looked wrong --
+        the counts were right, the rows were right, and the bill was paid
+        again each night.
+
+        So the filter is gone and the *caller* decides what "current" means for
+        the mode it is running in. A `needs_review` row still gets retried,
+        because it carries no embedding and this index reports that honestly.
         """
         if not source_id:
             return {}
@@ -126,9 +134,8 @@ class SupabaseRepository:
         while True:
             result = (
                 self.client.table("tenders")
-                .select("external_id, extraction_model, metadata")
+                .select("external_id, extraction_model, extraction_status, metadata, embedding")
                 .eq("source_id", source_id)
-                .eq("extraction_status", "extracted")
                 .range(page * size, page * size + size - 1)
                 .execute()
             )
@@ -139,6 +146,11 @@ class SupabaseRepository:
                     "model": row.get("extraction_model"),
                     "prompt_version": (meta.get("extraction") or {}).get("prompt_version"),
                     "raw_row": (meta.get("listing") or {}).get("raw_row"),
+                    "extracted": row.get("extraction_status") == "extracted",
+                    # A row with no vector is not "already done" in any mode --
+                    # it is in the table and invisible to every query that
+                    # matters, which is the one state a sweep must always fix.
+                    "embedded": row.get("embedding") is not None,
                 }
             if len(rows) < size:
                 break

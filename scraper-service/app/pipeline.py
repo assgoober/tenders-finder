@@ -225,7 +225,7 @@ class IngestionPipeline:
             fingerprints: dict[str, dict] = {}
             if not self.settings.dry_run:
                 try:
-                    fingerprints = self.repository.extracted_fingerprints(source_id)
+                    fingerprints = self.repository.ingest_fingerprints(source_id)
                 except Exception as exc:  # noqa: BLE001
                     # Not being able to read the index is a reason to do the
                     # work, never a reason to fail the run.
@@ -300,29 +300,47 @@ class IngestionPipeline:
         return report
 
     def _already_current(self, stub, fingerprint: dict | None) -> bool:
-        """Whether this tender is already stored, extracted, and unchanged.
+        """Whether this tender is already stored and unchanged.
 
-        Four things must all agree, and each of them is a way the stored row
-        could be out of date:
+        "Current" means something different in each ingestion mode, and
+        conflating the two is what made every listing-mode sweep redo its own
+        work. The shared part first:
 
-        * the tender was extracted successfully at all;
-        * the listing row is byte-identical, so the portal has not edited it
-          (the row carries the portal's own last-updated date, which is what
-          makes this a change detector rather than a guess);
-        * the prompt version matches, so a prompt change re-extracts the
-          corpus instead of leaving a mixture of two prompt generations;
-        * the model matches, for the same reason.
+        * the tender is in the table at all;
+        * it carries an embedding, because a row without one is present in
+          every count and absent from every result;
+        * the listing row is byte-identical, so the portal has not edited it.
+          The row carries the portal's own last-updated date, which is what
+          makes this a change detector rather than a guess.
 
-        Anything unknown on either side counts as a mismatch and re-extracts.
-        A skip that is wrong is invisible -- it looks exactly like a tender
-        nobody changed -- so this errs toward doing the work.
+        Then the mode-specific part. In extraction mode a stored row is only
+        current if it was extracted by the current model under the current
+        prompt, so a prompt change re-reads the corpus instead of leaving a
+        mixture of two generations. In listing mode there is no prompt and no
+        extraction model involved in producing the vector, so asking about
+        them would reject every row forever -- which is exactly what it did.
+
+        Anything unknown on either side counts as a mismatch and redoes the
+        work. A skip that is wrong is invisible: it looks precisely like a
+        tender nobody changed.
         """
         if not fingerprint:
+            return False
+
+        if not fingerprint.get("embedded"):
             return False
 
         stored_row = fingerprint.get("raw_row")
         current_row = (stub.listing_metadata or {}).get("raw_row")
         if not stored_row or not current_row or stored_row != current_row:
+            return False
+
+        if not self.settings.extract_on_ingest:
+            # The listing is unchanged and already embedded. There is nothing
+            # a second pass could produce that the first one did not.
+            return True
+
+        if not fingerprint.get("extracted"):
             return False
 
         if fingerprint.get("prompt_version") != PROMPT_VERSION:

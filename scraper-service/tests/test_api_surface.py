@@ -255,8 +255,12 @@ async def test_running_out_of_pages_is_not_a_partial_harvest():
 
 def _pipeline(**over):
     from app.pipeline import IngestionPipeline
+    # This block is about extraction-mode skipping, so it pins the mode. The
+    # listing-mode rules are different on purpose and are pinned separately
+    # below -- conflating the two is the bug these tests now guard.
     base = dict(extraction_provider="gemini", gemini_api_key="k",
-                gemini_model="gemini-3.5-flash-lite", embedding_provider="hash")
+                gemini_model="gemini-3.5-flash-lite", embedding_provider="hash",
+                extract_on_ingest=True)
     base.update(over)
     return IngestionPipeline(Settings(**base), repository=object())
 
@@ -270,7 +274,11 @@ def _stub(raw_row="1000 a tender 16:00 01/10/2026 01/09/2026"):
 def _fp(**over):
     from app.nlp.prompts import PROMPT_VERSION
     fp = {"raw_row": "1000 a tender 16:00 01/10/2026 01/09/2026",
-          "prompt_version": PROMPT_VERSION, "model": "gemini-3.5-flash-lite"}
+          "prompt_version": PROMPT_VERSION, "model": "gemini-3.5-flash-lite",
+          # Both reported by `ingest_fingerprints` since listing-first
+          # ingestion: a row can now be stored and embedded without ever
+          # having been extracted.
+          "extracted": True, "embedded": True}
     fp.update(over)
     return fp
 
@@ -302,6 +310,55 @@ def test_a_tender_that_was_never_extracted_is_not_skipped():
     """needs_review rows are absent from the index on purpose: the next sweep
     is their retry, not a cache miss."""
     assert _pipeline()._already_current(_stub(), None) is False
+
+
+def test_a_row_without_an_embedding_is_never_skipped():
+    """The one state a sweep must always fix.
+
+    An unembedded row is in the table and invisible to every query that
+    matters -- it inflates the count and matches nothing. Skipping it would
+    make that permanent.
+    """
+    assert _pipeline()._already_current(_stub(), _fp(embedded=False)) is False
+
+
+# --- listing mode has its own idea of "current" ----------------------------
+#
+# These exist because the first version of listing-first ingestion re-embedded
+# the entire corpus on every sweep and nothing looked wrong: the counts were
+# right, the rows were right, and the bill was simply paid again each night.
+# The cause was asking an extraction question about a listing.
+
+def _listing_pipeline(**over):
+    return _pipeline(extract_on_ingest=False, **over)
+
+
+def test_listing_mode_skips_an_unchanged_listing():
+    """The listing is byte-identical and already embedded. A second pass
+    cannot produce anything the first one did not."""
+    assert _listing_pipeline()._already_current(_stub(), _fp()) is True
+
+
+def test_listing_mode_ignores_the_prompt_version():
+    """No prompt produced this vector, so a prompt change says nothing about
+    it. Asking anyway rejected every row forever -- which is the whole bug."""
+    assert _listing_pipeline()._already_current(_stub(), _fp(prompt_version="pegs-v0")) is True
+
+
+def test_listing_mode_skips_a_row_that_was_never_extracted():
+    """`pending` is the normal, healthy state of a listing-embedded tender,
+    not a reason to redo it."""
+    assert _listing_pipeline()._already_current(_stub(), _fp(extracted=False)) is True
+
+
+def test_listing_mode_still_re_ingests_an_edited_listing():
+    """The one thing that does change a listing vector is the listing."""
+    edited = _fp(raw_row="1000 a tender 16:00 08/10/2026 09/09/2026")
+    assert _listing_pipeline()._already_current(_stub(), edited) is False
+
+
+def test_listing_mode_still_refuses_an_unembedded_row():
+    assert _listing_pipeline()._already_current(_stub(), _fp(embedded=False)) is False
 
 
 def test_anything_unknown_counts_as_a_mismatch():

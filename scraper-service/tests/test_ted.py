@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import re
+
 import pytest
 
 from app.agents.ted import (
@@ -339,3 +341,129 @@ async def test_hitting_the_caller_cap_is_not_a_truncation(fake_ted):
     stubs = await agent.discover(limit=3)
     assert len(stubs) == 3
     assert agent.pagination_truncated is False
+
+
+# --- sharding the sweep by CPV division ------------------------------------
+#
+# A sweep of fourteen divisions is fourteen walks, not one large request.
+# These pin the three properties that makes worth doing.
+
+def _sharded(**over):
+    from app.config import Settings
+    from app.agents.ted import TedAgent
+    base = dict(
+        extraction_provider="gemini", gemini_api_key="k",
+        embedding_provider="hash",
+        ted_cpv_codes=[35000000, 34000000, 72000000],
+        ted_divisions_per_query=1,
+    )
+    base.update(over)
+    return TedAgent(Settings(**base))
+
+
+def test_each_division_gets_its_own_query():
+    agent = _sharded()
+    assert agent.shards() == [[35000000], [34000000], [72000000]]
+
+
+def test_divisions_can_be_grouped():
+    agent = _sharded(ted_divisions_per_query=2)
+    assert agent.shards() == [[35000000, 34000000], [72000000]]
+
+
+def test_zero_means_one_query_for_everything():
+    """The old behaviour, kept reachable rather than deleted."""
+    agent = _sharded(ted_divisions_per_query=0)
+    assert agent.shards() == [[35000000, 34000000, 72000000]]
+
+
+def test_a_shard_query_asks_only_for_its_own_division():
+    agent = _sharded()
+    q = agent.build_query([34000000])
+    assert "34000000" in q
+    assert "35000000" not in q, "a shard must not carry its neighbours"
+
+
+# --- the window is a band, not a horizon -----------------------------------
+
+def test_the_default_window_has_no_upper_edge():
+    """Offset 0 means "the last 30 days", which needs one bound, not two."""
+    q = _sharded().build_query()
+    assert "publication-date>=today(-30)" in q
+    assert "publication-date<today(" not in q
+
+
+def test_an_offset_window_is_bounded_on_both_sides():
+    """A backfill walks [30,60) as its own retryable job. Without the upper
+    bound every step would re-ask for everything newer than itself, and the
+    backfill would get slower the further back it went."""
+    q = _sharded(ted_window_offset_days=30).build_query()
+    assert "publication-date>=today(-60)" in q
+    assert "publication-date<today(-30)" in q
+
+
+@pytest.mark.asyncio
+async def test_a_notice_in_several_divisions_is_collapsed_once(monkeypatch):
+    """The same publication number carries codes from several divisions.
+
+    The upsert would collapse it anyway -- but only after we had paid to
+    embed it. Collapsing here is the difference between the duplicate being
+    free and the duplicate being billed.
+    """
+    from app.agents.ted import TedAgent
+
+    agent = _sharded()
+
+    async def _walk(self, client, query, limit):
+        # Every shard finds the same notice, plus one of its own.
+        shared = agent.build_stub({
+            "publication-number": "111-2026",
+            "notice-title": {"eng": "shared across divisions"},
+        })
+        # Derived from the shard's own CPV code. Taking a slice of the query
+        # string looked unique and was not: every query ends with the same
+        # SORT clause, so all three shards produced one id.
+        division = re.search(r"IN \((\d+)\)", query).group(1)
+        own = agent.build_stub({
+            "publication-number": f"own-{division}",
+            "notice-title": {"eng": "unique"},
+        })
+        return [s for s in (shared, own) if s], "exhausted", 2
+
+    monkeypatch.setattr(TedAgent, "_walk", _walk)
+    stubs = await agent.discover(limit=100)
+
+    ids = [s.external_id for s in stubs]
+    assert ids.count("111-2026") == 1, f"duplicate survived: {ids}"
+    assert len(stubs) == 4, ids  # 1 shared + 3 unique
+
+
+@pytest.mark.asyncio
+async def test_one_dead_shard_does_not_take_the_sweep_with_it(monkeypatch):
+    """Losing a division is a partial harvest. Losing the sweep is an outage.
+
+    The API drops connections under sustained paging, so this is the ordinary
+    case rather than the exotic one.
+    """
+    from app.agents.ted import TedAgent
+
+    agent = _sharded()
+    calls = []
+
+    async def _walk(self, client, query, limit):
+        calls.append(query)
+        if "34000000" in query:
+            raise RuntimeError("connection reset by peer")
+        stub = agent.build_stub({
+            "publication-number": f"n-{len(calls)}",
+            "notice-title": {"eng": "ok"},
+        })
+        return [stub], "exhausted", 1
+
+    monkeypatch.setattr(TedAgent, "_walk", _walk)
+    stubs = await agent.discover(limit=100)
+
+    assert len(calls) == 3, "the sweep stopped instead of continuing"
+    assert len(stubs) == 2, "the surviving shards' notices were lost"
+    assert agent.pagination_truncated is True, \
+        "a sweep that lost a division must not report itself as complete"

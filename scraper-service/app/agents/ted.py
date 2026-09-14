@@ -242,118 +242,216 @@ class TedAgent(TenderSourceAgent):
         self._page_size = settings.ted_page_size
         self._notice_types = settings.ted_notice_types
         self._cpv_field = settings.ted_cpv_field
+        self._window_offset = settings.ted_window_offset_days
+        self._divisions_per_query = settings.ted_divisions_per_query
 
     # --- Query ---------------------------------------------------------------
 
-    def build_query(self) -> str:
+    def shards(self) -> list[list[int]]:
+        """The CPV divisions, cut into the groups one query each will ask for.
+
+        A sweep of fourteen divisions is not one request that happens to be
+        large. It is fourteen independent walks, and cutting it up buys three
+        things a single query cannot give:
+
+        * a connection reset costs one division, not the sweep. Walking
+          34000000 to exhaustion took 22 pages and the API dropped the
+          connection on the very next division -- sustained paging is what it
+          objects to, so a bounded job that can be re-run is the shape that
+          survives;
+        * a division is a resumable unit of work, so "we already did this one"
+          is a fact about a small named thing rather than about a 12,000-row
+          walk that got 60% through;
+        * the same notice carries codes from several divisions, and seeing it
+          twice is free -- `external_id` is the publication number, so the
+          upsert collapses it to one row no matter how many divisions found
+          it.
+
+        `ted_divisions_per_query = 0` puts them all in one query, which is the
+        old behaviour and still useful for a small window.
+        """
+        if self._divisions_per_query <= 0:
+            return [list(self._cpv)]
+        size = self._divisions_per_query
+        return [list(self._cpv[i:i + size]) for i in range(0, len(self._cpv), size)]
+
+    def build_query(self, cpv_codes: list[int] | None = None) -> str:
         """The expert query, built from configuration rather than hardcoded.
 
         Sorted newest-first so a run capped by `limit` keeps the notices a bid
         team can still act on, instead of an arbitrary slice of an archive
         that reaches back to 2016.
+
+        The window is a band, not a horizon: `ted_window_offset_days` moves
+        its far edge back, so a backfill walks [0,30), [30,60), [60,90) as
+        separate bounded jobs rather than asking for "everything since 2016"
+        in one request nobody could retry.
         """
-        cpv = ", ".join(str(c) for c in self._cpv)
+        codes = cpv_codes if cpv_codes is not None else self._cpv
+        cpv = ", ".join(str(c) for c in codes)
         clauses = [f"{self._cpv_field} IN ({cpv})"]
         if self._notice_types:
             kinds = ", ".join(self._notice_types)
             clauses.append(f"notice-type IN ({kinds})")
-        clauses.append(f"publication-date>=today(-{self._lookback_days})")
+
+        newest = self._window_offset
+        oldest = self._window_offset + self._lookback_days
+        clauses.append(f"publication-date>=today(-{oldest})")
+        if newest > 0:
+            clauses.append(f"publication-date<today(-{newest})")
         return " AND ".join(clauses) + " SORT BY publication-date DESC"
 
     # --- Navigation ----------------------------------------------------------
 
     async def discover(self, *, limit: int = 50) -> list[TenderStub]:
-        stubs: list[TenderStub] = []
-        token: str | None = None
-        total_available: int | None = None
-        ended = "unknown"
+        """Walk every CPV shard, deduplicating as we go.
+
+        Each shard is its own paginated walk with its own failure. A shard
+        that dies on a connection reset is reported and the sweep continues;
+        losing one division is a partial harvest, losing the sweep is an
+        outage.
+        """
         self.pagination_truncated = False
-        query = self.build_query()
+        shards = self.shards()
+        seen: set[str] = set()
+        stubs: list[TenderStub] = []
+        duplicates = 0
+        failed_shards: list[str] = []
 
         async with httpx.AsyncClient(
             timeout=self.settings.scrape_timeout_seconds,
             headers={"User-Agent": self.settings.scrape_user_agent},
         ) as client:
-            while True:
+            for shard in shards:
                 if len(stubs) >= limit:
-                    # The caller's cap, not a truncation.
-                    ended = "limit"
                     break
-                payload: dict[str, Any] = {
-                    "query": query,
-                    "fields": TED_FIELDS,
-                    "limit": min(self._page_size, limit - len(stubs)),
-                    # Without this the service answers page one and returns no
-                    # `iterationNextToken` at all -- so a loop that stops when
-                    # the token is missing stops after 100 notices and calls
-                    # it a complete sweep. Exactly the BALAM pagination
-                    # failure, in an agent that has no pager to get wrong.
-                    "paginationMode": "ITERATION",
-                }
-                if token:
-                    payload["iterationNextToken"] = token
-
-                response = await self.with_backoff(
-                    lambda: client.post(self.SEARCH_URL, json=payload),
-                    description="TED search",
-                )
-                # The API answers a bad request with the precise reason.
-                # Losing that body to a bare status code is how three attempts
-                # were spent guessing at a query it was willing to explain.
-                if response.status_code >= 400:
-                    raise RuntimeError(
-                        f"TED search returned {response.status_code}: {response.text[:400]}"
+                query = self.build_query(shard)
+                label = "+".join(str(c) for c in shard)
+                try:
+                    found, ended, available = await self._walk(
+                        client, query, limit - len(stubs)
                     )
-                body = response.json()
-                if total_available is None:
-                    total_available = body.get("totalNoticeCount")
+                except Exception as exc:  # noqa: BLE001
+                    # Deliberately swallowed per shard. The alternative is one
+                    # bad division taking thirteen good ones with it, and the
+                    # caller cannot tell the difference from the outside.
+                    failed_shards.append(label)
+                    logger.warning(
+                        "[%s] shard %s failed: %s: %s",
+                        self.key, label, type(exc).__name__, exc,
+                    )
+                    continue
 
-                notices = body.get("notices") or []
-                for notice in notices:
-                    stub = self.build_stub(notice)
-                    if stub is not None:
-                        stubs.append(stub)
+                fresh = 0
+                for stub in found:
+                    # A notice routinely carries codes from four divisions.
+                    # Collapsing it here saves the embedding call; the upsert
+                    # would collapse it anyway, but only after we had paid.
+                    if stub.external_id in seen:
+                        duplicates += 1
+                        continue
+                    seen.add(stub.external_id)
+                    stubs.append(stub)
+                    fresh += 1
 
-                token = body.get("iterationNextToken")
-                if not notices:
-                    # The service keeps handing back a token after the last
-                    # row, so an empty page -- not a missing token -- is how
-                    # the iteration actually ends.
-                    ended = "exhausted"
-                    break
-                if not token:
-                    ended = "exhausted"
-                    break
+                logger.info(
+                    "[%s] shard %s: %d notices, %d new (service reports %s available)",
+                    self.key, label, len(found), fresh, available,
+                )
+                if ended == "unknown":
+                    failed_shards.append(label)
 
-        # Partial means the walk stopped for a reason other than running out
-        # of rows or hitting the caller's cap. It deliberately does NOT mean
-        # "fewer than totalNoticeCount": the service reports 623 and then
-        # serves 551 across a full iteration, so keying the guard on its own
-        # arithmetic would fire on every complete run -- and a guard that
-        # always fires is one nobody reads.
-        if ended == "unknown":
+        if failed_shards:
             self.pagination_truncated = True
             logger.warning(
-                "[%s] PARTIAL: harvested %d notices, walk ended unexpectedly",
-                self.key, len(stubs),
+                "[%s] PARTIAL: %d of %d shards did not complete (%s)",
+                self.key, len(failed_shards), len(shards), ", ".join(failed_shards),
             )
-        elif total_available is not None and len(stubs) < total_available and ended == "exhausted":
-            # Worth saying once, not worth failing over: the count and the
-            # iteration disagree on TED's side, not ours.
+
+        if duplicates:
             logger.info(
-                "[%s] harvested %d notices; the service reported %d available "
-                "and served the rest as empty pages",
-                self.key, len(stubs), total_available,
+                "[%s] %d notices appeared in more than one division and were "
+                "collapsed before ingestion",
+                self.key, duplicates,
             )
-        elif not stubs:
+
+        if not stubs:
             logger.warning(
-                "[%s] no notices for query %r - either nothing was published in "
-                "the window or the CPV configuration is wrong",
-                self.key, query,
+                "[%s] no notices across %d shards - either nothing was "
+                "published in the window or the CPV configuration is wrong",
+                self.key, len(shards),
             )
         else:
-            logger.info("[%s] harvested %d notices", self.key, len(stubs))
+            logger.info("[%s] harvested %d distinct notices", self.key, len(stubs))
+
         return stubs[:limit]
+
+    async def _walk(
+        self, client: "httpx.AsyncClient", query: str, limit: int
+    ) -> tuple[list[TenderStub], str, int | None]:
+        """One query, paginated to exhaustion or to `limit`.
+
+        Returns the stubs, why the walk stopped, and what the service claimed
+        was available. The caller decides what a given ending means -- this
+        only reports.
+        """
+        stubs: list[TenderStub] = []
+        token: str | None = None
+        total_available: int | None = None
+        ended = "unknown"
+
+        while True:
+            if len(stubs) >= limit:
+                # The caller's cap, not a truncation.
+                ended = "limit"
+                break
+            payload: dict[str, Any] = {
+                "query": query,
+                "fields": TED_FIELDS,
+                "limit": min(self._page_size, limit - len(stubs)),
+                # Without this the service answers page one and returns no
+                # `iterationNextToken` at all -- so a loop that stops when
+                # the token is missing stops after 100 notices and calls it
+                # a complete sweep. Exactly the BALAM pagination failure, in
+                # an agent that has no pager to get wrong.
+                "paginationMode": "ITERATION",
+            }
+            if token:
+                payload["iterationNextToken"] = token
+
+            response = await self.with_backoff(
+                lambda: client.post(self.SEARCH_URL, json=payload),
+                description="TED search",
+            )
+            # The API answers a bad request with the precise reason. Losing
+            # that body to a bare status code is how three attempts were
+            # spent guessing at a query it was willing to explain.
+            if response.status_code >= 400:
+                raise RuntimeError(
+                    f"TED search returned {response.status_code}: {response.text[:400]}"
+                )
+            body = response.json()
+            if total_available is None:
+                total_available = body.get("totalNoticeCount")
+
+            notices = body.get("notices") or []
+            for notice in notices:
+                stub = self.build_stub(notice)
+                if stub is not None:
+                    stubs.append(stub)
+
+            token = body.get("iterationNextToken")
+            if not notices:
+                # The service keeps handing back a token after the last row,
+                # so an empty page -- not a missing token -- is how the
+                # iteration actually ends.
+                ended = "exhausted"
+                break
+            if not token:
+                ended = "exhausted"
+                break
+
+        return stubs, ended, total_available
 
     def build_stub(self, notice: dict) -> TenderStub | None:
         """One API notice -> one TenderStub. Pure; tested without a network."""

@@ -106,6 +106,27 @@ class Settings(BaseSettings):
     # still covers the 37-day legal minimum between a contract notice and the
     # shortlist deadline, so nothing closes before we have seen it.
     ted_lookback_days: int = 30
+
+    # How far back the window STARTS. The window is a band, not a horizon:
+    # offset 0 asks for the last 30 days, offset 30 for the 30 days before
+    # that. A historical backfill is therefore a sequence of bounded,
+    # independently retryable jobs rather than one request for "everything
+    # since 2016" that nobody could resume after it died on page 400.
+    ted_window_offset_days: int = 0
+
+    # How many CPV divisions go into one query. Fourteen divisions in one
+    # request is not a big query -- it is a walk that cannot be resumed and
+    # whose failure loses everything. One at a time, it is fourteen small
+    # jobs, and the one that dies is the only one that has to be redone.
+    #
+    # Measured: walking 34000000 alone reached all 2085 notices it claimed,
+    # 22 pages, 100%. There is no per-query cap -- the earlier "623 claimed,
+    # 551 served" reading was a connection reset under sustained paging,
+    # misread as a service limit. Sustained paging IS what the API objects
+    # to, which is the real argument for cutting the sweep up.
+    #
+    # 0 puts every division in one query (the old behaviour).
+    ted_divisions_per_query: int = 1
     # Notices per API page. The service accepts larger, but a smaller page
     # fails cheaper and resumes from a token rather than from the start.
     ted_page_size: int = 100
