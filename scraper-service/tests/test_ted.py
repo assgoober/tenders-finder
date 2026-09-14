@@ -397,6 +397,9 @@ def _sharded(**over):
         embedding_provider="hash",
         ted_cpv_codes=[35000000, 34000000, 72000000],
         ted_divisions_per_query=1,
+        # The real sweep waits between shards so TED does not answer with
+        # 429. A test that waits is a test nobody runs.
+        ted_shard_pause_seconds=0,
     )
     base.update(over)
     return TedAgent(Settings(**base))

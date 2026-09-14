@@ -145,6 +145,14 @@ class Settings(BaseSettings):
     # Together they find 774 open notices where the window found 594.
     ted_open_only: bool = True
 
+    # Seconds to wait between shards. Thirty-one paginated walks fired
+    # back-to-back is indistinguishable from an attack, and TED answered the
+    # first wide sweep with 429 on all thirty-one in eighteen seconds. The
+    # limiter is on sustained request RATE, so the fix is a gap the agent
+    # takes voluntarily rather than one the server imposes -- a sweep that
+    # finishes slowly beats a sweep that finishes as an IP ban.
+    ted_shard_pause_seconds: float = 3.0
+
     # How far back the window STARTS. The window is a band, not a horizon:
     # offset 0 asks for the last 30 days, offset 30 for the 30 days before
     # that. A historical backfill is therefore a sequence of bounded,

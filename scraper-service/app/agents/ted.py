@@ -40,6 +40,7 @@ extraction ladder is given the material it was built for.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, time
 from typing import Any, Iterable
@@ -245,6 +246,7 @@ class TedAgent(TenderSourceAgent):
         self._window_offset = settings.ted_window_offset_days
         self._divisions_per_query = settings.ted_divisions_per_query
         self._open_only = settings.ted_open_only
+        self._shard_pause = settings.ted_shard_pause_seconds
 
     # --- Query ---------------------------------------------------------------
 
@@ -335,9 +337,14 @@ class TedAgent(TenderSourceAgent):
             timeout=self.settings.scrape_timeout_seconds,
             headers={"User-Agent": self.settings.scrape_user_agent},
         ) as client:
-            for shard in shards:
+            for index, shard in enumerate(shards):
                 if len(stubs) >= limit:
                     break
+                if index and self._shard_pause > 0:
+                    # Between shards, not inside them: a walk's own pages are
+                    # already spaced by the response time, and it is the
+                    # thirty-one starts in a row that the limiter sees.
+                    await asyncio.sleep(self._shard_pause)
                 query = self.build_query(shard)
                 label = "+".join(str(c) for c in shard)
                 try:

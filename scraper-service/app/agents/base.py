@@ -143,6 +143,15 @@ class TenderSourceAgent(abc.ABC):
 
     # --- Shared plumbing ----------------------------------------------------
 
+    #: Statuses that mean "come back later", not "your request was wrong".
+    #: 429 is the whole reason this class has a backoff, and until the
+    #: response-status branch below existed it was the one status the backoff
+    #: could never see: a rate-limited call returns a perfectly valid
+    #: response object, so `try/except` caught nothing and the caller raised
+    #: on the status code afterwards -- outside the retry, with the attempt
+    #: budget untouched. A 31-shard sweep failed all 31 in eighteen seconds.
+    RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+
     async def with_backoff(self, operation, *, description: str = "request"):
         """Retry `operation` with exponential backoff and full jitter.
 
@@ -150,11 +159,47 @@ class TenderSourceAgent(abc.ABC):
         costs far more than a slow run. Jitter matters because agents run
         concurrently: without it, retries from several agents re-collide in
         lockstep and look exactly like the traffic that triggers a ban.
+
+        Retries on two different things, because a portal says "slow down" in
+        two different ways: a raised exception (connection reset, timeout)
+        and a returned status (429, 5xx). `Retry-After` is honoured when the
+        server sends one -- it knows how long it wants to be left alone
+        better than our exponent does.
         """
         attempt = 0
         while True:
             try:
-                return await operation()
+                result = await operation()
+
+                status = getattr(result, "status_code", None)
+                if status not in self.RETRYABLE_STATUSES:
+                    return result
+
+                attempt += 1
+                if attempt > self.settings.scrape_max_retries:
+                    logger.error(
+                        "[%s] %s: %s after %d attempts, giving up",
+                        self.key, description, status, attempt,
+                    )
+                    return result
+
+                delay = self._retry_after(result)
+                if delay is None:
+                    ceiling = min(
+                        self.settings.scrape_backoff_base_seconds * (2 ** (attempt - 1)),
+                        self.settings.scrape_backoff_max_seconds,
+                    )
+                    # Full jitter, but never less than a second: a rate limit
+                    # answered in 80ms is the request that caused it.
+                    delay = max(1.0, random.uniform(0, ceiling))
+                logger.warning(
+                    "[%s] %s: %s (attempt %d/%d) - waiting %.1fs",
+                    self.key, description, status, attempt,
+                    self.settings.scrape_max_retries, delay,
+                )
+                await asyncio.sleep(delay)
+                continue
+
             except Exception as exc:  # noqa: BLE001 - re-raised once retries are spent
                 attempt += 1
                 if attempt > self.settings.scrape_max_retries:
@@ -182,3 +227,25 @@ class TenderSourceAgent(abc.ABC):
                     delay,
                 )
                 await asyncio.sleep(delay)
+
+    @staticmethod
+    def _retry_after(response) -> float | None:
+        """Seconds the server asked us to wait, if it said so.
+
+        Only the delta-seconds form is read. The HTTP-date form is legal and
+        vanishingly rare here, and guessing at a malformed one is worse than
+        falling back to our own exponent.
+        """
+        headers = getattr(response, "headers", None)
+        if not headers:
+            return None
+        raw = headers.get("Retry-After") or headers.get("retry-after")
+        if not raw:
+            return None
+        try:
+            seconds = float(str(raw).strip())
+        except ValueError:
+            return None
+        # A server asking for an hour is asking us to stop, not to sleep
+        # through the run. Cap it and let the shard fail honestly instead.
+        return max(0.0, min(seconds, 120.0))
