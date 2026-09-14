@@ -506,3 +506,44 @@ async def test_a_successful_send_stamps_exactly_the_matches_it_carried():
     assert delivered == 2
     assert notifier.sent == ["bd@air.example"]      # one message, two matches
     assert sorted(repo.marked) == ["m1", "m2"]
+
+
+# --- alert lead time (migration 0018) --------------------------------------
+
+def test_a_tender_closing_inside_a_week_is_marked_urgent():
+    """The first alert this product was about to send led with a tender
+    closing in 0.3 days: a correct match, correctly ordered, and useless."""
+    from app.notifications import build_match_alert
+
+    rows = [dict(SAMPLE_MATCHES[0], lead_days=3)]
+    _, body = build_match_alert("AIR", rows)
+    assert body.splitlines()[2].startswith("[URGENT] ")
+
+
+def test_a_comfortable_deadline_is_not_marked():
+    """Marking everything is marking nothing."""
+    from app.notifications import build_match_alert
+
+    rows = [dict(SAMPLE_MATCHES[0], lead_days=30)]
+    _, body = build_match_alert("AIR", rows)
+    assert "[URGENT]" not in body
+
+
+def test_the_mark_comes_from_the_query_not_from_recomputing_the_date():
+    """lead_days travels with the row so the mark and the ordering cannot
+    disagree about which tenders are tight."""
+    from app.notifications import build_match_alert
+
+    # Deadline far away, lead_days says otherwise: the field wins.
+    rows = [dict(SAMPLE_MATCHES[0], deadline="2027-12-01T09:00:00+00:00", lead_days=2)]
+    _, body = build_match_alert("AIR", rows)
+    assert "[URGENT]" in body
+
+
+def test_a_tender_with_no_lead_days_is_not_marked():
+    """A tender with no published deadline is not late, it is unknown."""
+    from app.notifications import build_match_alert
+
+    rows = [dict(SAMPLE_MATCHES[1], lead_days=None)]
+    _, body = build_match_alert("AIR", rows)
+    assert "[URGENT]" not in body

@@ -204,6 +204,14 @@ def build_match_alert(organization: str, matches: list[dict]) -> tuple[str, str]
 
     for match in matches:
         title = (match.get("title") or "").strip() or match.get("external_id") or "Untitled"
+        # Marked, not sorted to the top: they are already first, and a reader
+        # scanning twenty titles should not have to read every date to find
+        # the ones that will not wait. `lead_days` comes from the query rather
+        # than being recomputed here, so the mark and the ordering cannot
+        # disagree.
+        lead = match.get("lead_days")
+        if isinstance(lead, int) and lead <= 7:
+            title = f"[URGENT] {title}"
         lines.append(title)
         detail = [f"  deadline: {_format_deadline(match.get('deadline'))}"]
         if match.get("buyer_name"):
