@@ -297,3 +297,52 @@ async def test_a_daily_quota_is_not_waited_out():
     with pytest.raises(RuntimeError, match="PerDay"):
         await provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types)
     assert len(calls) == 1, "a daily cap was retried as if it were a rate"
+
+
+@pytest.mark.asyncio
+async def test_the_generic_quota_message_is_also_waited_out():
+    """The exact body a live sweep received, pasted rather than imagined.
+
+    The first version of this retry required the string "PerMinute" to be in
+    the message. The API does not reliably send a quotaId at all, so the
+    retry never fired -- and the test covering it passed, because the test
+    asserted the payload I had assumed. This one is the real thing.
+    """
+    from app.nlp.embeddings import GeminiEmbeddingProvider
+
+    provider = GeminiEmbeddingProvider.__new__(GeminiEmbeddingProvider)
+    provider.model_name = "gemini-embedding-001"
+    provider.dimension = 1024
+    provider.RATE_LIMIT_WAIT_SECONDS = 0.001
+
+    REAL = ("429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': "
+            "'You exceeded your current quota, please check your plan and "
+            "billing details. For more information on this error, head to: "
+            "https://ai.google.dev/gemini-api/docs/rate-limits. ', "
+            "'status': 'RESOURCE_EXHAUSTED'}}")
+
+    calls = []
+
+    class _Models:
+        async def embed_content(self, **kw):
+            calls.append(1)
+            if len(calls) < 2:
+                raise RuntimeError(REAL)
+            return "embeddings"
+
+    class _Aio:
+        models = _Models()
+
+    class _Client:
+        aio = _Aio()
+
+    provider._client = _Client()
+
+    class _Types:
+        @staticmethod
+        def EmbedContentConfig(**kw):
+            return kw
+
+    result = await provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types)
+    assert result == "embeddings"
+    assert len(calls) == 2, "the generic quota message was not retried"

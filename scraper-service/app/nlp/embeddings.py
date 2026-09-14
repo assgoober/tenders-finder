@@ -173,10 +173,22 @@ class GeminiEmbeddingProvider:
                 )
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
-                per_minute = (
-                    "RESOURCE_EXHAUSTED" in message or "429" in message
-                ) and "PerMinute" in message
-                if not per_minute or attempt == self.RATE_LIMIT_RETRIES:
+                exhausted = "RESOURCE_EXHAUSTED" in message or "429" in message
+                # Keyed on the ONE thing we can actually read. The API does
+                # not reliably name the quota it enforced: sometimes the body
+                # carries `quotaId:
+                # EmbedContentRequestsPerMinutePerUserPerProjectPerModel-FreeTier`
+                # and sometimes only "You exceeded your current quota". An
+                # earlier version required "PerMinute" to be present, which
+                # meant the retry never fired on the generic form -- and the
+                # test for it passed, because the test asserted the message
+                # shape I had assumed rather than the one the API sends.
+                #
+                # So: wait it out unless the body says PerDay. Guessing wrong
+                # toward waiting costs a few minutes; guessing wrong toward
+                # raising costs the corpus.
+                retryable = exhausted and "PerDay" not in message
+                if not retryable or attempt == self.RATE_LIMIT_RETRIES:
                     raise
                 last = exc
                 logger.warning(
