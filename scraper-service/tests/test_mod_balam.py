@@ -631,3 +631,47 @@ async def test_a_short_reference_is_still_read_when_it_is_not_a_pager_row():
     stubs = await a._read_listing_page(_ListingPage([odd]))
 
     assert [s.external_id for s in stubs] == ["42"]
+
+
+# --- the pager cells that reached production ------------------------------
+
+def test_a_page_number_is_not_a_tender():
+    """Two rows reached the database that were not tenders at all:
+    `external_id` "1" and "2", titles "2" and "3" -- the pager's own
+    page-number cells, stored as procurement. No deadline, no embedding, so
+    they matched nothing and simply inflated every count by two, forever.
+
+    `discover` already skipped pager rows structurally, by looking for a
+    detail link or a reference number, and these had something that passed
+    for a reference. One structural check is not two.
+    """
+    from app.agents.mod_balam import ModBalamAgent
+
+    assert ModBalamAgent.looks_like_pager_cell("2", "1") is True
+    assert ModBalamAgent.looks_like_pager_cell("3", None) is True
+    assert ModBalamAgent.looks_like_pager_cell(" 10 ", "9") is True
+
+
+def test_a_real_tender_is_not_mistaken_for_a_pager_cell():
+    from app.agents.mod_balam import ModBalamAgent
+
+    assert ModBalamAgent.looks_like_pager_cell(
+        "רכש חלפים למערכות תקשורת", "1000974053") is False
+
+
+def test_the_guard_stops_at_two_digits():
+    """Deliberately narrow. A three- or four-digit title could plausibly be a
+    catalogue code; a one- or two-digit one never is."""
+    from app.agents.mod_balam import ModBalamAgent
+
+    assert ModBalamAgent.looks_like_pager_cell("1234", "1000974053") is False
+    assert ModBalamAgent.looks_like_pager_cell("123", None) is False
+
+
+def test_a_numeric_title_with_a_real_reference_survives():
+    """Both tests have to fail before a row is dropped. A tender genuinely
+    titled with a number still has a real reference number, and that is
+    enough to keep it."""
+    from app.agents.mod_balam import ModBalamAgent
+
+    assert ModBalamAgent.looks_like_pager_cell("7", "1000974053") is False

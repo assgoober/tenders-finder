@@ -394,18 +394,20 @@ class ModBalamAgent(PlaywrightPortalAgent):
                 )
                 continue
 
-            stubs.append(
-                self.build_stub(
-                    source_url=source_url,
-                    reference=reference,
-                    title=self._column(texts, self.contract.col_title) or "",
-                    buyer_text=self._column(texts, self.contract.col_buyer),
-                    publication_text=self._column(texts, self.contract.col_publication_date),
-                    deadline_text=self._column(texts, self.contract.col_deadline),
-                    status_text=self._column(texts, self.contract.col_status),
-                    row_text=self._redacted_row(texts),
-                )
+            stub = self.build_stub(
+                source_url=source_url,
+                reference=reference,
+                title=self._column(texts, self.contract.col_title) or "",
+                buyer_text=self._column(texts, self.contract.col_buyer),
+                publication_text=self._column(texts, self.contract.col_publication_date),
+                deadline_text=self._column(texts, self.contract.col_deadline),
+                status_text=self._column(texts, self.contract.col_status),
+                row_text=self._redacted_row(texts),
             )
+            if stub is None:
+                skipped_pager += 1
+                continue
+            stubs.append(stub)
 
         if skipped_pager:
             logger.debug(
@@ -602,8 +604,26 @@ class ModBalamAgent(PlaywrightPortalAgent):
         deadline_text: str | None = None,
         status_text: str | None = None,
         row_text: str | None = None,
-    ) -> TenderStub:
+    ) -> TenderStub | None:
+        """One listing row -> one stub, or None if the row is not a tender.
+
+        Returning None is new, and it exists because two rows got into
+        production that were not tenders at all: `external_id` "1" and "2",
+        titles "2" and "3" -- the pager's own page-number cells, stored as
+        procurement. They carried no deadline and no embedding, so they
+        matched nothing and simply inflated every count by two forever.
+
+        `discover` already skips pager rows structurally, by looking for a
+        detail link or a reference number. These had something that passed
+        for a reference, which is the whole lesson: one structural check is
+        not two. This is the content-based second layer -- a tender whose
+        entire title is a one- or two-digit number is a page number.
+        """
         raw_title = clean_text(title)
+
+        if self.looks_like_pager_cell(raw_title, reference):
+            return None
+
         marker = self.contract.title_truncation_marker
         was_truncated = bool(raw_title and marker and raw_title.endswith(marker))
 
@@ -629,6 +649,23 @@ class ModBalamAgent(PlaywrightPortalAgent):
                 "portal": self.key,
             },
         )
+
+    @staticmethod
+    def looks_like_pager_cell(title: str | None, reference: str | None) -> bool:
+        """A row whose whole title is a small number is a page number.
+
+        Deliberately narrow. Real BALAM titles are Hebrew procurement
+        descriptions and a bare one- or two-digit number is never one of
+        them -- but a three- or four-digit title could plausibly be a
+        catalogue code, so the bound stops at two. Requiring the reference to
+        be equally numeric as well means a real tender that happens to be
+        titled with a number still has to fail both tests to be dropped.
+        """
+        text = (title or "").strip()
+        if not text or not text.isdigit() or len(text) > 2:
+            return False
+        ref = (reference or "").strip()
+        return not ref or (ref.isdigit() and len(ref) <= 2)
 
     def clean_title(self, title: str | None) -> str | None:
         """Strip the portal's truncation marker from a listing title.
