@@ -1,0 +1,2295 @@
+{
+ "version": "1.1",
+ "releases": [
+  {
+   "ocid": "ocds-h6vhtk-06f8c7",
+   "id": "086712-2026",
+   "date": "2026-09-14T09:58:58+01:00",
+   "tag": [
+    "tender"
+   ],
+   "description": "The DPS has been extended to 31st March 2028 and Organisations are welcome to apply for inclusion in the DPS throughout the life of the DPS.\nPlease contact PassengerTransport@valeofglamorgan.gov.uk\nNOTE: To register your interest in this notice and obtain any additional information please visit the Sell2Wales Web Site at https://www.sell2wales.gov.wales/Search/Search_Switch.aspx?ID=168927.\n(WA Ref:168927)",
+   "initiationType": "tender",
+   "tender": {
+    "id": "VOG/RM041/19 /2024",
+    "legalBasis": {
+     "id": "32014L0024",
+     "scheme": "CELEX"
+    },
+    "title": "Extension to DPS for Passenger Transport Services ( Excluding Local Bus Services) in the Vale of Glamorga",
+    "status": "active",
+    "classification": {
+     "scheme": "CPV",
+     "id": "60112000",
+     "description": "Public road transport services"
+    },
+    "mainProcurementCategory": "services",
+    "description": "To correct the extension of the established Dynamic Purchasing System (“DPS”) for the procurement of passenger transport services, excluding local bus services until March 2028",
+    "value": {
+     "amount": 1250000,
+     "currency": "GBP"
+    },
+    "lots": [
+     {
+      "id": "1",
+      "description": "The Vale of Glamorgan Council is publishing this Notice in relation to the existing Dynamic Purchasing System (DPS) for Passenger Transport Services (excluding Local Bus Services).\nThe Contract Notice published on 5 August 2025 under reference 2025/S 000-046223 incorrectly stated the end date of the DPS as 31 July 2026.\nThe Council has identified that this was an administrative error in the published notice. The intended end date of the DPS was 31 March 2028.\nThis notice therefore corrects the previously published information so that the published record accurately reflects the intended period of validity of the DPS. To correct an error contained within the Extension notice\nOrganisations are invited to submit a Pre-Qualification Questionnaire to gain access to the Council’s Dynamic Purchasing System (“DPS”)\nfor Passenger Transport Services.\nSuccessful applicants to the DPS will then, via mini competitions, be requested to submit offers for a variety of Passenger Transport\nServices, including Mainstream and Additional Learning Needs (“ALN”) School Transport services.",
+      "awardCriteria": {
+       "criteria": [
+        {
+         "name": "Quality",
+         "type": "quality",
+         "description": "30"
+        },
+        {
+         "type": "price",
+         "description": "70"
+        }
+       ]
+      },
+      "contractPeriod": {
+       "durationInDays": 540
+      },
+      "hasRenewal": false,
+      "submissionTerms": {
+       "variantPolicy": "allowed"
+      },
+      "hasOptions": true,
+      "options": {
+       "description": "As detailed in subsequent tender documents"
+      },
+      "status": "active"
+     }
+    ],
+    "items": [
+     {
+      "id": "1",
+      "additionalClassifications": [
+       {
+        "scheme": "CPV",
+        "id": "60130000",
+        "description": "Special-purpose road passenger-transport services"
+       }
+      ],
+      "deliveryAddresses": [
+       {
+        "region": "UKL22"
+       }
+      ],
+      "deliveryLocation": {
+       "description": "Cardiff and the Vale of Glamorgan"
+      },
+      "relatedLot": "1"
+     }
+    ],
+    "submissionMethod": [
+     "electronicSubmission"
+    ],
+    "submissionMethodDetails": "https://www.sell2wales.gov.wales",
+    "selectionCriteria": {
+     "criteria": [
+      {
+       "type": "suitability",
+       "description": "As detailed in tender documents.",
+       "appliesTo": [
+        "supplier"
+       ]
+      }
+     ]
+    },
+    "documents": [
+     {
+      "documentType": "economicSelectionCriteria",
+      "id": "economic"
+     },
+     {
+      "documentType": "technicalSelectionCriteria",
+      "id": "technical"
+     }
+    ],
+    "contractTerms": {
+     "performanceTerms": "As stated in tender documents",
+     "hasElectronicPayment": true
+    },
+    "otherRequirements": {
+     "requiresStaffNamesAndQualifications": true
+    },
+    "procurementMethod": "open",
+    "procurementMethodDetails": "Open procedure",
+    "coveredBy": [
+     "GPA"
+    ],
+    "tenderPeriod": {
+     "endDate": "2028-03-31T12:00:00+01:00"
+    },
+    "submissionTerms": {
+     "languages": [
+      "en",
+      "cy"
+     ],
+     "bidValidityPeriod": {
+      "durationInDays": 90
+     }
+    },
+    "awardPeriod": {
+     "startDate": "2028-03-31T12:00:00+01:00"
+    },
+    "bidOpening": {
+     "date": "2028-03-31T12:00:00+01:00"
+    },
+    "hasRecurrence": true,
+    "reviewDetails": "The Vale of Glamorgan Council will incorporate a minimum 10 calendar day standstill period at the point information on the award of the contract is communicated to tenderers.  This period allows unsuccessful tenderers to seek further debriefing from the Council before the contract is entered into.  Applicants have 2 working days from the notification of the award decision to request additional debriefing and that information has to be provided a minimum of 3 working days before the expiry of the standstill period.  Such additional information should be requested from the Council.\nIf an appeal regarding the award of a contract has not been successfully resolved the Public Contracts Regulations 20014  (SI 2006 No 102) provide for aggrieved parties who have been harmed or are at risk of harm by a breach of the rules to take action in the High Court (England, Wales and Northern Ireland).  Any such action must be brought promptly (generally within 3 months).  Where a contract has not been entered into the Court may order the setting aside of the award decision or order the authority to amend any document and may award damages.  If the contract has been entered into the Court may only award damages.",
+    "recurrence": {
+     "description": "As required"
+    }
+   },
+   "parties": [
+    {
+     "name": "Vale of Glamorgan Council",
+     "id": "GB-FTS-526",
+     "identifier": {
+      "legalName": "Vale of Glamorgan Council"
+     },
+     "address": {
+      "streetAddress": "Civic Offices, Holton Road",
+      "locality": "BARRY",
+      "region": "UKL22",
+      "postalCode": "CF63 4RU",
+      "countryName": "United Kingdom"
+     },
+     "contactPoint": {
+      "name": "Passenger Transport Team",
+      "telephone": "+44 1446700111",
+      "email": "PassengerTransport@valeofglamorgan.gov.uk",
+      "url": "https://www.sell2wales.gov.wales"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "http://www.valeofglamorgan.gov.uk",
+      "buyerProfile": "http://www.sell2wales.gov.wales/search/Search_AuthProfile.aspx?ID=AA0275",
+      "classifications": [
+       {
+        "scheme": "TED_CA_TYPE",
+        "id": "REGIONAL_AUTHORITY",
+        "description": "Regional or local authority"
+       },
+       {
+        "scheme": "COFOG",
+        "id": "01",
+        "description": "General public services"
+       }
+      ]
+     }
+    },
+    {
+     "name": "High Court",
+     "id": "GB-FTS-111",
+     "identifier": {
+      "legalName": "High Court"
+     },
+     "address": {
+      "streetAddress": "Royal Courts of Justice, The Strand",
+      "locality": "London",
+      "postalCode": "WC2A 2LL",
+      "countryName": "United Kingdom"
+     },
+     "contactPoint": {
+      "telephone": "+44 2079477501"
+     },
+     "roles": [
+      "reviewBody"
+     ]
+    }
+   ],
+   "buyer": {
+    "id": "GB-FTS-526",
+    "name": "Vale of Glamorgan Council"
+   },
+   "links": [
+    {
+     "rel": "prev",
+     "href": "https://ted.europa.eu/udl?uri=TED:NOTICE:422548-2018:TEXT:EN:HTML"
+    }
+   ],
+   "language": "en"
+  },
+  {
+   "buyerID": [],
+   "id": "086711-2026",
+   "tag": [
+    "awardUpdate",
+    "contractUpdate"
+   ],
+   "date": "2026-09-14T09:58:16+01:00",
+   "initiationType": "tender",
+   "ocid": "ocds-h6vhtk-05a4ad",
+   "parties": [
+    {
+     "name": "Foreign, Commonwealth and Development Office",
+     "id": "GB-PPON-PXRR-8771-PHVX",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PXRR-8771-PHVX"
+     },
+     "address": {
+      "streetAddress": "King Charles Street",
+      "locality": "London",
+      "postalCode": "SW1A 2AH",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKI32"
+     },
+     "contactPoint": {
+      "email": "commercial.smi@fcdo.gov.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "https://www.gov.uk/government/organisations/foreign-commonwealth-development-office",
+      "classifications": [
+       {
+        "scheme": "UK_CA_TYPE",
+        "id": "publicAuthorityCentralGovernment",
+        "description": "Public authority - central government"
+       }
+      ]
+     }
+    },
+    {
+     "name": "ADAM SMITH INTERNATIONAL LTD",
+     "id": "GB-PPON-PQDV-1727-CGMV",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PQDV-1727-CGMV"
+     },
+     "address": {
+      "streetAddress": "16-18 New Bridge Street",
+      "locality": "LONDON",
+      "postalCode": "EC4V6AG",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKI31"
+     },
+     "contactPoint": {
+      "email": "Jalpa.patel@adamsmithinternational.com"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "scale": "large",
+      "vcse": false,
+      "publicServiceMissionOrganization": false,
+      "shelteredWorkshop": false
+     }
+    }
+   ],
+   "buyer": {
+    "id": "GB-PPON-PXRR-8771-PHVX",
+    "name": "Foreign, Commonwealth and Development Office"
+   },
+   "tender": {
+    "id": "PROJ 12986",
+    "legalBasis": {
+     "id": "2023/54",
+     "scheme": "UKPGA",
+     "uri": "https://www.legislation.gov.uk/ukpga/2023/54/contents"
+    },
+    "title": "ASEAN-UK SAGE",
+    "description": "The ASEAN-UK SAGE programme is a six-year Business Case  funded by the UK’s Foreign, Commonwealth and Development Office (FCDO) through the UK Mission to ASEAN. Delivered in two phases, the UK Mission to ASEAN is now seeking eligible organisation(s) to deliver a three-year Phase 2. \nPhase 2 will run for three UK financial years, from August 2026 to March 2029, with a total budget of £9,000,000. It will be delivered by a lead organisation under an agreement with the UK Mission to ASEAN, supported by downstream partners as needed. \nThe focus of ASEAN-UK SAGE is to support inclusive and equitable quality education for children across Southeast Asia Region in close collaboration with ASEAN secretariat, especially for girls and the most marginalised, contributing to regional integration and narrowing of development disparities between ASEAN Member States (AMS) .  \nThe emphasis in Phase 2 will be on the use of evidence to improve learning outcomes and inclusion, especially for priority countries in the region.",
+    "status": "complete",
+    "procurementMethod": "selective",
+    "procurementMethodDetails": "Competitive flexible procedure",
+    "coveredBy": [
+     "GPA"
+    ],
+    "lots": [
+     {
+      "id": "1",
+      "status": "complete",
+      "description": null
+     }
+    ],
+    "documents": [
+     {
+      "id": "conflictOfInterest",
+      "documentType": "conflictOfInterest",
+      "description": "Not published"
+     }
+    ]
+   },
+   "awards": [
+    {
+     "id": "2",
+     "status": "active",
+     "mainProcurementCategory": "services",
+     "suppliers": [
+      {
+       "id": "GB-PPON-PQDV-1727-CGMV",
+       "name": "ADAM SMITH INTERNATIONAL LTD"
+      }
+     ],
+     "items": [
+      {
+       "id": "1",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "75211200",
+         "description": "Foreign economic-aid-related services"
+        },
+        {
+         "scheme": "CPV",
+         "id": "80000000",
+         "description": "Education and training services"
+        }
+       ],
+       "deliveryAddresses": [
+        {
+         "region": "ID",
+         "country": "ID",
+         "countryName": "Indonesia"
+        },
+        {
+         "region": "KH",
+         "country": "KH",
+         "countryName": "Cambodia"
+        },
+        {
+         "region": "TL",
+         "country": "TL",
+         "countryName": "East Timor"
+        },
+        {
+         "region": "PH",
+         "country": "PH",
+         "countryName": "Philippines"
+        }
+       ],
+       "relatedLot": "1"
+      }
+     ],
+     "relatedLots": [
+      "1"
+     ]
+    }
+   ],
+   "contracts": [
+    {
+     "id": "2",
+     "awardID": "2",
+     "title": "ASEAN UK SAGE",
+     "status": "active",
+     "period": {
+      "startDate": "2026-09-14T00:00:00+01:00",
+      "endDate": "2029-03-31T23:59:59+01:00",
+      "maxExtentDate": "2030-03-31T23:59:59+01:00"
+     },
+     "hasRenewal": true,
+     "renewal": {
+      "description": "OPTIONAL 12 MONTH EXTENSION WITH MAXIMUM VALUE OF £3,000,000 SUBJECT TO BUDGET AVAILABILITY AND SHOULD ADDITIONAL SERVICES BE REQUIRED"
+     },
+     "value": {
+      "amountGross": 8699631,
+      "amount": 8699631,
+      "currency": "GBP"
+     },
+     "aboveThreshold": true,
+     "dateSigned": "2026-09-11T00:00:00+01:00",
+     "documents": [
+      {
+       "id": "A-22348",
+       "documentType": "contractSigned",
+       "url": "https://www.find-tender.service.gov.uk/Notice/Attachment/A-22348",
+       "format": "application/pdf"
+      },
+      {
+       "id": "086711-2026",
+       "documentType": "contractNotice",
+       "noticeType": "UK7",
+       "description": "Contract details notice on Find a Tender",
+       "url": "https://www.find-tender.service.gov.uk/Notice/086711-2026",
+       "datePublished": "2026-09-14T09:58:16+01:00",
+       "format": "text/html"
+      }
+     ],
+     "agreedMetrics": [
+      {
+       "id": "1",
+       "title": "KPI1 - TIMELY AND QUALITY REPORTING",
+       "description": "100% of quarterly and annual reports submitted on time and meeting agreed quality standards.",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "2",
+       "title": "KPI2 - FINANCIAL FORECASTING AND ACCURACY",
+       "description": "Quarterly forecast variance within ±5% and no material financial management issues.",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "3",
+       "title": "KPI3 - DELIVERY AGAINST WORKPLAN",
+       "description": "At least 90% of activities scheduled for the quarter completed on time and to required quality, demonstrating alignment \nto and progress across Outputs 1-4",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "4",
+       "title": "KPI4 - GOVERNANCE AND MANAGEMENT EFFECTIVENESS",
+       "description": "Governance meetings held on schedule; actions tracked and completed; delivery partners effectively managed.",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "5",
+       "title": "KPI5 -R RISK AND COMPLIANCE MANAGEMENT AND VFM",
+       "description": "Risks proactively identified and mitigated; safeguarding and \ncompliance standards met; VfM demonstrated across \nprogramme delivery.",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      }
+     ],
+     "statusDetails": null
+    }
+   ],
+   "language": "en"
+  },
+  {
+   "ocid": "ocds-h6vhtk-06f8c6",
+   "buyerID": [],
+   "id": "086710-2026",
+   "tag": [
+    "award",
+    "contract"
+   ],
+   "date": "2026-09-14T09:54:45+01:00",
+   "initiationType": "tender",
+   "parties": [
+    {
+     "name": "Northumberland County Council",
+     "id": "GB-PPON-PJJX-1133-JRGV",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PJJX-1133-JRGV"
+     },
+     "address": {
+      "streetAddress": "County Hall",
+      "locality": "Morpeth",
+      "postalCode": "NE61 2EF",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKC21"
+     },
+     "contactPoint": {
+      "email": "Donna.Sutton01@northumberland.gov.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "http://www.northumberland.gov.uk",
+      "classifications": [
+       {
+        "scheme": "UK_CA_TYPE",
+        "id": "publicAuthoritySubCentralGovernment",
+        "description": "Public authority - sub-central government"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Miles Macadam Limited",
+     "id": "GB-COH-03031039",
+     "identifier": {
+      "scheme": "GB-COH",
+      "id": "03031039"
+     },
+     "address": {
+      "streetAddress": "Malpas Station",
+      "locality": "Hampton",
+      "postalCode": "SY14 8LU",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKD63"
+     },
+     "contactPoint": {
+      "email": "info@milesmacadam.co.uk"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "scale": "large",
+      "vcse": false
+     }
+    }
+   ],
+   "buyer": {
+    "id": "GB-PPON-PJJX-1133-JRGV",
+    "name": "Northumberland County Council"
+   },
+   "tender": {
+    "id": "ocds-h6vhtk-06f8c6",
+    "legalBasis": {
+     "id": "2023/54",
+     "scheme": "UKPGA",
+     "uri": "https://www.legislation.gov.uk/ukpga/2023/54/contents"
+    },
+    "title": "NCC1512 Highway Surfacing Works 2026-2028: Lot 2 - Grouted Macadam",
+    "description": "Appointment of a single Contractor to provide highway surfacing works under Lot 2 (Grouted Macadam) of the NEPO210 Highway Surfacing Framework across the County of Northumberland.",
+    "status": "complete",
+    "procurementMethod": "selective",
+    "procurementMethodDetails": "Below threshold - award under framework",
+    "competitive": true,
+    "lots": [
+     {
+      "id": "1",
+      "status": "complete",
+      "description": null
+     }
+    ]
+   },
+   "awards": [
+    {
+     "id": "1",
+     "status": "active",
+     "mainProcurementCategory": "works",
+     "suppliers": [
+      {
+       "id": "GB-COH-03031039",
+       "name": "Miles Macadam Limited"
+      }
+     ],
+     "items": [
+      {
+       "id": "1",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "45233251",
+         "description": "Resurfacing works"
+        }
+       ],
+       "deliveryAddresses": [
+        {
+         "region": "UKC2",
+         "country": "GB",
+         "countryName": "United Kingdom"
+        }
+       ],
+       "relatedLot": "1"
+      }
+     ],
+     "relatedLots": [
+      "1"
+     ]
+    }
+   ],
+   "contracts": [
+    {
+     "id": "1",
+     "awardID": "1",
+     "status": "active",
+     "period": {
+      "startDate": "2026-09-01T00:00:00+01:00",
+      "endDate": "2028-08-31T23:59:59+01:00",
+      "maxExtentDate": "2030-08-30T23:59:59+01:00"
+     },
+     "hasRenewal": true,
+     "renewal": {
+      "description": "Two options to extend for up 12 months each."
+     },
+     "value": {
+      "amountGross": 1200000.0,
+      "amount": 1000000.0,
+      "currency": "GBP"
+     },
+     "aboveThreshold": false,
+     "dateSigned": "2026-09-01T00:00:00+01:00",
+     "statusDetails": null,
+     "documents": [
+      {
+       "id": "086710-2026",
+       "documentType": "contractNotice",
+       "noticeType": "UK7",
+       "description": "Contract details notice on Find a Tender",
+       "url": "https://www.find-tender.service.gov.uk/Notice/086710-2026",
+       "datePublished": "2026-09-14T09:54:45+01:00",
+       "format": "text/html"
+      }
+     ]
+    }
+   ],
+   "relatedProcesses": [
+    {
+     "id": "framework",
+     "relationship": [
+      "framework"
+     ],
+     "scheme": "ocid",
+     "identifier": "ocds-h6vhtk-05048c",
+     "uri": "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages/ocds-h6vhtk-05048c"
+    }
+   ],
+   "language": "en"
+  },
+  {
+   "ocid": "ocds-h6vhtk-06f8c5",
+   "id": "086709-2026",
+   "tag": [
+    "award",
+    "contract"
+   ],
+   "date": "2026-09-14T09:51:22+01:00",
+   "initiationType": "tender",
+   "parties": [
+    {
+     "name": "West Northamptonshire Council",
+     "id": "GB-PPON-PGDV-8944-CMBP",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PGDV-8944-CMBP"
+     },
+     "address": {
+      "streetAddress": "West Northamptonshire Council",
+      "locality": "Northampton",
+      "postalCode": "NN1 1ED",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKF24"
+     },
+     "contactPoint": {
+      "name": "Tom Callaghan",
+      "email": "tcallaghan@northamptonshire.gov.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "https://www.westnorthants.gov.uk/",
+      "classifications": [
+       {
+        "scheme": "UK_CA_TYPE",
+        "id": "publicAuthoritySubCentralGovernment",
+        "description": "Public authority - sub-central government"
+       }
+      ]
+     }
+    },
+    {
+     "name": "MS CARS",
+     "id": "GB-FTS-9133",
+     "address": {
+      "streetAddress": "17 Vicarage Lane",
+      "locality": "Northampton",
+      "postalCode": "NN2 6QS",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKF24"
+     },
+     "contactPoint": {
+      "name": "Khurram Shahzad",
+      "email": "Shahzadk7@gmail.com"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "scale": "sme",
+      "vcse": false
+     }
+    }
+   ],
+   "buyer": {
+    "id": "GB-PPON-PGDV-8944-CMBP",
+    "name": "West Northamptonshire Council"
+   },
+   "tender": {
+    "id": "SA1393800",
+    "legalBasis": {
+     "id": "2023/54",
+     "scheme": "UKPGA",
+     "uri": "https://www.legislation.gov.uk/ukpga/2023/54/contents"
+    },
+    "title": "Passenger Transport Services 2026 - Route Based (1-8 Seat Provision)",
+    "description": "Passenger Transport Services 2026 - Route Based (1-8 Seat Provision) - Route Based (1-8 Seat Provision)",
+    "status": "complete",
+    "procurementMethod": "limited",
+    "procurementMethodDetails": "Below threshold - limited competition",
+    "specialRegime": [
+     "lightTouch"
+    ],
+    "lots": [
+     {
+      "id": "2755",
+      "status": "complete"
+     }
+    ]
+   },
+   "awards": [
+    {
+     "id": "1",
+     "status": "active",
+     "mainProcurementCategory": "services",
+     "suppliers": [
+      {
+       "id": "GB-FTS-9133",
+       "name": "MS CARS"
+      }
+     ],
+     "items": [
+      {
+       "id": "2755",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "60000000",
+         "description": "Transport services (excl. Waste transport)"
+        }
+       ],
+       "relatedLot": "2755"
+      }
+     ],
+     "relatedLots": [
+      "2755"
+     ]
+    }
+   ],
+   "contracts": [
+    {
+     "id": "1",
+     "awardID": "1",
+     "title": "Passenger Transport Services 2026 - Route Based (1-8 Seat Provision)",
+     "status": "active",
+     "period": {
+      "startDate": "2026-09-15T00:00:00Z",
+      "endDate": "2027-07-25T23:59:59Z"
+     },
+     "value": {
+      "amountGross": 78.8,
+      "amount": 78.8,
+      "currency": "GBP"
+     },
+     "aboveThreshold": false,
+     "dateSigned": "2026-09-14T00:00:00Z",
+     "documents": [
+      {
+       "id": "086709-2026",
+       "documentType": "contractNotice",
+       "noticeType": "UK7",
+       "description": "Contract details notice on Find a Tender",
+       "url": "https://www.find-tender.service.gov.uk/Notice/086709-2026",
+       "datePublished": "2026-09-14T09:51:22+01:00",
+       "format": "text/html"
+      }
+     ]
+    }
+   ],
+   "language": "en"
+  },
+  {
+   "ocid": "ocds-h6vhtk-06f8c4",
+   "id": "086708-2026",
+   "tag": [
+    "planning"
+   ],
+   "date": "2026-09-14T09:48:04+01:00",
+   "initiationType": "tender",
+   "planning": {
+    "documents": [
+     {
+      "id": "086708-2026",
+      "documentType": "plannedProcurementNotice",
+      "noticeType": "UK3",
+      "description": "Planned procurement notice on Find a Tender",
+      "url": "https://www.find-tender.service.gov.uk/Notice/086708-2026",
+      "datePublished": "2026-09-14T09:48:04+01:00",
+      "format": "text/html"
+     }
+    ]
+   },
+   "parties": [
+    {
+     "name": "Causeway Coast and Glens Borough Council",
+     "id": "GB-PPON-PJGT-6783-MVHH",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PJGT-6783-MVHH"
+     },
+     "address": {
+      "streetAddress": "66 Portstewart Road",
+      "locality": "Coleraine",
+      "postalCode": "BT521EY",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKN0C"
+     },
+     "contactPoint": {
+      "email": "procurement@causewaycoastandglens.gov.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "classifications": [
+       {
+        "scheme": "UK_CA_TYPE",
+        "id": "publicAuthoritySubCentralGovernment",
+        "description": "Public authority - sub-central government"
+       }
+      ]
+     }
+    }
+   ],
+   "buyer": {
+    "id": "GB-PPON-PJGT-6783-MVHH",
+    "name": "Causeway Coast and Glens Borough Council"
+   },
+   "tender": {
+    "id": "ocds-h6vhtk-06f8c4",
+    "legalBasis": {
+     "id": "2023/54",
+     "scheme": "UKPGA",
+     "uri": "https://www.legislation.gov.uk/ukpga/2023/54/contents"
+    },
+    "title": "Construction, Maintenance and Minor Works Framework",
+    "description": "Causeway Coast and Glens Borough Council gives notice of its intention to award a Construction and Minor Works Framework for the delivery of construction, maintenance, repair, refurbishment and associated minor works required by Council during the framework term, which is three years.\nThe proposed framework is intended to provide the Council with access to suitably experienced and competent contractors capable of delivering a range of planned, reactive and project-based works across the Council estate. The scope will include, but is not limited to, general building works, minor civil works, repair and maintenance activities, small-scale refurbishment, enabling works and associated construction-related services.\nThe proposed framework will offer access to a range of construction and minor works trades and disciplines, including painting and decorating, plastering, plumbing, Gas Safe engineering, joinery, drywall and ceilings, skilled labour, general labouring, fence erection, glazing, bricklaying and stonemasonry, tiling, welding and roofing, playpark installations.\nThe estimated total value of the Framework over its term is £1,500,000. This estimate is provided for transparency and planning purposes only and does not constitute a guarantee of volume of work or number of call-off contracts to be awarded under the Framework.\nThe framework will be used exclusively for works and contractors/individuals located within the borough area of Causeway Coast and Glens Borough Council.\nIt is intended to support the efficient, compliant and timely delivery of Council requirements across the Borough whilst providing support to local firms through direct procurement and ensuring that works are procured and delivered in a manner that meets Council’s operational needs, statutory responsibilities and commitment to transparency in public procurement.\nThe framework is not intended to confer exclusivity on any single supplier, and any subsequent call-off arrangements will be managed in accordance with the terms of the Framework and the applicable requirements of the Procurement Act 2023 and the Procurement Regulations 2024.\nCouncil considers that the framework is particularly suitable for small and medium-sized enterprises. The nature, scale and geographic focus of the works are expected to provide opportunities for local and regional contractors, including SMEs, to participate as subcontractors.\nCouncil will seek to ensure that the procurement documentation is proportionate, accessible and clear, with requirements set at a level that encourage participation from SMEs and to reduce unnecessary barriers to competition.\nIn publishing this notice, the Council is providing advance transparency to the market regarding its intention to establish and award the framework. This notice is intended to inform interested suppliers of the Council’s proposed approach and to support openness, accountability and understanding of the Council’s procurement decisions.\nPublication of this notice does not create any binding commitment to award the framework, nor does it prevent the Council from amending, delaying or discontinuing the proposed procurement where it considers it appropriate to do so.",
+    "status": "planned",
+    "items": [
+     {
+      "id": "1",
+      "additionalClassifications": [
+       {
+        "scheme": "CPV",
+        "id": "44100000",
+        "description": "Construction materials and associated items"
+       },
+       {
+        "scheme": "CPV",
+        "id": "45311000",
+        "description": "Electrical wiring and fitting work"
+       },
+       {
+        "scheme": "CPV",
+        "id": "45315300",
+        "description": "Electricity supply installations"
+       },
+       {
+        "scheme": "CPV",
+        "id": "45330000",
+        "description": "Plumbing and sanitary works"
+       },
+       {
+        "scheme": "CPV",
+        "id": "45350000",
+        "description": "Mechanical installations"
+       },
+       {
+        "scheme": "CPV",
+        "id": "45400000",
+        "description": "Building completion work"
+       },
+       {
+        "scheme": "CPV",
+        "id": "50710000",
+        "description": "Repair and maintenance services of electrical and mechanical building installations"
+       },
+       {
+        "scheme": "CPV",
+        "id": "50720000",
+        "description": "Repair and maintenance services of central heating"
+       },
+       {
+        "scheme": "CPV",
+        "id": "50870000",
+        "description": "Repair and maintenance services of playground equipment"
+       }
+      ],
+      "deliveryAddresses": [
+       {
+        "region": "UKN0C",
+        "country": "GB",
+        "countryName": "United Kingdom"
+       }
+      ],
+      "relatedLot": "1"
+     }
+    ],
+    "procurementMethod": "open",
+    "procurementMethodDetails": "Open procedure",
+    "procedure": {
+     "isAccelerated": true,
+     "acceleratedRationale": "Qualifying planned procurement notice"
+    },
+    "mainProcurementCategory": "services",
+    "aboveThreshold": true,
+    "techniques": {
+     "hasFrameworkAgreement": true,
+     "frameworkAgreement": {
+      "isOpenFrameworkScheme": true,
+      "openFrameworkSchemeEndDate": "2029-11-30T23:59:59Z"
+     }
+    },
+    "submissionMethodDetails": "https://supplier.in-tend.co.uk/CCGBC/home",
+    "submissionTerms": {
+     "electronicSubmissionPolicy": "allowed",
+     "languages": [
+      "en"
+     ]
+    },
+    "tenderPeriod": {
+     "endDate": "2026-11-05T00:00:00Z"
+    },
+    "awardPeriod": {
+     "endDate": "2026-11-20T23:59:59Z"
+    },
+    "lots": [
+     {
+      "id": "1",
+      "status": "planned",
+      "awardCriteria": {
+       "weightingDescription": "Suppliers must be within the Causeway Coast and Glens Borough Council area, this framework will operate a taxi rank system to award works.\nFor response maintenance, suppliers must be able to respond within 1 hour of notification.",
+       "criteria": [
+        {
+         "type": "cost",
+         "name": "Hourly Rate"
+        }
+       ]
+      },
+      "suitability": {
+       "sme": true
+      },
+      "contractPeriod": {
+       "startDate": "2026-12-01T00:00:00Z",
+       "endDate": "2029-11-30T23:59:59Z"
+      }
+     }
+    ],
+    "communication": {
+     "futureNoticeDate": "2026-10-14T23:59:59Z"
+    }
+   },
+   "language": "en"
+  },
+  {
+   "ocid": "ocds-h6vhtk-06f8c3",
+   "id": "086707-2026",
+   "date": "2026-09-14T09:45:10+01:00",
+   "tag": [
+    "award",
+    "contract"
+   ],
+   "initiationType": "tender",
+   "tender": {
+    "id": "GLA82778",
+    "legalBasis": {
+     "id": "32014L0024",
+     "scheme": "CELEX"
+    },
+    "title": "Tender for Clerk of Works service for Warm Home local Grant",
+    "status": "complete",
+    "classification": {
+     "scheme": "CPV",
+     "id": "71630000",
+     "description": "Technical inspection and testing services"
+    },
+    "mainProcurementCategory": "services",
+    "description": "This new service will act as an independent, technical auditor to verify the design and installation of energy efficiency and low carbon heating measures within Warm Homes Local Grant. It is expected this service will focus on certain measures, particularly External/Internal Wall Insulation, and Air Source Heat Pumps, following the recent National Audit Office report into failures with insulation. The expectation is that by implementing a Clerk of Works service we can assure the quality of designs and installations undertaken by the programme to support residents.",
+    "lots": [
+     {
+      "id": "1",
+      "description": "GLA intends for all External Wall Insulation, Internal Wall Insulation and Air Source Heat Pump installations to be reviewed by the Clerk of Works, plus a selection of other properties, with the aim to review 15% of properties delivered under the WHLG programme. Under the WHSHF programme, the intention is to undertake a desktop review of 9% of properties and on-site reviews of 1% of the properties completed. This  aligns with the requirements within the Grant Funding Agreement for independent quality assurance under the WHSHF programme.",
+      "awardCriteria": {
+       "criteria": [
+        {
+         "type": "price"
+        }
+       ]
+      },
+      "hasOptions": false,
+      "status": "cancelled"
+     }
+    ],
+    "items": [
+     {
+      "id": "1",
+      "additionalClassifications": [
+       {
+        "scheme": "CPV",
+        "id": "71500000",
+        "description": "Construction-related services"
+       }
+      ],
+      "deliveryAddresses": [
+       {
+        "region": "UKI"
+       }
+      ],
+      "relatedLot": "1"
+     }
+    ],
+    "procurementMethod": "limited",
+    "procurementMethodDetails": "Award procedure without prior publication of a call for competition",
+    "procurementMethodRationaleClassifications": [
+     {
+      "scheme": "TED_PT_AWARD_CONTRACT_WITHOUT_CALL",
+      "id": "D_OUTSIDE_SCOPE",
+      "description": "The procurement falls outside the scope of application of the directive"
+     }
+    ],
+    "procurementMethodRationale": "This procurement was undertaken using a call-off using the Fusion21 Construction Consultancy Services Framework,\nLot 13- Clerk of Works, Inspection Regime"
+   },
+   "awards": [
+    {
+     "id": "086707-2026-1",
+     "relatedLots": [
+      "1"
+     ],
+     "status": "active",
+     "suppliers": [
+      {
+       "id": "GB-COH-OC305198",
+       "name": "Baily Garner"
+      }
+     ]
+    }
+   ],
+   "parties": [
+    {
+     "name": "Greater London Authority",
+     "id": "GB-FTS-132656",
+     "identifier": {
+      "legalName": "Greater London Authority",
+      "noIdentifierRationale": "notOnAnyRegister"
+     },
+     "address": {
+      "streetAddress": "City Hall, Kamal Chunchie Way",
+      "locality": "London",
+      "region": "UKI41",
+      "postalCode": "E16 1ZE",
+      "countryName": "United Kingdom"
+     },
+     "contactPoint": {
+      "name": "Meeta Chohan",
+      "email": "meetachohan@tfl.gov.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "https://www.london.gov.uk",
+      "classifications": [
+       {
+        "scheme": "TED_CA_TYPE",
+        "id": "BODY_PUBLIC",
+        "description": "Body governed by public law"
+       },
+       {
+        "scheme": "COFOG",
+        "id": "01",
+        "description": "General public services"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Baily Garner",
+     "id": "GB-COH-OC305198",
+     "identifier": {
+      "legalName": "Baily Garner",
+      "id": "OC305198",
+      "scheme": "GB-COH"
+     },
+     "address": {
+      "locality": "London",
+      "region": "UK",
+      "countryName": "United Kingdom"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "scale": "large"
+     }
+    },
+    {
+     "name": "Transport for London",
+     "id": "GB-FTS-6187",
+     "identifier": {
+      "legalName": "Transport for London"
+     },
+     "address": {
+      "locality": "London",
+      "countryName": "United Kingdom"
+     },
+     "roles": [
+      "reviewBody"
+     ]
+    }
+   ],
+   "buyer": {
+    "id": "GB-FTS-132656",
+    "name": "Greater London Authority"
+   },
+   "contracts": [
+    {
+     "id": "086707-2026-1",
+     "awardID": "086707-2026-1",
+     "status": "active",
+     "value": {
+      "amount": 543374,
+      "currency": "GBP"
+     },
+     "dateSigned": "2026-09-07T00:00:00+01:00"
+    }
+   ],
+   "bids": {
+    "statistics": [
+     {
+      "id": "1",
+      "measure": "bids",
+      "relatedLot": "1",
+      "value": 6
+     }
+    ]
+   },
+   "language": "en"
+  },
+  {
+   "ocid": "ocds-h6vhtk-06f8c2",
+   "id": "086706-2026",
+   "tag": [
+    "award",
+    "contract"
+   ],
+   "date": "2026-09-14T09:44:43+01:00",
+   "initiationType": "tender",
+   "parties": [
+    {
+     "name": "The North Yorkshire Council",
+     "id": "GB-PPON-PNXY-8263-XCNL",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PNXY-8263-XCNL"
+     },
+     "address": {
+      "streetAddress": "County Hall, Racecourse Lane,",
+      "locality": "Northallerton",
+      "postalCode": "DL7 8AD",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKE22"
+     },
+     "contactPoint": {
+      "name": "PHILIP RICHARDSON",
+      "email": "philip.richardson@northyorks.gov.uk",
+      "telephone": "03001312131"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "https://www.northyorks.gov.uk",
+      "classifications": [
+       {
+        "scheme": "UK_CA_TYPE",
+        "id": "publicAuthorityCentralGovernment",
+        "description": "Public authority - central government"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Thomas Armstrong (Construction) Ltd",
+     "id": "GB-PPON-PYXX-8765-GCVX",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PYXX-8765-GCVX"
+     },
+     "address": {
+      "streetAddress": "Workington Road, Flimby",
+      "locality": "Maryport",
+      "postalCode": "CA15 8RY",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKD11"
+     },
+     "contactPoint": {
+      "name": "Paul Osborne",
+      "email": "Paul.Osborne@thomasarmstrong.co.uk",
+      "telephone": "+44(0)190068211"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "scale": "sme",
+      "vcse": false
+     }
+    }
+   ],
+   "buyer": {
+    "id": "GB-PPON-PNXY-8263-XCNL",
+    "name": "The North Yorkshire Council"
+   },
+   "tender": {
+    "id": "NYC-BADS-1310-2026",
+    "legalBasis": {
+     "id": "2023/54",
+     "scheme": "UKPGA",
+     "uri": "https://www.legislation.gov.uk/ukpga/2023/54/contents"
+    },
+    "title": "Potts Beck (Litton) Emergency Works",
+    "description": "Potts Beck (Litton) Emergency Works at Potts Beck Bridge Litton",
+    "status": "complete",
+    "procurementMethod": "direct",
+    "procurementMethodDetails": "Below threshold - without competition",
+    "lots": [
+     {
+      "id": "LOT-0000",
+      "status": "complete",
+      "description": null
+     }
+    ]
+   },
+   "awards": [
+    {
+     "id": "1",
+     "status": "active",
+     "mainProcurementCategory": "works",
+     "suppliers": [
+      {
+       "id": "GB-PPON-PYXX-8765-GCVX",
+       "name": "Thomas Armstrong (Construction) Ltd"
+      }
+     ],
+     "items": [
+      {
+       "id": "LOT-0000",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "45000000",
+         "description": "Construction work"
+        }
+       ],
+       "relatedLot": "LOT-0000"
+      }
+     ],
+     "relatedLots": [
+      "LOT-0000"
+     ]
+    }
+   ],
+   "contracts": [
+    {
+     "id": "1",
+     "awardID": "1",
+     "title": "Potts Beck (Litton) Emergency Works",
+     "status": "active",
+     "period": {
+      "startDate": "2026-09-14T00:00:00Z",
+      "endDate": "2026-10-10T23:59:59+01:00"
+     },
+     "value": {
+      "amountGross": 180000,
+      "amount": 150000,
+      "currency": "GBP"
+     },
+     "aboveThreshold": false,
+     "dateSigned": "2026-09-11T00:00:00Z",
+     "statusDetails": null,
+     "documents": [
+      {
+       "id": "086706-2026",
+       "documentType": "contractNotice",
+       "noticeType": "UK7",
+       "description": "Contract details notice on Find a Tender",
+       "url": "https://www.find-tender.service.gov.uk/Notice/086706-2026",
+       "datePublished": "2026-09-14T09:44:43+01:00",
+       "format": "text/html"
+      }
+     ]
+    }
+   ],
+   "language": "en"
+  },
+  {
+   "ocid": "ocds-h6vhtk-06f8c1",
+   "id": "086705-2026",
+   "date": "2026-09-14T09:44:27+01:00",
+   "tag": [
+    "award",
+    "contract"
+   ],
+   "initiationType": "tender",
+   "tender": {
+    "id": "ocds-h6vhtk-06f8c1",
+    "legalBasis": {
+     "id": "32014L0024",
+     "scheme": "CELEX"
+    },
+    "title": "250335 - DFG - Lot 8",
+    "status": "complete",
+    "classification": {
+     "scheme": "CPV",
+     "id": "45210000",
+     "description": "Building construction work"
+    },
+    "mainProcurementCategory": "works",
+    "description": "250335 - DFG - Lot 8 in North Lincolnshire",
+    "lots": [
+     {
+      "id": "1",
+      "description": "250335 - DFG - Lot 8 in North Lincolnshire",
+      "awardCriteria": {
+       "criteria": [
+        {
+         "type": "price"
+        }
+       ]
+      },
+      "hasOptions": false,
+      "status": "cancelled"
+     }
+    ],
+    "items": [
+     {
+      "id": "1",
+      "deliveryAddresses": [
+       {
+        "region": "UKE13"
+       }
+      ],
+      "relatedLot": "1"
+     }
+    ],
+    "procurementMethod": "selective",
+    "procurementMethodDetails": "Restricted procedure",
+    "coveredBy": [
+     "GPA"
+    ]
+   },
+   "awards": [
+    {
+     "id": "086705-2026-1",
+     "relatedLots": [
+      "1"
+     ],
+     "status": "active",
+     "suppliers": [
+      {
+       "id": "GB-COH-03873231",
+       "name": "JP Developers Ltd"
+      }
+     ]
+    }
+   ],
+   "parties": [
+    {
+     "name": "North Lincolnshire Council",
+     "id": "GB-FTS-4589",
+     "identifier": {
+      "legalName": "North Lincolnshire Council",
+      "noIdentifierRationale": "notOnAnyRegister"
+     },
+     "address": {
+      "streetAddress": "Church Square House",
+      "locality": "Scunthorpe",
+      "region": "UKE13",
+      "postalCode": "DN156NL",
+      "countryName": "United Kingdom"
+     },
+     "contactPoint": {
+      "email": "Procurement@northlincs.gov.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "http://www.northlincs.gov.uk",
+      "classifications": [
+       {
+        "scheme": "TED_CA_TYPE",
+        "id": "REGIONAL_AUTHORITY",
+        "description": "Regional or local authority"
+       },
+       {
+        "scheme": "COFOG",
+        "id": "01",
+        "description": "General public services"
+       }
+      ]
+     }
+    },
+    {
+     "name": "JP Developers Ltd",
+     "id": "GB-COH-03873231",
+     "identifier": {
+      "legalName": "JP Developers Ltd",
+      "id": "03873231",
+      "scheme": "GB-COH"
+     },
+     "address": {
+      "locality": "Kingston upon Hull",
+      "region": "UKE11",
+      "countryName": "United Kingdom"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "scale": "sme"
+     }
+    },
+    {
+     "name": "High Court of England and Wales",
+     "id": "GB-FTS-136",
+     "identifier": {
+      "legalName": "High Court of England and Wales"
+     },
+     "address": {
+      "locality": "London",
+      "countryName": "United Kingdom"
+     },
+     "roles": [
+      "reviewBody"
+     ]
+    }
+   ],
+   "buyer": {
+    "id": "GB-FTS-4589",
+    "name": "North Lincolnshire Council"
+   },
+   "contracts": [
+    {
+     "id": "086705-2026-1",
+     "awardID": "086705-2026-1",
+     "status": "active",
+     "value": {
+      "amount": 7329.01,
+      "currency": "GBP"
+     },
+     "dateSigned": "2026-08-26T00:00:00+01:00"
+    }
+   ],
+   "bids": {
+    "statistics": [
+     {
+      "id": "1",
+      "measure": "bids",
+      "relatedLot": "1",
+      "value": 1
+     }
+    ]
+   },
+   "links": [
+    {
+     "rel": "prev",
+     "href": "https://ted.europa.eu/udl?uri=TED:NOTICE:391716-2018:TEXT:EN:HTML"
+    }
+   ],
+   "language": "en"
+  },
+  {
+   "buyerID": [],
+   "id": "086704-2026",
+   "tag": [
+    "award",
+    "contract"
+   ],
+   "date": "2026-09-14T09:44:18+01:00",
+   "initiationType": "tender",
+   "ocid": "ocds-h6vhtk-05e7a5",
+   "parties": [
+    {
+     "name": "Nottingham City Council",
+     "id": "GB-PPON-PZGG-1891-TDCX",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PZGG-1891-TDCX"
+     },
+     "address": {
+      "streetAddress": "Loxley House, Station Street",
+      "locality": "Nottingham",
+      "postalCode": "NG2 3NG",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKF14"
+     },
+     "contactPoint": {
+      "email": "procurement@nottinghamcity.gov.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "url": "http://www.nottinghamcity.gov.uk/",
+      "classifications": [
+       {
+        "scheme": "UK_CA_TYPE",
+        "id": "publicAuthoritySubCentralGovernment",
+        "description": "Public authority - sub-central government"
+       }
+      ]
+     }
+    },
+    {
+     "name": "HUWS GRAY LIMITED",
+     "id": "GB-COH-02506633",
+     "identifier": {
+      "scheme": "GB-COH",
+      "id": "02506633"
+     },
+     "additionalIdentifiers": [
+      {
+       "scheme": "GB-PPON",
+       "id": "PBNW-6852-DTMD"
+      }
+     ],
+     "address": {
+      "streetAddress": "Head Office",
+      "locality": "Llangefni",
+      "postalCode": "LL77 7JA",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKL11"
+     },
+     "contactPoint": {
+      "email": "partnering@huwsgray.co.uk"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "url": "https://www.supplychainsolutionsuk.com/",
+      "scale": "large",
+      "vcse": false,
+      "publicServiceMissionOrganization": false,
+      "shelteredWorkshop": false
+     }
+    },
+    {
+     "name": "CEMEX UK OPERATIONS LIMITED",
+     "id": "GB-COH-00658390",
+     "identifier": {
+      "scheme": "GB-COH",
+      "id": "00658390"
+     },
+     "additionalIdentifiers": [
+      {
+       "scheme": "GB-PPON",
+       "id": "PQTZ-1952-TLQR"
+      }
+     ],
+     "address": {
+      "streetAddress": "Cemex House, Binley Business Park",
+      "locality": "Coventry",
+      "postalCode": "CV3 2TY",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKG33"
+     },
+     "contactPoint": {
+      "email": "PBSALES@CEMEX.COM"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "url": "https://www.cemex.co.uk/",
+      "scale": "large",
+      "vcse": false,
+      "publicServiceMissionOrganization": false,
+      "shelteredWorkshop": false
+     }
+    },
+    {
+     "name": "TARMAC TRADING LIMITED",
+     "id": "GB-COH-00453791",
+     "identifier": {
+      "scheme": "GB-COH",
+      "id": "00453791"
+     },
+     "additionalIdentifiers": [
+      {
+       "scheme": "GB-PPON",
+       "id": "PGLC-9451-BRQP"
+      }
+     ],
+     "address": {
+      "streetAddress": "Ground Floor T3 Trinity Park",
+      "locality": "Birmingham",
+      "postalCode": "B37 7ES",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKG32"
+     },
+     "contactPoint": {
+      "email": "contractingcsd@tarmac.com"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "url": "https://www.tarmac.com/",
+      "scale": "large",
+      "vcse": false,
+      "publicServiceMissionOrganization": false,
+      "shelteredWorkshop": false
+     }
+    },
+    {
+     "name": "DRAGON ASPHALT LTD",
+     "id": "GB-COH-11232672",
+     "identifier": {
+      "scheme": "GB-COH",
+      "id": "11232672"
+     },
+     "additionalIdentifiers": [
+      {
+       "scheme": "GB-PPON",
+       "id": "PGXV-3795-TJMQ"
+      }
+     ],
+     "address": {
+      "streetAddress": "2 Old Bath Road",
+      "locality": "Newbury",
+      "postalCode": "RG14 1QL",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKJ11"
+     },
+     "contactPoint": {
+      "email": "ACCOUNTS@DRAGONASPHALT.CO.UK"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "url": "https://www.dragonasphalt.co.uk/",
+      "scale": "sme",
+      "vcse": false,
+      "publicServiceMissionOrganization": false,
+      "shelteredWorkshop": false
+     }
+    }
+   ],
+   "buyer": {
+    "id": "GB-PPON-PZGG-1891-TDCX",
+    "name": "Nottingham City Council"
+   },
+   "tender": {
+    "id": "CPU 8051",
+    "legalBasis": {
+     "id": "2023/54",
+     "scheme": "UKPGA",
+     "uri": "https://www.legislation.gov.uk/ukpga/2023/54/contents"
+    },
+    "title": "CPU 8051 Construction Materials (Aggregates & Asphalts)",
+    "description": "Nottingham City Council (the 'Authority' or 'Employer') sought tenders from suitably experienced and qualified entities (the 'Tenderer') for inclusion on a framework for the supply of Aggregates and Asphalts for works within the boundaries of Nottingham City Council.\nThe Framework duration is expected to be for up to 4 years at the Authority's discretion.\nThe Framework is to consist of 2 lots. \n The Authority is appointing 3 Contractors on each lot on\nthis Framework",
+    "status": "complete",
+    "procurementMethod": "open",
+    "procurementMethodDetails": "Open procedure",
+    "techniques": {
+     "hasFrameworkAgreement": true,
+     "frameworkAgreement": {
+      "method": "withoutReopeningCompetition",
+      "type": "closed",
+      "description": "Call-offs from the framework will be made by Direct Award.\nEach project will be priced solely using the rates set out in the Pricing Schedule and will be awarded as Direct Awards by Basket of Rates"
+     }
+    },
+    "lots": [
+     {
+      "id": "1",
+      "status": "complete",
+      "description": null
+     },
+     {
+      "id": "2",
+      "status": "complete",
+      "description": null
+     }
+    ],
+    "documents": [
+     {
+      "id": "conflictOfInterest",
+      "documentType": "conflictOfInterest",
+      "description": "Not published"
+     }
+    ]
+   },
+   "awards": [
+    {
+     "id": "1",
+     "status": "active",
+     "mainProcurementCategory": "goods",
+     "suppliers": [
+      {
+       "id": "GB-COH-02506633",
+       "name": "HUWS GRAY LIMITED"
+      },
+      {
+       "id": "GB-COH-00658390",
+       "name": "CEMEX UK OPERATIONS LIMITED"
+      },
+      {
+       "id": "GB-COH-00453791",
+       "name": "TARMAC TRADING LIMITED"
+      }
+     ],
+     "items": [
+      {
+       "id": "1",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "44110000",
+         "description": "Construction materials"
+        }
+       ],
+       "deliveryAddresses": [
+        {
+         "region": "UKF14",
+         "country": "GB",
+         "countryName": "United Kingdom"
+        }
+       ],
+       "relatedLot": "1"
+      }
+     ],
+     "relatedLots": [
+      "1"
+     ]
+    },
+    {
+     "id": "2",
+     "status": "active",
+     "mainProcurementCategory": "goods",
+     "suppliers": [
+      {
+       "id": "GB-COH-11232672",
+       "name": "DRAGON ASPHALT LTD"
+      },
+      {
+       "id": "GB-COH-00658390",
+       "name": "CEMEX UK OPERATIONS LIMITED"
+      }
+     ],
+     "items": [
+      {
+       "id": "2",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "44110000",
+         "description": "Construction materials"
+        }
+       ],
+       "deliveryAddresses": [
+        {
+         "region": "UKF14",
+         "country": "GB",
+         "countryName": "United Kingdom"
+        }
+       ],
+       "relatedLot": "2"
+      }
+     ],
+     "relatedLots": [
+      "2"
+     ]
+    }
+   ],
+   "contracts": [
+    {
+     "id": "1",
+     "awardID": "1",
+     "title": "CPU 8051 Construction Materials (Aggregates & Asphalts) Lot 1 Aggregates",
+     "status": "active",
+     "period": {
+      "startDate": "2026-08-03T00:00:00+01:00",
+      "endDate": "2030-08-02T23:59:59+01:00"
+     },
+     "value": {
+      "amountGross": 900000,
+      "amount": 750000,
+      "currency": "GBP"
+     },
+     "aboveThreshold": true,
+     "dateSigned": "2026-07-16T00:00:00+01:00",
+     "agreedMetrics": [
+      {
+       "id": "1",
+       "title": "Acceptance of Orders",
+       "description": "Acceptance of Orders on this Contract",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "2",
+       "title": "Health and Safety",
+       "description": "Number of reportable accidents",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "3",
+       "title": "Environmental Incidents",
+       "description": "Number of Environmental Incidents",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      }
+     ],
+     "statusDetails": null,
+     "documents": [
+      {
+       "id": "086704-2026",
+       "documentType": "contractNotice",
+       "noticeType": "UK7",
+       "description": "Contract details notice on Find a Tender",
+       "url": "https://www.find-tender.service.gov.uk/Notice/086704-2026",
+       "datePublished": "2026-09-14T09:44:18+01:00",
+       "format": "text/html"
+      }
+     ]
+    },
+    {
+     "id": "2",
+     "awardID": "2",
+     "title": ". CPU 8051 Construction Materials (Aggregates & Asphalts) Lot 2 - Asphalts",
+     "status": "active",
+     "period": {
+      "startDate": "2026-08-03T00:00:00+01:00",
+      "endDate": "2030-08-02T23:59:59+01:00"
+     },
+     "value": {
+      "amountGross": 1500000,
+      "amount": 1250000,
+      "currency": "GBP"
+     },
+     "aboveThreshold": true,
+     "dateSigned": "2026-07-16T00:00:00+01:00",
+     "agreedMetrics": [
+      {
+       "id": "1",
+       "title": "Acceptance of Orders",
+       "description": "Acceptance of orders on this contract",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "2",
+       "title": "Health and Safety",
+       "description": "Number of reportable incidents",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      },
+      {
+       "id": "3",
+       "title": "Environmental Incidents",
+       "description": "Number of Environmental Incidents",
+       "observations": [
+        {
+         "period": {
+          "durationInMonths": 3
+         },
+         "id": "frequency"
+        }
+       ]
+      }
+     ],
+     "statusDetails": null,
+     "documents": [
+      {
+       "id": "086704-2026",
+       "documentType": "contractNotice",
+       "noticeType": "UK7",
+       "description": "Contract details notice on Find a Tender",
+       "url": "https://www.find-tender.service.gov.uk/Notice/086704-2026",
+       "datePublished": "2026-09-14T09:44:18+01:00",
+       "format": "text/html"
+      }
+     ]
+    }
+   ],
+   "language": "en"
+  },
+  {
+   "buyerID": [],
+   "id": "086703-2026",
+   "tag": [
+    "award",
+    "contract"
+   ],
+   "date": "2026-09-14T09:41:23+01:00",
+   "initiationType": "tender",
+   "ocid": "ocds-h6vhtk-06c38b",
+   "parties": [
+    {
+     "name": "Karbon Homes",
+     "id": "GB-PPON-PCDL-6326-LXPW",
+     "identifier": {
+      "scheme": "GB-PPON",
+      "id": "PCDL-6326-LXPW"
+     },
+     "address": {
+      "streetAddress": "5 Gosforth Park, Gosforth Business Park",
+      "locality": "Newcastle upon Tyne",
+      "postalCode": "NE12 8EG",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKC22"
+     },
+     "contactPoint": {
+      "name": "Connor Jennings",
+      "email": "connor.jennings@karbonhomes.co.uk"
+     },
+     "roles": [
+      "buyer"
+     ],
+     "details": {
+      "classifications": [
+       {
+        "scheme": "UK_CA_TYPE",
+        "id": "publicAuthoritySubCentralGovernment",
+        "description": "Public authority - sub-central government"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Orchard Homecare Services Ltd",
+     "id": "GB-COH-04044206",
+     "identifier": {
+      "scheme": "GB-COH",
+      "id": "04044206"
+     },
+     "address": {
+      "streetAddress": "2 Ashfield Terrace",
+      "locality": "Chester-Le-Street",
+      "postalCode": "DH3 3PD",
+      "country": "GB",
+      "countryName": "United Kingdom",
+      "region": "UKC14"
+     },
+     "contactPoint": {
+      "email": "joseph@orchardhomecareservices.co.uk"
+     },
+     "roles": [
+      "supplier"
+     ],
+     "details": {
+      "url": "https://orchardhomecareservices.co.uk/",
+      "scale": "sme",
+      "vcse": false,
+      "publicServiceMissionOrganization": false,
+      "shelteredWorkshop": false
+     }
+    }
+   ],
+   "buyer": {
+    "id": "GB-PPON-PCDL-6326-LXPW",
+    "name": "Karbon Homes"
+   },
+   "tender": {
+    "id": "202604-GS19",
+    "legalBasis": {
+     "id": "2023/54",
+     "scheme": "UKPGA",
+     "uri": "https://www.legislation.gov.uk/ukpga/2023/54/contents"
+    },
+    "title": "Onsite First Responder Service",
+    "description": "The provision of an on-site first response care and support service for older people with extra care needs, delivered by an on-site first response Care Team at the below 3 sites.\nWeavers Court, Swordy Drive, Alnwick NE66 1SZ - 58 Properties\nThe Manors, Adderlane Rd, Prudhoe NE42 5ET – 46 Properties\nThe Elms, Moorfoot Ave, Chester le Street, DH2 3DQ – 54 Properties",
+    "status": "complete",
+    "procurementMethod": "open",
+    "procurementMethodDetails": "Open procedure",
+    "lots": [
+     {
+      "id": "1",
+      "status": "complete",
+      "description": null
+     },
+     {
+      "id": "2",
+      "status": "complete",
+      "description": null
+     },
+     {
+      "id": "3",
+      "status": "complete",
+      "description": null
+     }
+    ]
+   },
+   "bids": {
+    "statistics": [
+     {
+      "id": "1",
+      "measure": "bids",
+      "value": 2,
+      "relatedLot": "1"
+     },
+     {
+      "id": "2",
+      "measure": "finalStageBids",
+      "value": 2,
+      "relatedLot": "1"
+     },
+     {
+      "id": "3",
+      "measure": "smeFinalStageBids",
+      "value": 2,
+      "relatedLot": "1"
+     },
+     {
+      "id": "4",
+      "measure": "vcseFinalStageBids",
+      "value": 0,
+      "relatedLot": "1"
+     },
+     {
+      "id": "5",
+      "measure": "bids",
+      "value": 4,
+      "relatedLot": "2"
+     },
+     {
+      "id": "6",
+      "measure": "finalStageBids",
+      "value": 4,
+      "relatedLot": "2"
+     },
+     {
+      "id": "7",
+      "measure": "smeFinalStageBids",
+      "value": 4,
+      "relatedLot": "2"
+     },
+     {
+      "id": "8",
+      "measure": "vcseFinalStageBids",
+      "value": 0,
+      "relatedLot": "2"
+     },
+     {
+      "id": "9",
+      "measure": "bids",
+      "value": 2,
+      "relatedLot": "3"
+     },
+     {
+      "id": "10",
+      "measure": "finalStageBids",
+      "value": 2,
+      "relatedLot": "3"
+     },
+     {
+      "id": "11",
+      "measure": "smeFinalStageBids",
+      "value": 2,
+      "relatedLot": "3"
+     },
+     {
+      "id": "12",
+      "measure": "vcseFinalStageBids",
+      "value": 0,
+      "relatedLot": "3"
+     }
+    ]
+   },
+   "awards": [
+    {
+     "id": "1",
+     "status": "active",
+     "date": "2026-08-25T00:00:00Z",
+     "value": {
+      "amountGross": 2004000.0,
+      "amount": 1670000.0,
+      "currency": "GBP"
+     },
+     "mainProcurementCategory": "services",
+     "aboveThreshold": true,
+     "suppliers": [
+      {
+       "id": "GB-COH-04044206",
+       "name": "Orchard Homecare Services Ltd"
+      }
+     ],
+     "items": [
+      {
+       "id": "1",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "85144000",
+         "description": "Residential health facilities services"
+        },
+        {
+         "scheme": "CPV",
+         "id": "79342320",
+         "description": "Customer-care services"
+        }
+       ],
+       "deliveryAddresses": [
+        {
+         "region": "UKC",
+         "country": "GB",
+         "countryName": "United Kingdom"
+        }
+       ],
+       "relatedLot": "1"
+      },
+      {
+       "id": "2",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "85144000",
+         "description": "Residential health facilities services"
+        },
+        {
+         "scheme": "CPV",
+         "id": "79342320",
+         "description": "Customer-care services"
+        }
+       ],
+       "deliveryAddresses": [
+        {
+         "region": "UKC",
+         "country": "GB",
+         "countryName": "United Kingdom"
+        }
+       ],
+       "relatedLot": "2"
+      },
+      {
+       "id": "3",
+       "additionalClassifications": [
+        {
+         "scheme": "CPV",
+         "id": "85144000",
+         "description": "Residential health facilities services"
+        },
+        {
+         "scheme": "CPV",
+         "id": "79342320",
+         "description": "Customer-care services"
+        }
+       ],
+       "deliveryAddresses": [
+        {
+         "region": "UKC",
+         "country": "GB",
+         "countryName": "United Kingdom"
+        }
+       ],
+       "relatedLot": "3"
+      }
+     ],
+     "contractPeriod": {
+      "startDate": "2026-10-07T00:00:00Z",
+      "endDate": "2029-09-20T23:59:59+01:00",
+      "maxExtentDate": "2031-09-20T23:59:59+01:00"
+     },
+     "hasRenewal": true,
+     "renewal": {
+      "description": "This Contract will be for a period of 3 years with optional 2 x 12 month extension."
+     },
+     "relatedLots": [
+      "1",
+      "2",
+      "3"
+     ],
+     "documents": [
+      {
+       "id": "086703-2026",
+       "documentType": "awardNotice",
+       "noticeType": "UK6",
+       "description": "Contract award notice on Find a Tender",
+       "url": "https://www.find-tender.service.gov.uk/Notice/086703-2026",
+       "datePublished": "2026-09-14T09:41:23+01:00",
+       "format": "text/html"
+      }
+     ],
+     "assessmentSummariesDateSent": "2026-08-25T00:00:00Z",
+     "milestones": [
+      {
+       "id": "1",
+       "type": "futureSignatureDate",
+       "dueDate": "2026-09-30T23:59:59+01:00",
+       "status": "scheduled"
+      }
+     ]
+    }
+   ],
+   "language": "en"
+  }
+ ],
+ "links": {
+  "next": "https://www.find-tender.service.gov.uk/api/1.0/ocdsReleasePackages?cursor=PAGE2"
+ }
+}

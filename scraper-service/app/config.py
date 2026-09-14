@@ -227,6 +227,18 @@ class Settings(BaseSettings):
     # requests.
     embed_batch_size: int = 96
 
+    # --- Find a Tender (UK) ---
+    # The API filters on update time only, so the window is how far back a
+    # sweep looks for notices that were touched -- not how far back their
+    # deadlines run. Sixty days because a UK above-threshold notice is
+    # commonly edited once after publication, and a window shorter than the
+    # edit interval keeps re-finding the same notices as if they were new.
+    fts_lookback_days: int = 60
+    # Releases per page. The service accepts 100 and rate-limits on sustained
+    # paging like every other portal here, so a larger page is fewer requests
+    # for the same rows.
+    fts_page_size: int = 100
+
     # --- Notifications ---
     # A needs_review tender is invisible until a human opens it, and there is
     # no review queue in the dashboard yet, so this digest is currently the
