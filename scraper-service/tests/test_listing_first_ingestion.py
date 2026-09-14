@@ -34,6 +34,7 @@ class _Agent:
     display_name = "fake"
     base_url = "https://example.invalid"
     country = "IL"
+    sector = "defence"     # read by run_source when it registers the source
 
     def __init__(self, stubs):
         self._stubs = stubs
@@ -204,8 +205,36 @@ async def test_one_embedding_request_covers_the_whole_batch(monkeypatch):
     agent = _Agent([_stub(i) for i in range(250)])
     monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [agent])
 
+    # dry_run=False on purpose: a dry run no longer embeds at all, so with
+    # the default this test would count zero requests and pass for the
+    # opposite of the reason it exists. The repository is a stub so nothing
+    # reaches a real database.
+    class _Repo:
+        """Everything run_source touches on the live path, and nothing else."""
+
+        def __init__(self):
+            self.rows = []
+
+        def upsert_source(self, row):
+            return "source-id"
+
+        def start_run(self, source_id):
+            return "run-id"
+
+        def finish_run(self, run_id, **kw):
+            return None
+
+        def ingest_fingerprints(self, source_id):
+            return {}
+
+        def upsert_tender(self, row):
+            self.rows.append(row)
+            return "id"
+
     pipeline = IngestionPipeline(
-        settings=make_settings(extract_on_ingest=False, embed_batch_size=96)
+        settings=make_settings(extract_on_ingest=False, embed_batch_size=96,
+                               dry_run=False),
+        repository=_Repo(),
     )
 
     requests = []
@@ -257,3 +286,34 @@ async def test_a_blank_listing_does_not_cost_the_batch_its_vectors(monkeypatch):
     assert report.ingested == 2
     assert report.failed == 1
     assert any("no text" in e for e in report.errors)
+
+
+@pytest.mark.asyncio
+async def test_a_dry_run_does_not_spend_the_embedding_budget(monkeypatch):
+    """A dry run that costs money is not a dry run.
+
+    Found by running one. `--dry-run --limit 40` wrote nothing to the
+    database, exactly as promised, and still called the embedding API forty
+    tenders' worth -- against a quota that was already exhausted, so the run
+    reported `failed 40` for a reason that had nothing to do with tenders.
+
+    A dry run exists to check the fetch and the filter. Neither needs a
+    vector.
+    """
+    agent = _Agent([_stub(i) for i in range(30)])
+    monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [agent])
+
+    pipeline = IngestionPipeline(settings=make_settings(dry_run=True,
+                                                       extract_on_ingest=False))
+    called = []
+
+    async def _boom(texts, **kw):
+        called.append(len(texts))
+        raise AssertionError("a dry run called the embedding API")
+
+    monkeypatch.setattr(pipeline.embedder, "embed", _boom)
+    (report,) = await pipeline.run(["fake"], limit=30)
+
+    assert called == []
+    assert report.ingested == 30, "a dry run should still report what it would have written"
+    assert report.failed == 0

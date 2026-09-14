@@ -402,6 +402,18 @@ class IngestionPipeline:
         if not kept:
             return
 
+        if self.settings.dry_run:
+            # A dry run that spends the embedding budget is not dry. Found by
+            # running one: `--dry-run --limit 40` wrote nothing, as promised,
+            # and still burned forty tenders' worth of a quota that was
+            # already exhausted -- so the run reported `failed 40` for a
+            # reason that had nothing to do with the tenders.
+            #
+            # The whole point of a dry run here is to check the fetch and the
+            # filter, and neither of those needs a vector.
+            report.ingested += len(kept)
+            return
+
         vectors = await self.embedder.embed(texts, input_type="document")
 
         for stub, text, vector in zip(kept, texts, vectors):
