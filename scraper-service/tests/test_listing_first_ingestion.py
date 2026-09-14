@@ -187,3 +187,73 @@ async def test_an_unreadable_queue_is_not_an_outage(monkeypatch):
 
     pipeline = IngestionPipeline(settings=make_settings(), repository=_Repo())
     assert await pipeline.extract_matched() == 0
+
+
+# --- the cost of a sweep is measured in requests, not tenders --------------
+
+@pytest.mark.asyncio
+async def test_one_embedding_request_covers_the_whole_batch(monkeypatch):
+    """The free tier limits EmbedContentRequestsPerMinute.
+
+    The provider has batched since it was written; the pipeline called it
+    with one text at a time and nobody noticed, because while ingestion also
+    paid for an LLM read the embedding request count was invisible next to
+    it. At scale it is the only number that matters: at one request per
+    tender a 6,000-notice sweep died after 213.
+    """
+    agent = _Agent([_stub(i) for i in range(250)])
+    monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [agent])
+
+    pipeline = IngestionPipeline(
+        settings=make_settings(extract_on_ingest=False, embed_batch_size=96)
+    )
+
+    requests = []
+    original = pipeline.embedder.embed
+
+    async def _counting(texts, **kw):
+        requests.append(len(texts))
+        return await original(texts, **kw)
+
+    monkeypatch.setattr(pipeline.embedder, "embed", _counting)
+    (report,) = await pipeline.run(["fake"], limit=250)
+
+    assert report.ingested == 250
+    assert requests == [96, 96, 58], requests
+    assert len(requests) == 3, f"250 tenders took {len(requests)} requests"
+
+
+@pytest.mark.asyncio
+async def test_the_final_partial_batch_is_not_dropped(monkeypatch):
+    """The tail is the easiest thing in the world to lose silently: every
+    counter agrees, and the missing tenders look exactly like tenders the
+    portal never published."""
+    agent = _Agent([_stub(i) for i in range(5)])
+    monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [agent])
+
+    pipeline = IngestionPipeline(
+        settings=make_settings(extract_on_ingest=False, embed_batch_size=96)
+    )
+    (report,) = await pipeline.run(["fake"], limit=5)
+
+    assert report.ingested == 5, "a batch smaller than the batch size vanished"
+
+
+@pytest.mark.asyncio
+async def test_a_blank_listing_does_not_cost_the_batch_its_vectors(monkeypatch):
+    """One unembeddable listing among ninety-five good ones must not take
+    them with it -- and must not shift the others' vectors onto the wrong
+    rows either, which is what dropping a text without dropping its stub
+    would do."""
+    stubs = [_stub(0), TenderStub(external_id="blank", title="  ",
+                                  source_url="https://example.invalid/n"),
+             _stub(2)]
+    agent = _Agent(stubs)
+    monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [agent])
+
+    pipeline = IngestionPipeline(settings=make_settings(extract_on_ingest=False))
+    (report,) = await pipeline.run(["fake"], limit=3)
+
+    assert report.ingested == 2
+    assert report.failed == 1
+    assert any("no text" in e for e in report.errors)

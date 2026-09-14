@@ -191,17 +191,20 @@ def test_the_query_is_built_from_configuration_not_hardcoded():
     assert "today(-7)" in backfill.build_query()
 
 
-def test_soonest_deadline_first_so_a_capped_run_keeps_what_can_be_lost():
-    """A capped run must keep the tenders closing soonest.
+def test_the_query_never_sorts_on_a_deadline_field():
+    """TED refuses to, and finding that out cost a whole sweep.
 
-    The sort follows the filter. While the sweep asked for a publication
-    window, newest-first was right: the alternative was an arbitrary slice
-    of an archive reaching back to 2016. Now that it asks for open tenders,
-    "newest" is the wrong end -- a bid team loses the one closing on Friday,
-    not the one published on Friday.
+        SORT BY deadline-receipt-tender-date-lot ASC
+        -> 400 QUERY_SYNTAX_ERROR, "extraneous input 'ASC'"
+
+    The filter had been probed against the live API; the sort had not. Every
+    WHERE clause was right and all thirty-one shards died on the ORDER BY.
+    The ordering a reader needs is applied after ingestion, on a column we
+    own.
     """
     q = TedAgent(SETTINGS).build_query()
-    assert q.endswith("SORT BY deadline-receipt-tender-date-lot ASC")
+    assert "SORT BY deadline" not in q
+    assert q.endswith("SORT BY publication-date DESC")
 
 
 def test_the_backfill_path_still_sorts_newest_first():
@@ -227,8 +230,13 @@ def test_open_only_asks_for_both_deadline_fields():
 def test_open_only_does_not_filter_on_publication_date():
     """The two filters are not approximations of each other. Measured on
     defence CPV: the 30-day publication window missed 181 open tenders and
-    paid for 62 closed ones."""
-    assert "publication-date" not in TedAgent(SETTINGS).build_query()
+    paid for 62 closed ones.
+
+    The field still appears in the SORT, which is a different job -- keeping
+    the ITERATION walk a stable partition. This asserts on the WHERE.
+    """
+    where = TedAgent(SETTINGS).build_query().split(" SORT BY ")[0]
+    assert "publication-date" not in where
 
 
 def test_the_requested_field_list_stays_small():

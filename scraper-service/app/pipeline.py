@@ -231,6 +231,7 @@ class IngestionPipeline:
                     # work, never a reason to fail the run.
                     logger.warning("[%s] could not load extraction index: %s", agent.key, exc)
 
+            pending_batch: list = []
             for stub in stubs:
                 try:
                     if self._already_current(stub, fingerprints.get(stub.external_id)):
@@ -241,8 +242,15 @@ class IngestionPipeline:
                         await self._ingest_one(fetched, source_id, report)
                     else:
                         # No detail fetch, no browser, no model call. The
-                        # listing is already in hand from discover().
-                        await self._ingest_listing(stub, source_id, report)
+                        # listing is already in hand from discover(); it only
+                        # waits here until there are enough of them to make
+                        # one embedding request worth sending.
+                        pending_batch.append(stub)
+                        if len(pending_batch) >= self.settings.embed_batch_size:
+                            await self._ingest_listing_batch(
+                                pending_batch, source_id, report
+                            )
+                            pending_batch = []
                 except ExtractionQuotaExhausted as exc:
                     # Deliberately breaks the loop that the clause below
                     # deliberately does not. A bad document is local to one
@@ -271,6 +279,17 @@ class IngestionPipeline:
                     report.failed += 1
                     report.errors.append(f"{stub.external_id}: {type(exc).__name__}: {exc}")
                     logger.exception("[%s] ingest failed for %s", agent.key, stub.external_id)
+
+            if pending_batch:
+                # The tail. Without this the last partial batch is discovered,
+                # skipped-checked, paid for in attention and then dropped on
+                # the floor -- silently, because every counter would agree.
+                try:
+                    await self._ingest_listing_batch(pending_batch, source_id, report)
+                except Exception as exc:  # noqa: BLE001
+                    report.failed += len(pending_batch)
+                    report.errors.append(f"final batch: {type(exc).__name__}: {exc}")
+                pending_batch = []
 
             if report.skipped:
                 logger.info(
@@ -348,58 +367,80 @@ class IngestionPipeline:
 
         return fingerprint.get("model") == self.settings.extraction_model
 
-    async def _ingest_listing(
-        self, stub, source_id: str | None, report: IngestReport
+    async def _ingest_listing_batch(
+        self, stubs: list, source_id: str | None, report: IngestReport
     ) -> None:
-        """Store and embed a tender from its listing, without reading it.
+        """Store and embed a batch of tenders from their listings.
 
-        One embedding call. No document fetch, no browser, no extraction.
-        This is what makes 11,664 notices reachable where 551 was not.
+        One embedding REQUEST for the whole batch, not one per tender. The
+        provider has batched since it was written; the pipeline called it with
+        a single text and never noticed, because until ingestion stopped
+        paying for an LLM read the embedding was the cheap half of a slow
+        loop and its request count was invisible.
 
-        `extraction_status` stays `pending` -- which is true, and which the
-        column already meant. The row says where its vector came from under
-        `metadata.embedding.source`, so nothing downstream has to infer it
-        and a half-read corpus can always be counted.
+        It stopped being invisible at scale. The free tier limits
+        `EmbedContentRequestsPerMinutePerUserPerProjectPerModel`, so the cost
+        of a sweep is measured in REQUESTS, not tenders -- and at one request
+        per tender a 6,000-notice sweep died after 213. Batched at 96, the
+        same sweep is 63 requests.
         """
-        text = stub.listing_text()
-        if not text:
-            # A listing with no words at all cannot be embedded, and an
-            # unembedded row is invisible to matching. Better to count it as
-            # failed here than to store something no query will ever return.
-            report.failed += 1
-            report.errors.append(f"{stub.external_id}: listing carried no text to embed")
+        texts, kept = [], []
+        for stub in stubs:
+            text = stub.listing_text()
+            if not text:
+                # A listing with no words cannot be embedded, and an
+                # unembedded row is present in every count and absent from
+                # every result. Refusing it is the honest outcome.
+                report.failed += 1
+                report.errors.append(
+                    f"{stub.external_id}: listing carried no text to embed"
+                )
+                continue
+            texts.append(text)
+            kept.append(stub)
+
+        if not kept:
             return
 
-        vectors = await self.embedder.embed([text], input_type="document")
+        vectors = await self.embedder.embed(texts, input_type="document")
 
-        metadata = dict(stub.listing_metadata or {})
-        row = {
-            "source_id": source_id,
-            "external_id": stub.external_id,
-            "source_url": stub.source_url,
-            "title": stub.title,
-            "buyer_name": stub.buyer_name,
-            "publication_date": stub.publication_date.date().isoformat()
-            if stub.publication_date else None,
-            "deadline": stub.deadline.isoformat() if stub.deadline else None,
-            "status": "open",
-            "metadata": {
-                "listing": metadata,
-                "embedding": {
-                    "source": "listing",
-                    "model": self.settings.gemini_embedding_model,
-                    "chars": len(text),
-                    "at": datetime.now(timezone.utc).isoformat(),
+        for stub, text, vector in zip(kept, texts, vectors):
+            row = {
+                "source_id": source_id,
+                "external_id": stub.external_id,
+                "source_url": stub.source_url,
+                "title": stub.title,
+                "buyer_name": stub.buyer_name,
+                "publication_date": stub.publication_date.date().isoformat()
+                if stub.publication_date else None,
+                "deadline": stub.deadline.isoformat() if stub.deadline else None,
+                "status": "open",
+                "metadata": {
+                    "listing": dict(stub.listing_metadata or {}),
+                    "embedding": {
+                        "source": "listing",
+                        "model": self.settings.gemini_embedding_model,
+                        "chars": len(text),
+                        "at": datetime.now(timezone.utc).isoformat(),
+                    },
                 },
-            },
-            "embedding": vectors[0],
-            "extraction_status": "pending",
-        }
-
-        report.ingested += 1
-        if self.settings.dry_run:
-            return
-        self.repository.upsert_tender(row)
+                "embedding": vector,
+                # True, and what the column already meant. Provenance lives in
+                # metadata.embedding.source so a half-read corpus can be
+                # counted rather than inferred.
+                "extraction_status": "pending",
+            }
+            report.ingested += 1
+            if self.settings.dry_run:
+                continue
+            try:
+                self.repository.upsert_tender(row)
+            except Exception as exc:  # noqa: BLE001
+                # One bad row must not lose the other ninety-five we already
+                # paid to embed.
+                report.ingested -= 1
+                report.failed += 1
+                report.errors.append(f"{stub.external_id}: {type(exc).__name__}: {exc}")
 
     async def extract_matched(self, limit: int | None = None) -> int:
         """Read the tenders somebody actually matched.

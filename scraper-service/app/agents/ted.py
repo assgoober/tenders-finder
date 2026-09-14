@@ -304,10 +304,23 @@ class TedAgent(TenderSourceAgent):
                 "(deadline-receipt-tender-date-lot>=today(0)"
                 " OR deadline-receipt-request-date-lot>=today(0))"
             )
-            # Sorted by deadline: a run capped by `limit` should keep the
-            # tenders closing soonest, which are the ones a bid team can
-            # still lose by not seeing.
-            return " AND ".join(clauses) + " SORT BY deadline-receipt-tender-date-lot ASC"
+            # Deliberately still sorted by publication date, and this is a
+            # limitation rather than a preference: TED refuses to sort on a
+            # deadline field at all.
+            #
+            #   SORT BY deadline-receipt-tender-date-lot ASC
+            #   -> 400 QUERY_SYNTAX_ERROR, "extraneous input 'ASC'"
+            #
+            # Found by shipping it. The filter was probed against the live
+            # API and the sort was not, so a sweep that had every WHERE
+            # clause right failed all thirty-one shards on the ORDER BY.
+            #
+            # What the sort is actually for here is stable pagination: an
+            # ITERATION walk over an unordered result set is not guaranteed
+            # to be a partition. The soonest-closing ordering that a reader
+            # needs is applied after ingestion, where the deadline is a
+            # column we own -- `pending_match_alerts` already orders by it.
+            return " AND ".join(clauses) + " SORT BY publication-date DESC"
 
         newest = self._window_offset
         oldest = self._window_offset + self._lookback_days

@@ -219,6 +219,14 @@ class Settings(BaseSettings):
     # out runs out on the tenders with the most time left.
     extract_matched_limit: int = 50
 
+    # Tenders per embedding REQUEST. The free tier limits requests per
+    # minute, not tenders per minute, so this is the dial that decides
+    # whether a wide sweep finishes. At 1 -- which is what the pipeline
+    # effectively used before it was batched -- a 6,000-notice sweep died
+    # after 213. At 96, the provider's own cap, the same sweep is 63
+    # requests.
+    embed_batch_size: int = 96
+
     # --- Notifications ---
     # A needs_review tender is invisible until a human opens it, and there is
     # no review queue in the dashboard yet, so this digest is currently the

@@ -140,6 +140,52 @@ class GeminiEmbeddingProvider:
             self._client = genai.Client(api_key=self._settings.gemini_api_key)
         return self._client
 
+    #: How long to wait out a per-minute rate limit, and how many times.
+    #: The free tier's embedding cap is
+    #: `EmbedContentRequestsPerMinutePerUserPerProjectPerModel`, which is a
+    #: RATE, not a budget: the window refills on its own. Treating it as
+    #: exhaustion -- which is what an unhandled 429 amounts to -- throws away
+    #: a corpus we are seconds away from being allowed to embed. The first
+    #: wide sweep ended that way after 213 of 6,000 tenders.
+    RATE_LIMIT_WAIT_SECONDS = 62.0
+    RATE_LIMIT_RETRIES = 6
+
+    async def _embed_batch_with_retry(self, batch, task_type, types):
+        """One batch, waiting out a per-minute cap rather than dying on it.
+
+        Deliberately NOT retried on anything else. A malformed request, a bad
+        key, a model that does not exist -- those return the same 429-shaped
+        confidence to a broad `except`, and sleeping a minute between six
+        identical failures helps nobody.
+        """
+        import asyncio
+
+        last: Exception | None = None
+        for attempt in range(1, self.RATE_LIMIT_RETRIES + 1):
+            try:
+                return await self.client.aio.models.embed_content(
+                    model=self.model_name,
+                    contents=batch,
+                    config=types.EmbedContentConfig(
+                        output_dimensionality=self.dimension,
+                        task_type=task_type,
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001
+                message = str(exc)
+                per_minute = (
+                    "RESOURCE_EXHAUSTED" in message or "429" in message
+                ) and "PerMinute" in message
+                if not per_minute or attempt == self.RATE_LIMIT_RETRIES:
+                    raise
+                last = exc
+                logger.warning(
+                    "embedding rate limit (attempt %d/%d); waiting %.0fs",
+                    attempt, self.RATE_LIMIT_RETRIES, self.RATE_LIMIT_WAIT_SECONDS,
+                )
+                await asyncio.sleep(self.RATE_LIMIT_WAIT_SECONDS)
+        raise last  # unreachable; kept so the contract is explicit
+
     async def embed(
         self, texts: list[str], *, input_type: InputType = "document"
     ) -> list[list[float]]:
@@ -153,14 +199,7 @@ class GeminiEmbeddingProvider:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), self.MAX_BATCH):
             batch = texts[start : start + self.MAX_BATCH]
-            response = await self.client.aio.models.embed_content(
-                model=self.model_name,
-                contents=batch,
-                config=types.EmbedContentConfig(
-                    output_dimensionality=self.dimension,
-                    task_type=task_type,
-                ),
-            )
+            response = await self._embed_batch_with_retry(batch, task_type, types)
             vectors.extend(_normalize(list(e.values)) for e in response.embeddings)
 
         _assert_dimensions(vectors, self.dimension)
