@@ -244,6 +244,7 @@ class TedAgent(TenderSourceAgent):
         self._cpv_field = settings.ted_cpv_field
         self._window_offset = settings.ted_window_offset_days
         self._divisions_per_query = settings.ted_divisions_per_query
+        self._open_only = settings.ted_open_only
 
     # --- Query ---------------------------------------------------------------
 
@@ -293,6 +294,18 @@ class TedAgent(TenderSourceAgent):
         if self._notice_types:
             kinds = ", ".join(self._notice_types)
             clauses.append(f"notice-type IN ({kinds})")
+
+        if self._open_only:
+            # Both deadline fields, because a restricted procedure carries
+            # only the request-to-participate one until its shortlist exists.
+            clauses.append(
+                "(deadline-receipt-tender-date-lot>=today(0)"
+                " OR deadline-receipt-request-date-lot>=today(0))"
+            )
+            # Sorted by deadline: a run capped by `limit` should keep the
+            # tenders closing soonest, which are the ones a bid team can
+            # still lose by not seeing.
+            return " AND ".join(clauses) + " SORT BY deadline-receipt-tender-date-lot ASC"
 
         newest = self._window_offset
         oldest = self._window_offset + self._lookback_days

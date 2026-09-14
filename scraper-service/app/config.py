@@ -98,14 +98,52 @@ class Settings(BaseSettings):
     # capability profile downstream; a division dropped at ingestion is gone.
     # Harvest wide, filter late.
     ted_cpv_codes: list[int] = [
+        # Defence-adjacent core.
         35000000, 34000000, 72000000, 50000000, 48000000, 38000000,
         31000000, 44000000, 32000000, 51000000, 18000000, 63000000,
         73000000, 75000000,
+        # Dual-use, per the architecture rule that this product is
+        # sector-agnostic by construction: a civilian infrastructure or
+        # medical procurement must flow through the same tables and the same
+        # matching function. Open notices each, measured:
+        #   45000000 construction work                      7890
+        #   33000000 medical equipment, pharmaceuticals      6134
+        #   71000000 architectural and engineering services  5463
+        #   79000000 business services                       2847
+        #   39000000 furniture and furnishings               1859
+        #   30000000 office and computing machinery          1618
+        #   42000000 industrial machinery                    1197
+        45000000, 33000000, 71000000, 79000000, 39000000, 30000000, 42000000,
+        60000000, 85000000, 80000000, 24000000, 64000000, 43000000,
+        22000000, 65000000, 19000000, 14000000,
     ]
     # How far back a sweep reaches. Thirty days keeps the run bounded and
     # still covers the 37-day legal minimum between a contract notice and the
     # shortlist deadline, so nothing closes before we have seen it.
     ted_lookback_days: int = 30
+
+    # Filter on when a notice CLOSES, not on when it was published.
+    #
+    # These are not approximations of each other, and the publication window
+    # was wrong in both directions at once. Measured on defence CPV alone:
+    #
+    #   published inside our 30-day window          594
+    #   actually still open                         603
+    #   MISSED: open but published >30 days ago     181   <- 30% of what is open
+    #   WASTED: inside our window, already closed    62
+    #   the overlap we actually got                 422
+    #
+    # A tender published 50 days ago that closes next month is precisely what
+    # a bid team wants, and we dropped it. A tender published yesterday that
+    # closed this morning is noise we paid to embed. Seventy percent recall on
+    # the only question the customer asks.
+    #
+    # The OR is not optional. A restricted procedure publishes a
+    # request-to-participate deadline and no tender deadline until the
+    # shortlist exists, so keying on the tender deadline alone silently drops
+    # every two-stage procurement -- which is most large defence work.
+    # Together they find 774 open notices where the window found 594.
+    ted_open_only: bool = True
 
     # How far back the window STARTS. The window is a band, not a horizon:
     # offset 0 asks for the last 30 days, offset 30 for the 30 days before

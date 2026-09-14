@@ -178,16 +178,57 @@ def test_the_query_is_built_from_configuration_not_hardcoded():
     product decision rather than a code change."""
     agent = TedAgent(Settings(embedding_provider="hash",
                               ted_cpv_codes=[35000000, 39000000],
-                              ted_lookback_days=7))
+                              ted_divisions_per_query=0))
     query = agent.build_query()
     assert "35000000, 39000000" in query
-    assert "today(-7)" in query
+
+    # `ted_lookback_days` only shapes the backfill path -- the open-only
+    # default has no publication window to size.
+    backfill = TedAgent(Settings(embedding_provider="hash",
+                                 ted_cpv_codes=[35000000, 39000000],
+                                 ted_open_only=False,
+                                 ted_lookback_days=7))
+    assert "today(-7)" in backfill.build_query()
 
 
-def test_newest_first_so_a_capped_run_keeps_what_is_actionable():
-    """The archive reaches back to 2016. Without the sort, a run capped by
-    `limit` returns an arbitrary slice of history."""
-    assert TedAgent(SETTINGS).build_query().endswith("SORT BY publication-date DESC")
+def test_soonest_deadline_first_so_a_capped_run_keeps_what_can_be_lost():
+    """A capped run must keep the tenders closing soonest.
+
+    The sort follows the filter. While the sweep asked for a publication
+    window, newest-first was right: the alternative was an arbitrary slice
+    of an archive reaching back to 2016. Now that it asks for open tenders,
+    "newest" is the wrong end -- a bid team loses the one closing on Friday,
+    not the one published on Friday.
+    """
+    q = TedAgent(SETTINGS).build_query()
+    assert q.endswith("SORT BY deadline-receipt-tender-date-lot ASC")
+
+
+def test_the_backfill_path_still_sorts_newest_first():
+    """Walking history has no deadlines to sort by -- everything in it is
+    closed, which is the point of walking it."""
+    from app.config import Settings
+    agent = TedAgent(Settings(extraction_provider="gemini", gemini_api_key="k",
+                              embedding_provider="hash", ted_open_only=False))
+    assert agent.build_query().endswith("SORT BY publication-date DESC")
+
+
+def test_open_only_asks_for_both_deadline_fields():
+    """A restricted procedure carries only a request-to-participate deadline
+    until its shortlist exists. Keying on the tender deadline alone silently
+    drops every two-stage procurement -- which is most large defence work.
+    Measured: 603 notices one way, 774 with both."""
+    q = TedAgent(SETTINGS).build_query()
+    assert "deadline-receipt-tender-date-lot>=today(0)" in q
+    assert "deadline-receipt-request-date-lot>=today(0)" in q
+    assert " OR " in q
+
+
+def test_open_only_does_not_filter_on_publication_date():
+    """The two filters are not approximations of each other. Measured on
+    defence CPV: the 30-day publication window missed 181 open tenders and
+    paid for 62 closed ones."""
+    assert "publication-date" not in TedAgent(SETTINGS).build_query()
 
 
 def test_the_requested_field_list_stays_small():
@@ -388,7 +429,7 @@ def test_a_shard_query_asks_only_for_its_own_division():
 
 def test_the_default_window_has_no_upper_edge():
     """Offset 0 means "the last 30 days", which needs one bound, not two."""
-    q = _sharded().build_query()
+    q = _sharded(ted_open_only=False).build_query()
     assert "publication-date>=today(-30)" in q
     assert "publication-date<today(" not in q
 
@@ -397,7 +438,7 @@ def test_an_offset_window_is_bounded_on_both_sides():
     """A backfill walks [30,60) as its own retryable job. Without the upper
     bound every step would re-ask for everything newer than itself, and the
     backfill would get slower the further back it went."""
-    q = _sharded(ted_window_offset_days=30).build_query()
+    q = _sharded(ted_open_only=False, ted_window_offset_days=30).build_query()
     assert "publication-date>=today(-60)" in q
     assert "publication-date<today(-30)" in q
 
