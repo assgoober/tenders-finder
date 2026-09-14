@@ -538,6 +538,42 @@ a { color: inherit; }
 .source-pill[data-state="closed"] .source-dot { background: var(--closed); }
 .source-pill[data-state="closed"] .host { color: var(--closed); }
 
+/* The scale strip. Four numbers read out of the database by
+   `npm run stats`, each carrying a data-stat attribute so the refresher has
+   exactly one place to write and the page has exactly one copy to go stale.
+   Hand-typed counts on a landing page are wrong within a week; the only
+   question is whether anybody notices. */
+.scale {
+  list-style: none;
+  margin: 0 0 22px; padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 44px;
+}
+.scale li { display: flex; flex-direction: column; gap: 2px; }
+.scale-num {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.scale-label { color: var(--steel); font-size: .84rem; }
+.scale-note {
+  color: var(--steel);
+  font-size: .8rem;
+  margin: 0 0 22px;
+  max-width: 70ch;
+}
+.scale-note code {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .78rem;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
 /* --- Sections ------------------------------------------------------------ */
 section { padding-block: clamp(60px, 8vw, 100px); }
 .section-head { max-width: 62ch; margin-block-end: 44px; }
@@ -979,7 +1015,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
         </div>
         <p class="hero-note">
           <span class="dot-live" aria-hidden="true"></span>
-          <span>סוכן משרד הביטחון פעיל · המועדים למטה רצים בזמן אמת</span>
+          <span>שני סוכנים פעילים — משרד הביטחון ו‑TED · המועדים למטה רצים בזמן אמת</span>
         </p>
       </div>
 
@@ -999,6 +1035,37 @@ section { padding-block: clamp(60px, 8vw, 100px); }
        cannot read is listed as such, by name: a coverage claim nobody can
        check is worth nothing to a bid team. -->
   <div class="sources">
+    <div class="wrap">
+
+      <!-- Counts, not adjectives. Every number here is written by
+           `npm run stats` straight out of the database, and the date it was
+           measured is printed beside them so a reader can tell how old the
+           claim is instead of having to trust it. -->
+      <ul class="scale" aria-label="היקף הכיסוי">
+        <li>
+          <span class="scale-num mono" data-stat="tenders">792</span>
+          <span class="scale-label">מכרזים באינדקס</span>
+        </li>
+        <li>
+          <span class="scale-num mono" data-stat="live">644</span>
+          <span class="scale-label">פתוחים להגשה עכשיו</span>
+        </li>
+        <li>
+          <span class="scale-num mono" data-stat="countries">31</span>
+          <span class="scale-label">מדינות רוכשות</span>
+        </li>
+        <li>
+          <span class="scale-num mono" data-stat="sources">2</span>
+          <span class="scale-label">פורטלים בסריקה אוטומטית</span>
+        </li>
+      </ul>
+      <p class="scale-note">
+        נמדד מול בסיס הנתונים ב־<time datetime="2026-09-14" data-stat="asof">14.09.2026</time>.
+        המספרים נכתבים על ידי <code dir="ltr">npm run stats</code> ולא בהקלדה —
+        אין עותק שני שיכול להישאר מאחור.
+      </p>
+
+    </div>
     <div class="wrap sources-row">
       <p class="sources-label" id="sources-label">מקורות · מצב גישה</p>
       <ul class="sources-list" aria-labelledby="sources-label">
@@ -1006,6 +1073,11 @@ section { padding-block: clamp(60px, 8vw, 100px); }
           <span class="source-dot" aria-hidden="true"></span>
           <span class="host" dir="ltr">online.mod.gov.il</span>
           <span class="state">סוכן פעיל</span>
+        </li>
+        <li class="source-pill" data-state="live">
+          <span class="source-dot" aria-hidden="true"></span>
+          <span class="host" dir="ltr">ted.europa.eu</span>
+          <span class="state">סוכן פעיל · 30 מדינות</span>
         </li>
         <li class="source-pill" data-state="pending">
           <span class="source-dot" aria-hidden="true"></span>
@@ -1259,21 +1331,24 @@ section { padding-block: clamp(60px, 8vw, 100px); }
       <div class="roadmap">
         <article class="phase" data-state="now">
           <p class="phase-state">פעיל עכשיו</p>
-          <h3>ליבה ומקור ראשון</h3>
+          <h3>ליבה ושני מקורות</h3>
           <ul>
             <li>סוכן רשימת המכרזים של משרד הביטחון — מאומת מול הפורטל החי</li>
+            <li>סוכן TED — ה‑API הרשמי של האיחוד האירופי, 30 מדינות רוכשות</li>
             <li>חילוץ PEGS עם אכיפת סכמה ובדיקה אנושית לכשלים</li>
-            <li>מנוע התאמה היברידי והתראות</li>
+            <li>התאמה סמנטית חוצת‑שפות — פרופיל באנגלית מוצא מכרז ביוונית</li>
+            <li>התראות במייל עם סף זמן הגשה מינימלי לכל פרופיל</li>
             <li>סביבת עבודה מאוחדת עם ניהול מחזור חיי הצעה</li>
           </ul>
         </article>
 
         <article class="phase" data-state="next">
           <p class="phase-state">בדרך</p>
-          <h3>עומק בשוק הישראלי</h3>
+          <h3>עוד פורטלים, בארץ ובעולם</h3>
           <ul>
-            <li>המשרדים האזרחיים — דרך ממשק רשמי, בכפוף לאישור גישה</li>
-            <li>חילוץ מלא ממסמכי מכרז, לא רק מכותרות</li>
+            <li>המשרדים האזרחיים בישראל — דרך ממשק רשמי, בכפוף לאישור גישה</li>
+            <li>פורטלים לאומיים נוספים: בריטניה, ארצות הברית, נאט"ו</li>
+            <li>חילוץ מלא ממסמכי מכרז גם בבל"מ — היום שם יש רק כותרת</li>
             <li>רשויות מקומיות וחברות ממשלתיות</li>
             <li>מסך בדיקה ידנית לרשומות שסומנו</li>
           </ul>
@@ -1281,12 +1356,12 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 
         <article class="phase" data-state="later">
           <p class="phase-state">בהמשך</p>
-          <h3>מעבר לישראל</h3>
+          <h3>מעבר לאגרגציה</h3>
           <ul>
-            <li>מאגרי מכרזים אירופיים ובינלאומיים</li>
-            <li>התאמה חוצת-שווקים לאותו פרופיל חברה</li>
-            <li>ניתוח מגמות רכש לאורך זמן</li>
+            <li>ניתוח מגמות רכש לאורך זמן ועל פני שווקים</li>
             <li>הרחבה מעבר לביטחון — תשתיות, בריאות, אנרגיה</li>
+            <li>זיהוי שותפים לקונסורציום מתוך הזוכים בעבר</li>
+            <li>הערכת סיכוי זכייה מול תנאי הסף של המכרז</li>
           </ul>
         </article>
       </div>

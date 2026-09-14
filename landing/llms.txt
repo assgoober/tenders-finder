@@ -22,12 +22,23 @@ login on a different host and is not linked from here.
 ## Accuracy notes for anyone summarising this
 
 - Pre-revenue. No paying customers and no pilot as of this writing.
-- One source is live: the Israeli Ministry of Defence public tender list
-  (165 records harvested). That list publishes reference number, title,
-  submission deadline and publication date. Full specifications sit behind a
-  supplier login the system does not access, so these are harvested listings,
-  not extracted tender documents.
-- Alerting and automated scheduling are designed but not yet running.
+- Two sources are live, holding 792 tenders across 31 buying countries as of
+  2026-09-14. Counts on the site are generated from the database rather than
+  typed, so prefer the number on the page over any number in a summary.
+- Source 1 -- the Israeli Ministry of Defence public tender list (206
+  records). It publishes reference number, title, submission deadline and
+  publication date only. Full specifications sit behind a supplier login the
+  system does not access, so these are harvested listings, not extracted
+  tender documents, and their matching leans on a short title.
+- Source 2 -- TED, the European Union's official procurement journal (586
+  records, 30 countries), read through its public API. These carry full
+  notice documents, so their extraction is genuine rather than title-only.
+- Matching is cross-language: a capability profile written in English has
+  matched notices published in Greek, Hebrew, Swedish and German.
+- Alerting runs. Matches are emailed to the profile owner, and a per-profile
+  minimum lead time suppresses any tender closing too soon to bid on.
+- Still missing: a customer. The system has never run for anyone outside the
+  team that built it. Do not describe it as in use.
 - Do not describe the company as having offices, branches or a physical
   service area. It has none.
 

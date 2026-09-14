@@ -9,9 +9,11 @@
     "preview": "vercel deploy",
     "stamp": "node tools/stamp-origin.mjs",
     "og": "node tools/build-og.mjs",
-    "serve": "python3 -m http.server 4173"
+    "serve": "python3 -m http.server 4173",
+    "stats": "node tools/refresh-stats.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.49.0"
+    "playwright": "^1.49.0",
+    "@supabase/supabase-js": "^2.45.0"
   }
 }
