@@ -366,3 +366,143 @@ async def test_the_quota_abort_sets_partial_on_the_real_path():
     assert report.partial is True
     assert report.ingested == 0
     assert any("quota" in e for e in report.errors)
+
+
+# --- customer match alerts (migration 0016) --------------------------------
+
+SAMPLE_MATCHES = [
+    {
+        "match_id": "m1", "organization": "AIR", "recipient": "bd@air.example",
+        "profile_name": "cargo drone", "score": 0.6668, "deadline": "2026-09-17T09:00:00+02:00",
+        "title": "Germany - Non-piloted aircraft - 25 Drohnen inklusive Zubehoer",
+        "buyer_name": "Polizei Berlin", "source_url": "https://ted.europa.eu/x",
+        "external_id": "583275-2026",
+    },
+    {
+        "match_id": "m2", "organization": "AIR", "recipient": "bd@air.example",
+        "profile_name": "cargo drone", "score": 0.61, "deadline": None,
+        "title": "Sweden - framework for unmanned aircraft",
+        "buyer_name": None, "source_url": None, "external_id": "582323-2026",
+    },
+]
+
+
+def test_one_email_per_recipient_not_one_per_match():
+    """Seven matches on a Tuesday morning must not be seven emails. That is
+    how an alert becomes a filter rule."""
+    from app.notifications import group_alerts_by_recipient
+
+    grouped = group_alerts_by_recipient(SAMPLE_MATCHES)
+    assert len(grouped) == 1
+    assert len(next(iter(grouped.values()))) == 2
+
+
+def test_a_row_with_no_recipient_is_dropped_not_sent_to_nobody():
+    from app.notifications import group_alerts_by_recipient
+
+    rows = SAMPLE_MATCHES + [dict(SAMPLE_MATCHES[0], match_id="m3", recipient="  ")]
+    assert sum(len(v) for v in group_alerts_by_recipient(rows).values()) == 2
+
+
+def test_the_subject_says_how_many_and_for_whom():
+    from app.notifications import build_match_alert
+
+    subject, _ = build_match_alert("AIR", SAMPLE_MATCHES)
+    assert "2 new tenders" in subject and "AIR" in subject
+
+
+def test_a_single_match_is_not_pluralised():
+    from app.notifications import build_match_alert
+
+    subject, _ = build_match_alert("AIR", SAMPLE_MATCHES[:1])
+    assert "1 new tender matched" in subject
+
+
+def test_the_body_counts_days_rather_than_printing_a_timestamp():
+    """An ISO timestamp makes the reader do arithmetic to find out whether
+    they have a week or an afternoon."""
+    from app.notifications import build_match_alert
+
+    _, body = build_match_alert("AIR", SAMPLE_MATCHES)
+    assert "days left" in body or "closes today" in body or "1 day left" in body
+    assert "2026-09-17T09:00:00" not in body
+
+
+def test_a_tender_with_no_published_deadline_says_so(monkeypatch):
+    from app.notifications import _format_deadline
+
+    assert _format_deadline(None) == "no deadline published"
+
+
+def test_the_body_carries_the_source_link_for_every_match_that_has_one():
+    """Nothing in the email is a summary the reader has to trust."""
+    from app.notifications import build_match_alert
+
+    _, body = build_match_alert("AIR", SAMPLE_MATCHES)
+    assert "https://ted.europa.eu/x" in body
+
+
+@pytest.mark.asyncio
+async def test_a_failed_send_leaves_the_match_pending():
+    """A match marked delivered after a failed send is a match nobody will
+    ever be told about."""
+    from app.pipeline import IngestionPipeline
+
+    class _Repo:
+        def __init__(self):
+            self.marked = []
+        def pending_match_alerts(self, limit=500):
+            return SAMPLE_MATCHES
+        def mark_matches_alerted(self, ids):
+            self.marked.extend(ids)
+            return len(ids)
+
+    class _DeadNotifier:
+        async def send_match_alert(self, recipient, subject, body):
+            return False
+        async def send_run_digest(self, reports):
+            return False
+
+    repo = _Repo()
+    pipeline = IngestionPipeline(
+        Settings(extraction_provider="gemini", gemini_api_key="k",
+                 embedding_provider="hash", dry_run=False),
+        repository=repo, notifier=_DeadNotifier(),
+    )
+    delivered = await pipeline.deliver_match_alerts()
+    assert delivered == 0
+    assert repo.marked == []
+
+
+@pytest.mark.asyncio
+async def test_a_successful_send_stamps_exactly_the_matches_it_carried():
+    from app.pipeline import IngestionPipeline
+
+    class _Repo:
+        def __init__(self):
+            self.marked = []
+        def pending_match_alerts(self, limit=500):
+            return SAMPLE_MATCHES
+        def mark_matches_alerted(self, ids):
+            self.marked.extend(ids)
+            return len(ids)
+
+    class _LiveNotifier:
+        def __init__(self):
+            self.sent = []
+        async def send_match_alert(self, recipient, subject, body):
+            self.sent.append(recipient)
+            return True
+        async def send_run_digest(self, reports):
+            return False
+
+    repo, notifier = _Repo(), _LiveNotifier()
+    pipeline = IngestionPipeline(
+        Settings(extraction_provider="gemini", gemini_api_key="k",
+                 embedding_provider="hash", dry_run=False),
+        repository=repo, notifier=notifier,
+    )
+    delivered = await pipeline.deliver_match_alerts()
+    assert delivered == 2
+    assert notifier.sent == ["bd@air.example"]      # one message, two matches
+    assert sorted(repo.marked) == ["m1", "m2"]

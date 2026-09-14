@@ -145,6 +145,32 @@ class SupabaseRepository:
             page += 1
         return index
 
+    # --- Match alerts -------------------------------------------------------
+
+    def pending_match_alerts(self, limit: int = 500) -> list[dict]:
+        """Undelivered matches, joined to the addresses that should get them.
+
+        Migration 0016. The join reaches auth.users, which no tenant role can
+        read, so this goes through a SECURITY DEFINER function rather than a
+        PostgREST select.
+        """
+        result = self.client.rpc("pending_match_alerts", {"p_limit": limit}).execute()
+        return result.data or []
+
+    def mark_matches_alerted(self, match_ids: list[str]) -> int:
+        """Stamp alerted_at, and only after a send actually succeeded.
+
+        Deliberately a separate call from the read: a function that returned
+        matches and marked them in one statement would mark a match delivered
+        that never left the building.
+        """
+        if not match_ids:
+            return 0
+        result = self.client.rpc(
+            "mark_matches_alerted", {"p_match_ids": match_ids}
+        ).execute()
+        return result.data if isinstance(result.data, int) else 0
+
     def age_tender_status(self) -> dict[str, int]:
         """Re-derive open / closing_soon / closed from each tender's deadline.
 

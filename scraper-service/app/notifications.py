@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
+from datetime import datetime
 from email.message import EmailMessage
 from typing import TYPE_CHECKING, Protocol
 
@@ -134,6 +135,100 @@ def explain_smtp_failure(exc: Exception) -> str:
     return "Unexpected failure; the exception itself is the detail."
 
 
+# --- Customer match alerts --------------------------------------------------
+#
+# The run digest above goes to whoever operates the service: how many tenders
+# were harvested, how many are waiting for a human. This goes to the customer,
+# and it is the only part of the product they ever receive rather than visit.
+
+
+def group_alerts_by_recipient(rows: list[dict]) -> dict[tuple[str, str], list[dict]]:
+    """One message per recipient, not one per match.
+
+    `pending_match_alerts` returns a row per (match, recipient) because the
+    grouping is a presentation decision and the database should not be making
+    it. Sending each row would mean a customer with seven matches gets seven
+    emails on the same morning, which is how an alert becomes a filter rule.
+    """
+    grouped: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        recipient = (row.get("recipient") or "").strip()
+        if not recipient:
+            continue
+        grouped.setdefault((recipient, row.get("organization") or ""), []).append(row)
+    return grouped
+
+
+def _format_deadline(value: str | None) -> str:
+    """Days remaining, because that is the number a bid team acts on.
+
+    An ISO timestamp makes a reader do arithmetic to find out whether they
+    have a week or an afternoon.
+    """
+    if not value:
+        return "no deadline published"
+
+    text = str(value).replace("Z", "+00:00")
+    try:
+        when = datetime.fromisoformat(text)
+    except ValueError:
+        return str(value)
+
+    now = datetime.now(when.tzinfo) if when.tzinfo else datetime.now()
+    days = (when - now).days
+    stamp = when.strftime("%d %b %Y")
+
+    if days < 0:
+        return f"{stamp} (closed)"
+    if days == 0:
+        return f"{stamp} (closes today)"
+    if days == 1:
+        return f"{stamp} (1 day left)"
+    return f"{stamp} ({days} days left)"
+
+
+def build_match_alert(organization: str, matches: list[dict]) -> tuple[str, str]:
+    """Render (subject, body) for one recipient. Pure; the tests read this."""
+    count = len(matches)
+    # Already ordered by deadline in the SQL; relied on rather than re-sorted
+    # so the email and the dashboard cannot disagree about what is urgent.
+    soonest = _format_deadline(matches[0].get("deadline")) if matches else ""
+
+    noun = "tender" if count == 1 else "tenders"
+    subject = f"[Tenders Finder] {count} new {noun} matched {organization}"
+
+    lines = [
+        f"{count} new {noun} matched your capability profile.",
+        "",
+    ]
+
+    for match in matches:
+        title = (match.get("title") or "").strip() or match.get("external_id") or "Untitled"
+        lines.append(title)
+        detail = [f"  deadline: {_format_deadline(match.get('deadline'))}"]
+        if match.get("buyer_name"):
+            detail.append(f"  buyer:    {match['buyer_name']}")
+        detail.append(f"  profile:  {match.get('profile_name', '-')}")
+        # The score is shown, not hidden behind a label like "strong match".
+        # A BD lead who can see the number can calibrate their own trust in it
+        # after a fortnight; one who cannot has to take it or leave it.
+        if match.get("score") is not None:
+            detail.append(f"  score:    {float(match['score']):.2f}")
+        if match.get("source_url"):
+            detail.append(f"  source:   {match['source_url']}")
+        lines.extend(detail)
+        lines.append("")
+
+    lines.append(
+        "Every tender above links to its original notice. Nothing here is a "
+        "summary you have to trust -- open the source and check."
+    )
+    if soonest:
+        lines.append(f"Soonest deadline in this batch: {soonest}.")
+
+    return subject, "\n".join(lines)
+
+
 class EmailNotifier:
     """Sends the digest over SMTP."""
 
@@ -186,6 +281,39 @@ class EmailNotifier:
             return False
 
         logger.info("run digest sent to %s (%s)", self.settings.notify_email, subject)
+        return True
+
+    async def send_match_alert(self, recipient: str, subject: str, body: str) -> bool:
+        """One customer-facing alert. Returns whether it actually went out.
+
+        The caller only stamps `alerted_at` on a True, so a send that could
+        not happen leaves the match pending rather than silently consumed --
+        which is the difference between a customer getting their alert late
+        and never getting it at all.
+        """
+        if not self.settings.has_email_notifications:
+            logger.warning(
+                "email is not configured (set SMTP_HOST); alert for %s not sent\n%s\n%s",
+                recipient, subject, body,
+            )
+            return False
+
+        message = EmailMessage()
+        message["Subject"] = subject
+        message["From"] = self.settings.mail_from
+        message["To"] = recipient
+        message.set_content(body)
+
+        try:
+            await asyncio.to_thread(self._send, message)
+        except Exception as exc:  # noqa: BLE001 - a send must never abort a run
+            logger.error(
+                "failed to send a match alert to %s: %s: %s\n%s",
+                recipient, type(exc).__name__, exc, explain_smtp_failure(exc),
+            )
+            return False
+
+        logger.info("match alert sent to %s (%s)", recipient, subject)
         return True
 
     def _send(self, message: EmailMessage) -> None:

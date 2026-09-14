@@ -9,11 +9,16 @@
  * time. Create users under Authentication → Users in the Supabase dashboard;
  * that path also skips email confirmation, so an account works immediately.
  *
- * There is no sign-up form on purpose. Access to a tender workspace is granted
- * by whoever runs it, not claimed by whoever finds the URL.
+ * Sign-up used to be deliberately absent: access was granted by whoever ran
+ * the workspace, not claimed by whoever found the URL. That held while the
+ * product was operated for one organisation by hand. `/signup` reverses it,
+ * and the organisation is provisioned by a trigger rather than by that page
+ * (migration 0017) -- see the note there for why it cannot be done in the
+ * browser.
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -115,6 +120,13 @@ export default function LoginPage() {
               {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>
+
+          <p className="mt-4 text-sm text-slate-500">
+            No account yet?{" "}
+            <Link href="/signup" className="underline">
+              Create a workspace
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </main>

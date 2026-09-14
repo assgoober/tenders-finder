@@ -24,7 +24,12 @@ from .nlp.extractor import (
     get_extractor,
 )
 from .nlp.prompts import PROMPT_VERSION
-from .notifications import Notifier, get_notifier
+from .notifications import (
+    Notifier,
+    build_match_alert,
+    get_notifier,
+    group_alerts_by_recipient,
+)
 from .storage.supabase_repo import SupabaseRepository
 
 logger = logging.getLogger(__name__)
@@ -136,12 +141,46 @@ class IngestionPipeline:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("could not age tender status: %s", exc)
 
+        # Customer alerts before the operator digest. If only one of the two
+        # can get out, it should be the one a bid team is waiting for.
+        if not self.settings.dry_run:
+            try:
+                delivered = await self.deliver_match_alerts()
+                if delivered:
+                    logger.info("delivered %d match alerts", delivered)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("could not deliver match alerts: %s", exc)
+
         # After every source has finished, so one mail covers the whole run.
         # Never inside the try of a source: a mail failure must not be able to
         # mark a successful scrape as failed.
         await self.notifier.send_run_digest(reports)
 
         return reports
+
+    async def deliver_match_alerts(self, limit: int = 500) -> int:
+        """Send every undelivered match to the people it belongs to.
+
+        Returns the number of matches stamped as delivered -- which is not the
+        number of emails, because one message carries every match for one
+        recipient. A customer with seven matches gets one email, not seven;
+        seven is how an alert becomes a filter rule.
+        """
+        rows = await asyncio.to_thread(self.repository.pending_match_alerts, limit)
+        if not rows:
+            return 0
+
+        delivered = 0
+        for (recipient, organization), matches in group_alerts_by_recipient(rows).items():
+            subject, body = build_match_alert(organization, matches)
+            if not await self.notifier.send_match_alert(recipient, subject, body):
+                # Left pending on purpose. A match marked delivered after a
+                # failed send is a match nobody will ever be told about.
+                continue
+            ids = [m["match_id"] for m in matches]
+            delivered += await asyncio.to_thread(self.repository.mark_matches_alerted, ids)
+
+        return delivered
 
     async def run_source(self, agent: TenderSourceAgent, *, limit: int = 25) -> IngestReport:
         report = IngestReport(source_key=agent.key)
