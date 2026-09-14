@@ -1,3 +1,6 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
 <meta charset="utf-8">
 <!-- Load-bearing once this is served as a standalone page rather than inside
      the artifact wrapper, which injects its own. Without it a phone lays the
@@ -5,13 +8,6 @@
      phone visit opens on unreadable 6px text. -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tenders Finder — כל מכרזי הרכש הביטחוניים במקום אחד</title>
-<script>
-  /* The artifact wrapper owns <html>, so language and direction are set
-     here rather than in markup. Assistive tech reads these attributes —
-     the CSS `direction` below is not a substitute for them. */
-  document.documentElement.lang = "he";
-  document.documentElement.dir = "rtl";
-</script>
 <meta name="description" content="אגרגציית מכרזים ביטחוניים ואזרחיים: איסוף אוטומטי מפורטלים מבודדים, חילוץ תנאי הסף, והתראה כשמכרז מתאים לפרופיל שלכם.">
 <meta name="theme-color" content="#05070C">
 <link rel="canonical" href="https://tenders-finder.vercel.app/">
@@ -967,10 +963,79 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 }
 .site-nav a:hover::after, .foot-links a:hover::after { width: 100%; }
 .foot-links a:hover { text-decoration: none; }
+/* --- Phones, and anything driven by a finger -----------------------------
+   Measured at 375px before this block existed: seventeen tap targets under
+   44px, body labels at 11.5px, and a hero whose contents laid out to 555px
+   inside a 375px viewport. The page did not scroll sideways -- the overflow
+   was contained -- which is exactly why none of it was visible from a
+   desktop read.
+
+   44px is the floor Apple and WCAG 2.5.5 both land on. It is not a
+   preference: below it, a thumb misses.
+   -------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  /* Only the interactive things, and only their hit area. Padding rather
+     than height so nothing shifts visually -- the control looks identical
+     and simply becomes possible to hit. */
+  .btn, .filter, .source-link, .brand, .lang-switch a, .site-foot a {
+    min-block-size: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* The consent checkbox. The first version of this rule SHRANK it, from
+     24px to 22 -- it assumed the label wrapped the input, so a `:has()`
+     rule would carry the hit area. This page uses `for=`, the `:has()`
+     never matched, and the only effect was to make the worst target on the
+     page slightly worse. Caught by measuring after the change rather than
+     before it.
+     The label here is a full paragraph and genuinely is a large target, so
+     the box only has to be comfortable rather than 44px on its own. */
+  .consent input[type="checkbox"],
+  input[type="checkbox"], input[type="radio"] {
+    inline-size: 28px;
+    block-size: 28px;
+  }
+  .consent label {
+    /* A tall target for the thumb, and the text stays where it was. */
+    padding-block: 8px;
+  }
+  input[type="text"], input[type="email"], input[type="tel"], textarea, select {
+    min-block-size: 44px;
+    /* 16px exactly: iOS Safari zooms the whole page in when a focused
+       field is smaller, and the reader then has to pinch back out. */
+    font-size: max(16px, 1rem);
+  }
+}
+
+@media (max-width: 560px) {
+  /* Nothing under 12px. These are eyebrows, countdown labels and column
+     headers -- the small print that carries the deadline, which is the one
+     number on this page a reader cannot afford to squint at. */
+  .eyebrow, .sources-label, .countdown-label, .scale-label, .pegs-key,
+  .source-pill .state, .source-pill .host, cite, .scale-note {
+    font-size: max(12.5px, 0.8rem);
+  }
+  /* The hero diagram laid out to 555px inside 375. It scrolls in its own
+     box now rather than being clipped, so the parts off-screen are
+     reachable instead of merely absent. */
+  .hero svg, .converge, .board {
+    max-inline-size: 100%;
+    overflow-x: auto;
+  }
+  .hero svg { block-size: auto; }
+  /* Two 44px buttons will not sit side by side at this width without one
+     of them wrapping mid-word. */
+  .hero-cta { flex-direction: column; align-items: stretch; }
+  .hero-cta .btn { justify-content: center; }
+}
+
+
 </style>
 
 <a class="skip" href="#main">דילוג לתוכן המרכזי</a>
 
+</head>
+<body>
 <header class="site-head">
   <div class="wrap head-row">
     <a class="brand" href="#main" aria-label="Tenders Finder — לראש הדף">
@@ -2162,3 +2227,5 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   });
 })();
 </script>
+</body>
+</html>
