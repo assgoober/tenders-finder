@@ -94,8 +94,23 @@ grant  execute on function public.skip_late_matches() to service_role;
 -- pending_match_alerts: honour the lead time, and hand the renderer the
 -- number of days so the email can say how tight a tender is rather than
 -- leaving the reader to work it out.
+--
+-- Dropped and recreated rather than replaced. `create or replace` cannot
+-- change a function's return type, and adding `lead_days` to the returned
+-- row changes it:
+--
+--   ERROR 42P13: cannot change return type of existing function
+--   DETAIL: Row type defined by OUT parameters is different.
+--
+-- The first attempt at this migration failed on exactly that and rolled the
+-- whole file back -- loudly, and with nothing half-applied, which is the
+-- opposite of most of the defects recorded in REPOMIX. The drop takes the
+-- grants with it, which is why 0016's revokes and grant are restated below
+-- rather than assumed to have survived.
 -- ---------------------------------------------------------------------------
-create or replace function public.pending_match_alerts(p_limit integer default 500)
+drop function if exists public.pending_match_alerts(integer);
+
+create function public.pending_match_alerts(p_limit integer default 500)
 returns table (
   match_id        uuid,
   organization_id uuid,
