@@ -227,6 +227,31 @@ class Settings(BaseSettings):
     # requests.
     embed_batch_size: int = 96
 
+    # Tokens per minute the embedding model allows. This -- not the request
+    # count -- is what actually bounds a wide sweep, and it was invisible
+    # until the account's rate-limit dashboard was read:
+    #
+    #   Gemini Embedding 1   RPM 106/100   TPM 37.57K/30K   RPD 965/1K
+    #
+    # Measured over 1,001 real listing rows: 792 characters each, about 198
+    # tokens. So 30,000 TPM / 198 = roughly 150 tenders per minute, and that
+    # ceiling does not move with batch size -- 48 per request at 3.2
+    # requests/min and 96 at 1.6 deliver the same 151 tenders. Batching buys
+    # request headroom (402 requests for 38,500 tenders, against 1,000/day);
+    # it does not buy throughput. 38,500 tenders is about four hours of
+    # wall clock, and a sweep that does not know this simply hits 429 in its
+    # first minute and spends the rest of the run waiting.
+    #
+    # Set a little under the stated ceiling: the token count here is an
+    # estimate from characters, and being wrong upward costs a 429.
+    embed_tokens_per_minute: int = 27000
+
+    # Ceiling on one request's tokens. The batch is cut by whichever comes
+    # first, this or `embed_batch_size`, because the two are not equivalent:
+    # the p95 listing is 2,590 characters, and 96 of those is 62,000 tokens
+    # -- twice the entire minute's budget, in a single request.
+    embed_max_tokens_per_request: int = 18000
+
     # --- Find a Tender (UK) ---
     # The API filters on update time only, so the window is how far back a
     # sweep looks for notices that were touched -- not how far back their

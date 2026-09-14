@@ -132,6 +132,10 @@ class GeminiEmbeddingProvider:
         self._client = client
         self.model_name = settings.gemini_embedding_model
         self.dimension = settings.embedding_dim
+        self._tpm = settings.embed_tokens_per_minute
+        self._max_request_tokens = settings.embed_max_tokens_per_request
+        #: (monotonic timestamp, tokens) for requests inside the last minute.
+        self._spent: list[tuple[float, int]] = []
 
     @property
     def client(self):
@@ -166,6 +170,53 @@ class GeminiEmbeddingProvider:
     #: regardless of what the message says: a limit that has not cleared in
     #: five minutes is not a per-minute limit. Stop, and say so.
     QUOTA_WAIT_BUDGET_SECONDS = 300.0
+
+    def _chunks(self, texts: list[str]):
+        """Cut the work by tokens as well as by count.
+
+        The two are not interchangeable. `MAX_BATCH` is 96 and the average
+        listing is 198 tokens, so a typical batch is 19,000 tokens -- fine.
+        But the p95 listing is 648 tokens, and 96 of those is 62,000 in a
+        single request: twice the whole minute's allowance, spent at once,
+        for a batch that looks identical from the outside.
+        """
+        batch: list[str] = []
+        tokens = 0
+        for text in texts:
+            cost = estimate_tokens([text])
+            too_many = len(batch) >= self.MAX_BATCH
+            too_big = batch and tokens + cost > self._max_request_tokens
+            if too_many or too_big:
+                yield batch
+                batch, tokens = [], 0
+            batch.append(text)
+            tokens += cost
+        if batch:
+            yield batch
+
+    async def _wait_for_token_budget(self, tokens: int) -> None:
+        """Hold until this request fits inside the last minute's allowance.
+
+        A sliding window rather than a fixed one: the limit is "per minute"
+        as measured by the server at the moment it is asked, not as measured
+        from whenever our run happened to start.
+
+        This is deliberately a wait we take rather than a 429 we absorb. The
+        retry path exists for the times the estimate is wrong; arriving at
+        the limit on purpose and apologising afterwards is not a plan.
+        """
+        import asyncio, time
+
+        while True:
+            now = time.monotonic()
+            self._spent = [(t, n) for t, n in self._spent if now - t < 60.0]
+            used = sum(n for _, n in self._spent)
+            if used + tokens <= self._tpm or not self._spent:
+                self._spent.append((now, tokens))
+                return
+            # Sleep until the oldest entry leaves the window.
+            oldest = min(t for t, _ in self._spent)
+            await asyncio.sleep(max(0.5, 60.0 - (now - oldest)))
 
     @staticmethod
     def _stated_retry_delay(message: str) -> float | None:
@@ -267,8 +318,8 @@ class GeminiEmbeddingProvider:
         task_type = "RETRIEVAL_QUERY" if input_type == "query" else "RETRIEVAL_DOCUMENT"
 
         vectors: list[list[float]] = []
-        for start in range(0, len(texts), self.MAX_BATCH):
-            batch = texts[start : start + self.MAX_BATCH]
+        for batch in self._chunks(texts):
+            await self._wait_for_token_budget(estimate_tokens(batch))
             response = await self._embed_batch_with_retry(batch, task_type, types)
             returned = list(response.embeddings)
             # Per BATCH, not only at the end: a provider that collapses ten
@@ -330,6 +381,24 @@ def _normalize(vector: list[float]) -> list[float]:
     if norm == 0:
         return vector
     return [x / norm for x in vector]
+
+
+def estimate_tokens(texts: list[str]) -> int:
+    """Rough token count for a batch, from characters.
+
+    Four characters per token is the usual English approximation and it is
+    wrong in the safe direction here for the wrong reason: these listings are
+    largely not English. Greek, Hebrew and Bulgarian tokenize to MORE tokens
+    per character, not fewer, so a pure /4 estimate runs light exactly where
+    the corpus is most multilingual -- which is the whole point of the
+    corpus. The floor of one token per three characters covers that.
+
+    Deliberately local arithmetic rather than the API's countTokens: that
+    endpoint has a quota of its own, and spending quota to find out how much
+    quota a call will spend is not a saving.
+    """
+    chars = sum(len(t) for t in texts)
+    return max(1, chars // 3)
 
 
 def _assert_dimensions(vectors: list[list[float]], expected: int) -> None:
