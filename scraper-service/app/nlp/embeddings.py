@@ -150,6 +150,22 @@ class GeminiEmbeddingProvider:
     RATE_LIMIT_WAIT_SECONDS = 62.0
     RATE_LIMIT_RETRIES = 6
 
+    #: Total seconds a single embed() call may spend waiting on quota before
+    #: it gives up on the whole run.
+    #:
+    #: The per-message branch below cannot be trusted on its own. The API
+    #: names the quota it enforced only sometimes: the detailed body says
+    #: `quotaId: EmbedContentRequestsPerDayPerUserPerProjectPerModel-FreeTier`,
+    #: and the generic one says "You exceeded your current quota" and nothing
+    #: else. A daily cap arriving in the generic dress is indistinguishable
+    #: from a per-minute one, and a sweep spent fifteen waits of sixty-two
+    #: seconds against a wall that was never going to fall that day.
+    #:
+    #: So the budget is the backstop, and it rests on something that is true
+    #: regardless of what the message says: a limit that has not cleared in
+    #: five minutes is not a per-minute limit. Stop, and say so.
+    QUOTA_WAIT_BUDGET_SECONDS = 300.0
+
     @staticmethod
     def _stated_retry_delay(message: str) -> float | None:
         """Seconds the API asked for, read out of its own message.
@@ -183,6 +199,7 @@ class GeminiEmbeddingProvider:
         import asyncio
 
         last: Exception | None = None
+        waited = 0.0
         for attempt in range(1, self.RATE_LIMIT_RETRIES + 1):
             try:
                 return await self.client.aio.models.embed_content(
@@ -220,12 +237,22 @@ class GeminiEmbeddingProvider:
                 wait = self._stated_retry_delay(message)
                 if wait is None:
                     wait = self.RATE_LIMIT_WAIT_SECONDS
+
+                if waited + wait > self.QUOTA_WAIT_BUDGET_SECONDS:
+                    logger.error(
+                        "embedding quota has not cleared in %.0fs; this is a "
+                        "daily cap, not a rate limit -- stopping rather than "
+                        "waiting out the day",
+                        waited,
+                    )
+                    raise
                 logger.warning(
                     "embedding quota (attempt %d/%d); waiting %.0fs%s",
                     attempt, self.RATE_LIMIT_RETRIES, wait,
                     " (server-stated)" if self._stated_retry_delay(message) else "",
                 )
                 await asyncio.sleep(wait)
+                waited += wait
         raise last  # unreachable; kept so the contract is explicit
 
     async def embed(

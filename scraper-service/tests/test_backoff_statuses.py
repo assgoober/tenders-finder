@@ -425,3 +425,62 @@ async def test_the_daily_cap_named_in_a_real_body_is_not_waited_out():
     with pytest.raises(RuntimeError, match="PerDay"):
         await provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types)
     assert len(calls) == 1, "a daily cap was retried as if it were a rate"
+
+
+@pytest.mark.asyncio
+async def test_a_quota_that_never_clears_stops_instead_of_waiting_out_the_day():
+    """The backstop for a message that will not say what it is.
+
+    The API names its quota only sometimes. A daily cap wearing the generic
+    "You exceeded your current quota" is indistinguishable from a per-minute
+    one, and a sweep spent fifteen waits of sixty-two seconds against a wall
+    that was not going to fall that day -- writing nothing at all.
+
+    This rests on something true regardless of the wording: a limit that has
+    not cleared in five minutes is not a per-minute limit.
+    """
+    from app.nlp.embeddings import GeminiEmbeddingProvider
+
+    provider = GeminiEmbeddingProvider.__new__(GeminiEmbeddingProvider)
+    provider.model_name = "gemini-embedding-001"
+    provider.dimension = 1024
+    provider.RATE_LIMIT_WAIT_SECONDS = 62.0
+    provider.RATE_LIMIT_RETRIES = 50          # generous on purpose
+    provider.QUOTA_WAIT_BUDGET_SECONDS = 300.0
+
+    slept = []
+    calls = []
+
+    class _Models:
+        async def embed_content(self, **kw):
+            calls.append(1)
+            raise RuntimeError("429 RESOURCE_EXHAUSTED. You exceeded your current quota.")
+
+    class _Aio:
+        models = _Models()
+
+    class _Client:
+        aio = _Aio()
+
+    provider._client = _Client()
+
+    class _Types:
+        @staticmethod
+        def EmbedContentConfig(**kw):
+            return kw
+
+    import app.nlp.embeddings as mod
+
+    async def _sleep(seconds):
+        slept.append(seconds)
+
+    real = __import__("asyncio").sleep
+    __import__("asyncio").sleep = _sleep
+    try:
+        with pytest.raises(RuntimeError):
+            await provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types)
+    finally:
+        __import__("asyncio").sleep = real
+
+    assert sum(slept) <= 300.0, f"waited {sum(slept)}s against a daily cap"
+    assert len(calls) < 10, f"{len(calls)} attempts despite a five-minute budget"
