@@ -11,6 +11,16 @@
 <meta name="description" content="אגרגציית מכרזים ביטחוניים ואזרחיים: איסוף אוטומטי מפורטלים מבודדים, חילוץ תנאי הסף, והתראה כשמכרז מתאים לפרופיל שלכם.">
 <meta name="theme-color" content="#05070C">
 <link rel="canonical" href="https://tenders-finder.vercel.app/">
+<!-- Two languages, two URLs. Google treats untagged translations as
+     duplicates and silently picks one; hreflang says they are the same page
+     for different readers. x-default is the Hebrew page because the product
+     is sold in Israel first -- a business answer, not a technical one.
+     No trailing slash: vercel.json sets trailingSlash:false, so /en/ would
+     308 to /en, and an hreflang pointing at a redirect is a soft error
+     nobody sees until the English page fails to rank. -->
+<link rel="alternate" hreflang="he" href="https://tenders-finder.vercel.app/">
+<link rel="alternate" hreflang="en" href="https://tenders-finder.vercel.app/en">
+<link rel="alternate" hreflang="x-default" href="https://tenders-finder.vercel.app/">
 <meta name="robots" content="index, follow, max-image-preview:large">
 
 <!-- Sharing card. This page's job is to be sent to someone — in WhatsApp, in
@@ -194,9 +204,13 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 html {
-  /* Set in markup by the script above too; kept here so the very first
-     paint is already RTL and the page never flashes left-aligned. */
-  direction: rtl;
+  /* No `direction` here on purpose. It used to be hardcoded to rtl, because
+     `dir` was assigned by JavaScript and the page would otherwise flash
+     left-aligned before the script ran. `dir` is in the markup now, so it
+     applies on the first paint by itself -- and the CSS rule, having become
+     redundant, was actively wrong: it overrode `dir="ltr"` on the English
+     page and rendered English right-aligned, with the full stops at the
+     start of every line. */
   scroll-behavior: smooth;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -245,8 +259,13 @@ a { color: inherit; }
 
 .skip {
   position: absolute;
-  inset-inline-start: 50%;
-  transform: translate(50%, -140%);
+  /* Physical `left`, not `inset-inline-start`, and a negative translate.
+     The logical pair centred the link in RTL and pushed it off the right
+     edge in LTR -- a transform is not direction-aware, so the two have to
+     agree by hand. Off-screen is fine; off-screen while widening the
+     document is a horizontal scrollbar on every English page. */
+  left: 50%;
+  transform: translate(-50%, -140%);
   background: var(--blue-solid);
   color: #fff;
   padding: 12px 22px;
@@ -255,7 +274,7 @@ a { color: inherit; }
   border-radius: 0 0 10px 10px;
   transition: transform .18s ease;
 }
-.skip:focus { transform: translate(50%, 0); }
+.skip:focus { transform: translate(-50%, 0); }
 
 .wrap { width: min(1180px, 100% - 40px); margin-inline: auto; }
 
@@ -1030,6 +1049,52 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 }
 
 
+/* The language switcher. Deliberately quiet -- it is wayfinding, not a call
+   to action, and a loud one would compete with the only button in the header
+   that matters. The current language carries `aria-current` and the filled
+   state, so the control says where you ARE and not only where you can go. */
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.lang-switch a {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: .74rem;
+  letter-spacing: .06em;
+  padding: 6px 10px;
+  color: var(--steel);
+  text-decoration: none;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  transition: background-color .15s, color .15s;
+}
+.lang-switch a + a { border-inline-start: 1px solid var(--line); }
+.lang-switch a:hover { background: var(--blue-soft); color: var(--blue); }
+.lang-switch a[aria-current] {
+  background: var(--blue-solid);
+  color: #fff;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  /* The switcher is the one control that must survive a narrow header: a
+     reader who cannot read the page needs the way out more than the nav. */
+  .site-nav { display: none; }
+}
+@media (max-width: 520px) {
+  /* At this width the header carries a mark, a wordmark, a language
+     switcher, a theme toggle and a call to action. Something has to go, and
+     the wordmark is the one thing the logo already says. */
+  .head-row { gap: 12px; }
+  .brand-name { display: none; }
+  .site-head .btn-primary { padding-inline: 14px; white-space: nowrap; }
+}
+
+
 </style>
 
 <a class="skip" href="#main">דילוג לתוכן המרכזי</a>
@@ -1050,6 +1115,16 @@ section { padding-block: clamp(60px, 8vw, 100px); }
       <a href="#demo">דמו חי</a>
       <a href="#roadmap">מפת דרכים</a>
       <a href="#faq">שאלות</a>
+    </nav>
+
+    <!-- A real link to a real URL, not a script that swaps text in place.
+         A toggle that leaves the address bar unchanged reads as a widget;
+         changing the URL is what makes it read as a second edition of the
+         site. It also means the English page can be linked, bookmarked and
+         indexed, which a JS toggle cannot offer. -->
+    <nav class="lang-switch" aria-label="שפה">
+      <a href="/" hreflang="he" lang="he" aria-current="true">עב</a>
+      <a href="/en" hreflang="en" lang="en">EN</a>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="החלפת ערכת צבעים">

@@ -10,7 +10,9 @@
     "stamp": "node tools/stamp-origin.mjs",
     "og": "node tools/build-og.mjs",
     "serve": "python3 -m http.server 4173",
-    "stats": "node tools/refresh-stats.mjs"
+    "stats": "node tools/refresh-stats.mjs",
+    "build:en": "node tools/build-en.mjs",
+    "check:en": "node tools/build-en.mjs --check"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.45.0",
