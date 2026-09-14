@@ -484,3 +484,38 @@ async def test_a_quota_that_never_clears_stops_instead_of_waiting_out_the_day():
 
     assert sum(slept) <= 300.0, f"waited {sum(slept)}s against a daily cap"
     assert len(calls) < 10, f"{len(calls)} attempts despite a five-minute budget"
+
+
+# --- one vector per text, or nothing ---------------------------------------
+
+def test_a_provider_that_collapses_a_batch_is_refused():
+    """Found by trying `gemini-embedding-2`, which has an untouched daily
+    budget and looked like the way out of an exhausted one.
+
+    It accepts a list of ten texts and returns ONE vector. No error, correct
+    dimensions -- so the dimension check passed it. The caller then does
+    `zip(stubs, texts, vectors)`, and zip stops at the shortest: ninety-five
+    tenders dropped without a counter disagreeing, and the survivor carrying
+    a vector computed from all ninety-six texts at once.
+
+    A corpus that looks full and matches wrongly is the worst outcome
+    available here. Dimensions were checked because they are easy to check.
+    """
+    from app.nlp.embeddings import _assert_one_vector_per_text
+
+    with pytest.raises(ValueError, match="returned 1 embeddings for 10 texts"):
+        _assert_one_vector_per_text([[0.0] * 1024], ["t"] * 10, "gemini-embedding-2")
+
+
+def test_matching_counts_pass():
+    from app.nlp.embeddings import _assert_one_vector_per_text
+
+    _assert_one_vector_per_text([[0.0], [0.1], [0.2]], ["a", "b", "c"], "m")
+
+
+def test_the_dimension_check_alone_would_have_let_it_through():
+    """The point of the test above, stated as the gap it closes."""
+    from app.nlp.embeddings import _assert_dimensions
+
+    # One perfectly-shaped vector, ten texts. Silent under the old check.
+    _assert_dimensions([[0.0] * 1024], 1024)

@@ -80,6 +80,7 @@ class VoyageEmbeddingProvider:
                 ordered = sorted(payload["data"], key=lambda d: d["index"])
                 vectors.extend(item["embedding"] for item in ordered)
 
+        _assert_one_vector_per_text(vectors, texts, self.model_name)
         _assert_dimensions(vectors, self.dimension)
         return vectors
 
@@ -269,8 +270,14 @@ class GeminiEmbeddingProvider:
         for start in range(0, len(texts), self.MAX_BATCH):
             batch = texts[start : start + self.MAX_BATCH]
             response = await self._embed_batch_with_retry(batch, task_type, types)
-            vectors.extend(_normalize(list(e.values)) for e in response.embeddings)
+            returned = list(response.embeddings)
+            # Per BATCH, not only at the end: a provider that collapses ten
+            # inputs into one would otherwise be caught only after the whole
+            # call, with no way to say which batch went wrong.
+            _assert_one_vector_per_text(returned, batch, self.model_name)
+            vectors.extend(_normalize(list(e.values)) for e in returned)
 
+        _assert_one_vector_per_text(vectors, texts, self.model_name)
         _assert_dimensions(vectors, self.dimension)
         return vectors
 
@@ -333,6 +340,31 @@ def _assert_dimensions(vectors: list[list[float]], expected: int) -> None:
                 f"but the schema declares vector({expected}). "
                 "Changing provider requires a migration and a full re-embedding."
             )
+
+
+def _assert_one_vector_per_text(vectors: list, texts: list, model: str) -> None:
+    """As many vectors back as texts sent, in the same order.
+
+    This checked nothing until a model was found that violates it.
+    `gemini-embedding-2` accepts a list of ten texts and returns ONE vector,
+    with no error and correct dimensions -- so `_assert_dimensions` passed it
+    happily. The caller then does `zip(stubs, texts, vectors)`, and zip stops
+    at the shortest: ninety-five tenders would be dropped without a single
+    counter disagreeing, and the one that survived could be carrying a vector
+    computed from all ninety-six texts at once.
+
+    A batch endpoint that quietly returns fewer results than it was given is
+    the worst shape a bug can take here, because the corpus would look full
+    and match wrongly. Dimensions were being checked because they are easy to
+    check; this is the invariant that actually matters.
+    """
+    if len(vectors) != len(texts):
+        raise ValueError(
+            f"{model} returned {len(vectors)} embeddings for {len(texts)} "
+            "texts. A provider that does not return one vector per input "
+            "cannot be batched: the vectors would be silently misaligned "
+            "with the rows they are written to."
+        )
 
 
 def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvider:
