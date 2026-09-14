@@ -150,6 +150,28 @@ class GeminiEmbeddingProvider:
     RATE_LIMIT_WAIT_SECONDS = 62.0
     RATE_LIMIT_RETRIES = 6
 
+    @staticmethod
+    def _stated_retry_delay(message: str) -> float | None:
+        """Seconds the API asked for, read out of its own message.
+
+        It says so in two places and neither is a header:
+        `"Please retry in 12.034577317s"` in the prose, and `retryDelay` in
+        the structured detail block. Reading it is the difference between
+        waiting twelve seconds and waiting a minute -- and, when the real
+        wait is longer, between one honest failure and six scheduled ones.
+        """
+        import re
+
+        for pattern in (r"retry in ([0-9.]+)s", r"retryDelay['\"]?[:=]\s*['\"]?([0-9.]+)"):
+            found = re.search(pattern, message)
+            if not found:
+                continue
+            try:
+                return max(1.0, min(float(found.group(1)), 120.0))
+            except ValueError:
+                continue
+        return None
+
     async def _embed_batch_with_retry(self, batch, task_type, types):
         """One batch, waiting out a per-minute cap rather than dying on it.
 
@@ -191,11 +213,19 @@ class GeminiEmbeddingProvider:
                 if not retryable or attempt == self.RATE_LIMIT_RETRIES:
                     raise
                 last = exc
+                # The server states how long it wants: "Please retry in
+                # 12.034577317s". Believing it beats a fixed minute in both
+                # directions -- it is usually shorter, and when it is longer
+                # a fixed minute just fails again on schedule.
+                wait = self._stated_retry_delay(message)
+                if wait is None:
+                    wait = self.RATE_LIMIT_WAIT_SECONDS
                 logger.warning(
-                    "embedding rate limit (attempt %d/%d); waiting %.0fs",
-                    attempt, self.RATE_LIMIT_RETRIES, self.RATE_LIMIT_WAIT_SECONDS,
+                    "embedding quota (attempt %d/%d); waiting %.0fs%s",
+                    attempt, self.RATE_LIMIT_RETRIES, wait,
+                    " (server-stated)" if self._stated_retry_delay(message) else "",
                 )
-                await asyncio.sleep(self.RATE_LIMIT_WAIT_SECONDS)
+                await asyncio.sleep(wait)
         raise last  # unreachable; kept so the contract is explicit
 
     async def embed(

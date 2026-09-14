@@ -346,3 +346,82 @@ async def test_the_generic_quota_message_is_also_waited_out():
     result = await provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types)
     assert result == "embeddings"
     assert len(calls) == 2, "the generic quota message was not retried"
+
+
+def test_the_stated_retry_delay_is_read_from_the_message():
+    """The API says how long it wants, twice, and neither is a header.
+
+    Real body from a live sweep:
+        "... Please retry in 12.034577317s."
+    plus `retryDelay` in the structured detail block.
+    """
+    from app.nlp.embeddings import GeminiEmbeddingProvider as G
+
+    assert G._stated_retry_delay("Please retry in 12.034577317s.") == 12.034577317
+    assert G._stated_retry_delay("{'retryDelay': '38s'}") == 38.0
+    assert G._stated_retry_delay("You exceeded your current quota") is None
+
+
+def test_an_absurd_stated_delay_is_capped():
+    from app.nlp.embeddings import GeminiEmbeddingProvider as G
+
+    assert G._stated_retry_delay("Please retry in 86400s.") == 120.0
+
+
+def test_a_sub_second_stated_delay_still_waits_a_second():
+    """A quota answered in 80ms is the request that caused it."""
+    from app.nlp.embeddings import GeminiEmbeddingProvider as G
+
+    assert G._stated_retry_delay("Please retry in 0.2s") == 1.0
+
+
+@pytest.mark.asyncio
+async def test_the_daily_cap_named_in_a_real_body_is_not_waited_out():
+    """The body that ended the third sweep, pasted rather than imagined:
+
+      Quota exceeded for metric:
+      generativelanguage.googleapis.com/embed_content_free_tier_requests,
+      limit: 1000
+      quotaId: EmbedContentRequestsPerDayPerUserPerProject
+
+    One thousand embedding REQUESTS per day. Two unbatched sweeps spent
+    213 and 788 of them -- 1,001 against a limit of 1,000, to the request --
+    so the batched sweep that followed had nothing left to spend and
+    embedded nothing at all. Waiting six minutes for a day to end is not a
+    retry strategy.
+    """
+    from app.nlp.embeddings import GeminiEmbeddingProvider
+
+    provider = GeminiEmbeddingProvider.__new__(GeminiEmbeddingProvider)
+    provider.model_name = "gemini-embedding-001"
+    provider.dimension = 1024
+    provider.RATE_LIMIT_WAIT_SECONDS = 0.001
+
+    REAL = ("429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
+            "generativelanguage.googleapis.com/embed_content_free_tier_requests, "
+            "limit: 1000. Please retry in 12.03s. "
+            "quotaId: EmbedContentRequestsPerDayPerUserPerProject")
+
+    calls = []
+
+    class _Models:
+        async def embed_content(self, **kw):
+            calls.append(1)
+            raise RuntimeError(REAL)
+
+    class _Aio:
+        models = _Models()
+
+    class _Client:
+        aio = _Aio()
+
+    provider._client = _Client()
+
+    class _Types:
+        @staticmethod
+        def EmbedContentConfig(**kw):
+            return kw
+
+    with pytest.raises(RuntimeError, match="PerDay"):
+        await provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types)
+    assert len(calls) == 1, "a daily cap was retried as if it were a rate"
