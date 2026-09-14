@@ -359,8 +359,13 @@ async def test_the_quota_abort_sets_partial_on_the_real_path():
             raise ExtractionQuotaExhausted("per-day request quota is exhausted")
 
     pipeline = _Blown(
+        # Pinned to the extraction path on purpose. The quota abort is a
+        # property of extracting, and since listing-first ingestion became
+        # the default a sweep makes no model calls at all -- so this test
+        # would pass for the wrong reason if it took the default.
         Settings(extraction_provider="gemini", gemini_api_key="k",
-                 embedding_provider="hash", dry_run=True),
+                 embedding_provider="hash", dry_run=True,
+                 extract_on_ingest=True),
     )
     report = await pipeline.run_source(_QuotaAgent(), limit=3)
     assert report.partial is True

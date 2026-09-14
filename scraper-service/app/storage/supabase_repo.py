@@ -157,6 +157,18 @@ class SupabaseRepository:
         result = self.client.rpc("pending_match_alerts", {"p_limit": limit}).execute()
         return result.data or []
 
+    def tenders_awaiting_extraction(self, limit: int = 100) -> list[dict]:
+        """The matched-but-unread queue (migration 0019).
+
+        A SECURITY DEFINER function rather than a PostgREST select because it
+        joins across tenants: it answers "which tenders did *anybody* match",
+        which no single organisation is allowed to ask.
+        """
+        result = self.client.rpc(
+            "tenders_awaiting_extraction", {"p_limit": limit}
+        ).execute()
+        return result.data or []
+
     def mark_matches_alerted(self, match_ids: list[str]) -> int:
         """Stamp alerted_at, and only after a send actually succeeded.
 

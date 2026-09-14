@@ -43,6 +43,45 @@ class TenderStub:
     # Anything the listing page exposed that the detail page might not.
     listing_metadata: dict = field(default_factory=dict)
 
+    def listing_text(self) -> str:
+        """What the buyer published, in the buyer's own words.
+
+        This is what a tender is embedded from before anyone has paid to
+        extract it. It is not a summary and not a model's reading of one --
+        it is the notice's own title and description, which is why it can be
+        trusted into the matching corpus without a validation ladder in
+        front of it.
+
+        Quality varies by portal and that variance is the point: TED
+        listings carry a real description, so their vectors are rich. The
+        Israeli MoD list publishes a 27-character title and nothing else, so
+        its vectors are thin -- exactly as thin as they already were, since
+        that portal never had a document to extract in the first place.
+        Nothing here makes any tender worse than it is today.
+        """
+        meta = self.listing_metadata or {}
+        parts: list[str] = [self.title]
+
+        for key in ("description", "scope", "summary", "listing_title"):
+            value = meta.get(key)
+            # `listing_title` repeats `title` on most portals; keeping it
+            # twice would weight the title against the description rather
+            # than adding anything.
+            if isinstance(value, str) and value.strip() and value.strip() != self.title.strip():
+                parts.append(value.strip())
+
+        if self.buyer_name:
+            parts.append(self.buyer_name)
+
+        # CPV codes are a controlled vocabulary, so they carry real signal
+        # across languages -- 35613000 means "unmanned aerial vehicles" to a
+        # Greek notice and a Danish one alike.
+        codes = meta.get("cpv_codes")
+        if isinstance(codes, (list, tuple)) and codes:
+            parts.append(" ".join(str(c) for c in codes if c))
+
+        return "\n".join(p for p in parts if p).strip()
+
 
 @dataclass(slots=True)
 class TenderDocument:

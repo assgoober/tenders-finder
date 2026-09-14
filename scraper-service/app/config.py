@@ -72,11 +72,36 @@ class Settings(BaseSettings):
     gemini_verify_model: bool = True
 
     # --- TED (EU) ---
-    # CPV 35000000 is "security, fire-fighting, police and defence equipment",
-    # the division the EU files defence procurement under. Configurable
-    # because narrowing or widening the corpus is a product decision, not a
-    # code change: a customer who makes field kitchens wants 39000000 too.
-    ted_cpv_codes: list[int] = [35000000]
+
+    # Widened from [35000000] once ingestion stopped costing a model call per
+    # tender. Probed against the live API, contract notices, 30-day window:
+    #
+    #   35000000  security, defence, police, fire-fighting        594
+    #   34000000  transport equipment: vehicles, aircraft, ships 2085
+    #   72000000  IT services                                    2166
+    #   50000000  repair and maintenance                         2042
+    #   48000000  software and information systems               1582
+    #   38000000  laboratory, optical, precision instruments     1145
+    #   31000000  electrical machinery                            976
+    #   44000000  construction structures and materials           964
+    #   32000000  radio, television, telecom equipment            888
+    #   51000000  installation services                           478
+    #   18000000  clothing, footwear, personal equipment          327
+    #   63000000  supporting transport services                   270
+    #   73000000  research and development                        213
+    #   75000000  administration and defence services             198
+    #                                        union, deduplicated 11664
+    #
+    # The union is not the sum: a single notice routinely carries codes from
+    # four divisions, which is exactly why filtering here is the wrong place
+    # to be precise. The matching engine scores every tender against a real
+    # capability profile downstream; a division dropped at ingestion is gone.
+    # Harvest wide, filter late.
+    ted_cpv_codes: list[int] = [
+        35000000, 34000000, 72000000, 50000000, 48000000, 38000000,
+        31000000, 44000000, 32000000, 51000000, 18000000, 63000000,
+        73000000, 75000000,
+    ]
     # How far back a sweep reaches. Thirty days keeps the run bounded and
     # still covers the 37-day legal minimum between a contract notice and the
     # shortlist deadline, so nothing closes before we have seen it.
@@ -103,6 +128,29 @@ class Settings(BaseSettings):
     # row, while a defence lot dropped at ingestion is gone for good.
     # Filter late, harvest wide.
     ted_cpv_field: str = "classification-cpv"
+
+    # --- Ingestion mode -------------------------------------------------
+    # False: a tender is embedded from its LISTING at ingestion and the full
+    # PEGS extraction is deferred until it matches somebody's profile.
+    # True: the original behaviour -- fetch the document and extract every
+    # tender before it can be matched at all.
+    #
+    # The default flipped because the old one had a ceiling we hit. Every
+    # tender cost one model call before we knew whether any customer wanted
+    # it, so a 551-notice sweep aborted on quota at 483 and 11,664 available
+    # notices were unreachable in principle, not in practice.
+    #
+    # What we give up is real and worth naming: until a tender is extracted
+    # its `summary`, eligibility conditions and evaluation criteria are
+    # empty, and it is matched on the buyer's own title and description
+    # rather than on its requirements. What we gain is that it is matched at
+    # all. A tender nobody can see has no extraction quality to discuss.
+    extract_on_ingest: bool = False
+
+    # How many matched-but-unread tenders to extract per run. This is the
+    # spending dial: the queue is ordered by deadline, so a budget that runs
+    # out runs out on the tenders with the most time left.
+    extract_matched_limit: int = 50
 
     # --- Notifications ---
     # A needs_review tender is invisible until a human opens it, and there is

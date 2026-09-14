@@ -502,7 +502,11 @@ async def test_the_pipeline_stops_the_loop_instead_of_failing_every_remaining_ro
 
     monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [_Agent()])
 
-    pipeline = IngestionPipeline(settings=make_settings(extraction_provider="gemini"))
+    # Same reason as the sibling test in test_api_surface: the loop this
+    # asserts on only runs when ingestion extracts.
+    pipeline = IngestionPipeline(
+        settings=make_settings(extraction_provider="gemini", extract_on_ingest=True)
+    )
     (report,) = await pipeline.run(["fake"], limit=10)
 
     assert len(seen) == 1, f"stopped after {len(seen)} tenders, not the whole list of 10"
