@@ -29,7 +29,15 @@ from app.agents.ted import (
 from app.config import Settings
 
 
-SETTINGS = Settings(embedding_provider="hash")
+SETTINGS = Settings(
+    embedding_provider="hash",
+    # The real sweep waits three seconds between shards so TED does not
+    # answer with 429. There are 31 divisions by default, so a test that
+    # takes the production value sleeps for 93 seconds -- which is what
+    # made this whole file time out while every test in it passed when run
+    # alone. A test that sleeps is a test nobody runs.
+    ted_shard_pause_seconds=0,
+)
 
 # Captured verbatim from POST /v3/notices/search.
 REAL_NOTICE = {
@@ -519,3 +527,85 @@ async def test_one_dead_shard_does_not_take_the_sweep_with_it(monkeypatch):
     assert len(stubs) == 2, "the surviving shards' notices were lost"
     assert agent.pagination_truncated is True, \
         "a sweep that lost a division must not report itself as complete"
+
+
+# --- no division starves because of where it sits in a list ---------------
+
+@pytest.mark.asyncio
+async def test_a_big_division_cannot_eat_the_whole_budget(monkeypatch):
+    """Measured on a real 20,000-tender sweep before this rule existed:
+
+        33000000 medical       4,889
+        45000000 construction  3,887
+        ...
+        39000000 furniture        29
+        60000000 transport          5
+        80000000 education          1
+        and seven divisions never ran at all.
+
+    Which divisions starve was decided by their position in a config list.
+    That is not a procurement judgement.
+    """
+    from app.agents.ted import TedAgent
+
+    agent = _sharded()                      # three divisions
+    budgets = []
+
+    async def _walk(self, client, query, limit):
+        budgets.append(limit)
+        # Every division could supply far more than the whole budget.
+        stubs = [
+            agent.build_stub({"publication-number": f"{len(budgets)}-{i}",
+                              "notice-title": {"eng": "n"}})
+            for i in range(limit + 50)
+        ]
+        return [s for s in stubs if s][:limit], "limit", 9999
+
+    monkeypatch.setattr(TedAgent, "_walk", _walk)
+    stubs = await agent.discover(limit=300)
+
+    assert budgets[0] == 100, f"the first division was handed {budgets[0]} of 300"
+    assert len(budgets) == 3, "a later division never got a turn"
+    assert len(stubs) == 300
+
+
+@pytest.mark.asyncio
+async def test_an_empty_division_hands_its_share_forward(monkeypatch):
+    """The share is recomputed per shard, not fixed up front, so a division
+    with nothing to give does not reserve a slice nobody can use."""
+    from app.agents.ted import TedAgent
+
+    agent = _sharded()
+    budgets = []
+
+    async def _walk(self, client, query, limit):
+        budgets.append(limit)
+        if "35000000" in query:
+            return [], "exhausted", 0       # first division is empty
+        stub = agent.build_stub({"publication-number": f"n{len(budgets)}",
+                                 "notice-title": {"eng": "n"}})
+        return [stub], "exhausted", 1
+
+    monkeypatch.setattr(TedAgent, "_walk", _walk)
+    await agent.discover(limit=300)
+
+    assert budgets[0] == 100
+    assert budgets[1] == 150, f"the empty division's share was not passed on: {budgets}"
+
+
+@pytest.mark.asyncio
+async def test_the_last_division_gets_the_whole_remainder(monkeypatch):
+    """By then there is nobody left to starve."""
+    from app.agents.ted import TedAgent
+
+    agent = _sharded()
+    budgets = []
+
+    async def _walk(self, client, query, limit):
+        budgets.append(limit)
+        return [], "exhausted", 0
+
+    monkeypatch.setattr(TedAgent, "_walk", _walk)
+    await agent.discover(limit=300)
+
+    assert budgets[-1] == 300, f"the last shard was capped at {budgets[-1]}"

@@ -358,11 +358,30 @@ class TedAgent(TenderSourceAgent):
                     # already spaced by the response time, and it is the
                     # thirty-one starts in a row that the limiter sees.
                     await asyncio.sleep(self._shard_pause)
+
+                # Each shard gets a fair share of what is LEFT, not a free
+                # run at the whole budget. Without this the first divisions
+                # in the list eat it and the last ones starve: on a real
+                # 20,000-tender sweep, medical took 4,889 and construction
+                # 3,887, while furniture got 29, energy got 5, education got
+                # 1 -- and seven divisions never ran at all. Which ones
+                # starve is decided by their position in a config list,
+                # which is not a procurement judgement.
+                #
+                # Recomputed per shard rather than fixed up front, so a
+                # division with nothing to give hands its share to the ones
+                # still to come instead of reserving it.
+                remaining_shards = len(shards) - index
+                fair_share = max(1, (limit - len(stubs)) // remaining_shards)
+                # The last shard is allowed the whole remainder: by then
+                # there is nobody left to starve.
+                budget = limit - len(stubs) if remaining_shards == 1 else fair_share
+
                 query = self.build_query(shard)
                 label = "+".join(str(c) for c in shard)
                 try:
                     found, ended, available = await self._walk(
-                        client, query, limit - len(stubs)
+                        client, query, budget
                     )
                 except Exception as exc:  # noqa: BLE001
                     # Deliberately swallowed per shard. The alternative is one
