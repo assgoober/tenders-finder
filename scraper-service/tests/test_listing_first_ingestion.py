@@ -317,3 +317,121 @@ async def test_a_dry_run_does_not_spend_the_embedding_budget(monkeypatch):
     assert called == []
     assert report.ingested == 30, "a dry run should still report what it would have written"
     assert report.failed == 0
+
+
+# --- the four hours of grinding -------------------------------------------
+
+@pytest.mark.asyncio
+async def test_a_failed_batch_is_let_go_of(monkeypatch):
+    """The batch cleared only on success.
+
+    So a failed flush left all 96 stubs in place, the next stub flushed 97,
+    failed, then 98 -- one doomed embedding call per remaining tender, each
+    burning its full retry budget. Observed in production: 225 failures at
+    one a minute for four hours, which is also what spent the day's quota.
+    """
+    agent = _Agent([_stub(i) for i in range(12)])
+    monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [agent])
+
+    class _Repo:
+        def upsert_source(self, row): return "s"
+        def start_run(self, s): return "r"
+        def finish_run(self, r, **kw): return None
+        def ingest_fingerprints(self, s): return {}
+        def upsert_tender(self, row): return "id"
+
+    pipeline = IngestionPipeline(
+        settings=make_settings(extract_on_ingest=False, embed_batch_size=4,
+                               dry_run=False),
+        repository=_Repo(),
+    )
+
+    sizes = []
+
+    async def _always_fails(texts, **kw):
+        sizes.append(len(texts))
+        raise RuntimeError("provider said no")
+
+    monkeypatch.setattr(pipeline.embedder, "embed", _always_fails)
+    await pipeline.run(["fake"], limit=12)
+
+    assert sizes, "the batch never flushed at all"
+    assert max(sizes) == 4, f"the batch grew past its size: {sizes}"
+    assert len(sizes) == 3, f"12 stubs at 4 per batch is 3 calls, got {len(sizes)}"
+
+
+@pytest.mark.asyncio
+async def test_a_daily_embedding_cap_stops_the_run(monkeypatch):
+    """A rate limit is about this minute; a daily cap is about this run.
+
+    Without the distinction the cap arrived as an ordinary error, the
+    per-tender handler counted one failed tender, and the loop went on to
+    fail every remaining tender for the same reason -- with `partial` false
+    and the run reporting itself as finished.
+    """
+    from app.nlp.embeddings import EmbeddingQuotaExhausted
+
+    agent = _Agent([_stub(i) for i in range(500)])
+    monkeypatch.setattr("app.pipeline.get_agents", lambda *a, **k: [agent])
+
+    class _Repo:
+        def upsert_source(self, row): return "s"
+        def start_run(self, s): return "r"
+        def finish_run(self, r, **kw): return None
+        def ingest_fingerprints(self, s): return {}
+        def upsert_tender(self, row): return "id"
+
+    pipeline = IngestionPipeline(
+        settings=make_settings(extract_on_ingest=False, embed_batch_size=10,
+                               dry_run=False),
+        repository=_Repo(),
+    )
+
+    calls = []
+
+    async def _cap(texts, **kw):
+        calls.append(len(texts))
+        raise EmbeddingQuotaExhausted("the daily embedding budget is spent")
+
+    monkeypatch.setattr(pipeline.embedder, "embed", _cap)
+    (report,) = await pipeline.run(["fake"], limit=500)
+
+    assert len(calls) == 1, f"kept going after the day's budget was gone: {len(calls)} calls"
+    assert report.partial is True, "a run that stopped early reported itself complete"
+    assert any("aborted" in e for e in report.errors)
+
+
+def test_the_daily_cap_is_recognised_from_the_real_body():
+    """The body a live sweep received at 14:00, pasted rather than imagined."""
+    import asyncio
+    from app.nlp.embeddings import EmbeddingQuotaExhausted, GeminiEmbeddingProvider
+
+    provider = GeminiEmbeddingProvider.__new__(GeminiEmbeddingProvider)
+    provider.model_name = "gemini-embedding-001"
+    provider.dimension = 1024
+    provider.RATE_LIMIT_WAIT_SECONDS = 0.001
+
+    REAL = ("429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
+            "generativelanguage.googleapis.com/embed_content_free_tier_requests, "
+            "limit: 1000, model: gemini-embedding-1.0. Please retry in 42.08s. "
+            "quotaId: EmbedContentRequestsPerDayPerUserPerProjectPerModel-FreeTier")
+
+    class _Models:
+        async def embed_content(self, **kw):
+            raise RuntimeError(REAL)
+
+    class _Aio:
+        models = _Models()
+
+    class _Client:
+        aio = _Aio()
+
+    provider._client = _Client()
+
+    class _Types:
+        @staticmethod
+        def EmbedContentConfig(**kw):
+            return kw
+
+    with pytest.raises(EmbeddingQuotaExhausted):
+        asyncio.run(provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types))

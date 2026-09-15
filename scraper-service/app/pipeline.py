@@ -15,7 +15,11 @@ from datetime import datetime, timezone
 
 from .agents import FetchedTender, TenderSourceAgent, TenderStub, get_agents
 from .config import Settings, get_settings
-from .nlp.embeddings import EmbeddingProvider, get_embedding_provider
+from .nlp.embeddings import (
+    EmbeddingProvider,
+    EmbeddingQuotaExhausted,
+    get_embedding_provider,
+)
 from .nlp.extractor import (
     ExtractionNotConfigured,
     ExtractionQuotaExhausted,
@@ -247,11 +251,21 @@ class IngestionPipeline:
                         # one embedding request worth sending.
                         pending_batch.append(stub)
                         if len(pending_batch) >= self.settings.embed_batch_size:
-                            await self._ingest_listing_batch(
-                                pending_batch, source_id, report
-                            )
-                            pending_batch = []
-                except ExtractionQuotaExhausted as exc:
+                            # `finally`, because a batch that fails must still
+                            # be let go of. Clearing it only on success meant
+                            # a failed flush left all 96 stubs in place, so
+                            # the next stub flushed 97, failed, then 98 --
+                            # one doomed embedding call per remaining tender,
+                            # each burning its full retry budget. Observed:
+                            # 225 failures at one a minute for four hours,
+                            # which is also what spent the day's quota.
+                            try:
+                                await self._ingest_listing_batch(
+                                    pending_batch, source_id, report
+                                )
+                            finally:
+                                pending_batch = []
+                except (ExtractionQuotaExhausted, EmbeddingQuotaExhausted) as exc:
                     # Deliberately breaks the loop that the clause below
                     # deliberately does not. A bad document is local to one
                     # tender; an exhausted quota is a property of the run, so
@@ -286,6 +300,14 @@ class IngestionPipeline:
                 # the floor -- silently, because every counter would agree.
                 try:
                     await self._ingest_listing_batch(pending_batch, source_id, report)
+                except (ExtractionQuotaExhausted, EmbeddingQuotaExhausted) as exc:
+                    # Same rule as inside the loop: a spent budget is a fact
+                    # about the run, and the tail is not a second chance at it.
+                    quota_exhausted = True
+                    report.partial = True
+                    report.failed += len(pending_batch)
+                    report.errors.append(f"run aborted on the final batch: {exc}")
+                    logger.error("[%s] %s", agent.key, exc)
                 except Exception as exc:  # noqa: BLE001
                     report.failed += len(pending_batch)
                     report.errors.append(f"final batch: {type(exc).__name__}: {exc}")

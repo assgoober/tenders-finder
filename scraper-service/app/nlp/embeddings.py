@@ -24,6 +24,22 @@ from ..config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
+
+class EmbeddingQuotaExhausted(RuntimeError):
+    """The provider's DAILY embedding budget is gone for the rest of the day.
+
+    Distinct from a rate limit on purpose, and it exists because of what
+    happened without it. A sweep hit the 1,000/day cap, the error arrived as
+    an ordinary ClientError, the per-tender handler counted it as one failed
+    tender, and the loop moved on -- to fail the next tender the same way,
+    and the next, one per minute for four hours. Every counter agreed.
+
+    A quota that will not clear today is a fact about the run. It has to
+    stop the run, the way ExtractionQuotaExhausted already stops it.
+    """
+
+
+
 # Voyage distinguishes the two: a corpus document and a search query get
 # different prefixes and embed into comparable but not identical positions.
 InputType = str  # "document" | "query"
@@ -278,8 +294,14 @@ class GeminiEmbeddingProvider:
                 # So: wait it out unless the body says PerDay. Guessing wrong
                 # toward waiting costs a few minutes; guessing wrong toward
                 # raising costs the corpus.
-                retryable = exhausted and "PerDay" not in message
-                if not retryable or attempt == self.RATE_LIMIT_RETRIES:
+                if exhausted and "PerDay" in message:
+                    # Named explicitly by the API. No amount of waiting fixes
+                    # a day, so this ends the run rather than the tender.
+                    raise EmbeddingQuotaExhausted(
+                        "the daily embedding budget is spent: %s" % message[:200]
+                    ) from exc
+
+                if not exhausted or attempt == self.RATE_LIMIT_RETRIES:
                     raise
                 last = exc
                 # The server states how long it wants: "Please retry in
@@ -291,13 +313,13 @@ class GeminiEmbeddingProvider:
                     wait = self.RATE_LIMIT_WAIT_SECONDS
 
                 if waited + wait > self.QUOTA_WAIT_BUDGET_SECONDS:
-                    logger.error(
-                        "embedding quota has not cleared in %.0fs; this is a "
-                        "daily cap, not a rate limit -- stopping rather than "
-                        "waiting out the day",
-                        waited,
-                    )
-                    raise
+                    # The backstop for a quota that never names itself. A
+                    # limit that has not cleared in five minutes is not a
+                    # per-minute limit, whatever the message says.
+                    raise EmbeddingQuotaExhausted(
+                        "the embedding quota has not cleared in %.0fs; "
+                        "treating it as a daily cap" % waited
+                    ) from exc
                 logger.warning(
                     "embedding quota (attempt %d/%d); waiting %.0fs%s",
                     attempt, self.RATE_LIMIT_RETRIES, wait,
