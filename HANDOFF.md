@@ -1,103 +1,117 @@
-# Handoff — starting a local Claude Code session on this project
+# Handoff — picking up Tenders Finder
 
-Paste everything below the line into a fresh `claude` session started inside
-this repository. It is written to be read by the assistant, not by a person.
+Written for an assistant starting a fresh session in this repository, and
+kept current rather than appended to. There used to be two of these:
+`HANDOFF.md` from 01/09 and `HANDOFF-NEXT.md` from 11/09. They disagreed
+with each other and both disagreed with the database — one said 180 tenders
+and 190 tests, the other said "nothing schedules the scraper". Two handoffs
+is how a handoff becomes archaeology, so there is one, and every number in
+it was read back from the live system on **2026-09-15**.
+
+**Read `CLAUDE.md` first** — the behaviour contract, and authoritative over
+anything here. Then `REPOMIX.md`, the knowledge base in Hebrew: vision,
+stack rationale, **26 architecture decision records**, and a table of silent
+failures that is the single most useful page in this repository.
+
+The user is Israeli and writes in Hebrew. **Reply in Hebrew.** Code,
+comments, commit messages and documentation stay in English — that split is
+consistent across the repository; keep it.
 
 ---
 
-## Who you are and what this is
-
-You are picking up **Tenders Finder**, a B2G/B2B tender-aggregation platform
-for Israeli defence contractors. It aggregates public procurement tenders
-scattered across isolated government portals into one workspace: scraping
-agents, schema-constrained AI extraction, semantic matching against a company
-profile, and a dashboard that replaces portal-by-portal searching.
-
-**Read these two files first, before doing anything else:**
-
-- `CLAUDE.md` — the behaviour contract. Architecture rules, done-criteria,
-  and the constraints below in their authoritative form.
-- `REPOMIX.md` — the full knowledge base, in Hebrew. Vision, stack rationale,
-  17 architecture decision records, file map, open risks. **ADR-17 explains
-  why this repository exists separately.** If you make an architectural
-  decision, add an ADR here; `CLAUDE.md`'s done-criteria require it.
-
-The user is Israeli and writes in Hebrew. Reply in Hebrew. Code, comments,
-commit messages and documentation stay in English — that split is already
-consistent across the repository, keep it.
-
-## Exact state as of this handoff
+## State, measured
 
 | | |
 |---|---|
-| Repository | `omer-izhaki/tenders-finder`, **private**, default branch `main` |
-| HEAD | `19b9182` — "Read live data from Supabase, behind authentication" |
-| CI | Green on all three jobs (`scraper-service`, `web`, `landing page`) |
-| Supabase project | `vixuawfbayglbgitzqbj`, region Frankfurt, free tier |
-| Landing page | Live at `https://tenders-finder.vercel.app` |
+| Repository | `omer-izhaki/tenders-finder`, private, default branch `main` |
+| Supabase | `vixuawfbayglbgitzqbj`, Frankfurt, free tier, healthy |
+| Tenders | **2,751** — every one carrying an embedding |
+| Open for bids | **2,329** |
+| Buying countries | **37** |
+| Live sources | **2** (Israeli MoD, TED/EU) + UK Find a Tender written and tested, waiting on budget |
+| Matches | 81 — 66 alerted, 15 skipped as too late, **0 pending** |
+| Tests | **320**, ~23s, no network and no API keys |
+| Scheduled | 3 pg_cron jobs + a Windows Task Scheduler sweep at 10:05 |
+| Landing page | live, Hebrew + English, `https://tenders-finder.vercel.app` |
 
-**A second Claude session is working on this repository at the same time**
-(Claude Code on the web, in a cloud container). Read "Working in parallel"
-below before your first push — this is the part most likely to go wrong.
+The product has run end to end: harvest → filter → embed → match → email.
+**66 alerts have actually been delivered.** Cross-language matching is not a
+claim — an English capability profile has matched notices published in
+Greek, Hebrew, Swedish and German.
 
-### What is done
+---
 
-- **Schema applied and verified live.** All five migrations ran against the
-  real Supabase project. `supabase/verify.sql` returns 8/8 `OK` there:
-  9 tables, RLS enabled on all and forced on the 5 tenant-scoped ones,
-  11 policies, 7 project functions, 2 HNSW indexes, the alert trigger,
-  pgvector.
-- **Cross-organization isolation tested, not assumed.** Against PostgreSQL 16
-  with pgvector: two organizations, one alert profile each. Each member saw
-  only their own; a member could not insert into the other organization even
-  naming its id explicitly; a signed-in user in no organization saw nothing.
-- **Dashboard reads live data behind authentication.** `lib/api.ts`,
-  `lib/supabase/{server,client,config}.ts`, `middleware.ts`,
-  `app/login/page.tsx`, `app/auth/signout/route.ts`.
-- **Landing page** deployed, WCAG 2.2 AA / IS 5568, RTL.
-- **Scraper service**: 143 tests pass with no network and no API keys.
-  `mod-balam` is verified against the live portal and enabled.
+## Blocked on the user
 
-### What is not done — the actual work queue
+**1. The embedding budget is the ceiling.** Gemini's free tier allows
+**1,000 embedding requests per day**. That is enough to keep growing but not
+enough for a daily refresh of tens of thousands of tenders plus customers.
+The options are a paid Gemini tier (cents, and it changes nothing else) or a
+`VOYAGE_API_KEY` — but Voyage means **re-embedding the whole corpus**,
+because vectors from two models are not comparable. That is a decision, not
+a quick fix.
 
-1. **No user account exists.** Nothing can be seen in the dashboard until one
-   does. Create it in the Supabase dashboard (Authentication → Users → Add
-   user), then run the organization + membership SQL in
-   `supabase/README.md`. **Only the user can do the first half**; you cannot
-   reach their Supabase dashboard.
-2. **The database has no tenders.** The scraper has never written to it. This
-   is the main event: run the pipeline against the live project and get real
-   MOD tenders in.
-3. **`ANTHROPIC_API_KEY` and `VOYAGE_API_KEY` are unset.** Without Voyage,
-   embeddings fall back to `EMBEDDING_PROVIDER=hash`, which is deterministic
-   but **not semantic** — matching results will be junk. Say so plainly
-   rather than letting a hash-provider run look like a working matcher.
-4. **`govil` agent is disabled** and stays that way (see constraints).
-5. **Nothing schedules the scraper.** There is no cron, no worker. `/ingest`
-   is manual.
-6. **`web/.env.local` does not exist.** Next reads env from `web/`, not the
-   repository root, so the root `.env` the scraper uses is invisible to it.
-   `NEXT_PUBLIC_*` values are inlined **at build time**, so a build made
-   without them serves demo fixtures no matter what the runtime environment
-   holds later.
+**2. Six CI lines cannot be pushed.** GitHub refuses a workflow change from
+an OAuth App without `workflow` scope. Two checks written this week are not
+in `.github/workflows/ci.yml` on the remote: the coverage-stat check
+(`data-stat`) and the English-translation check (`npm run check:en`). Either
+the user pastes them into GitHub's web editor, or they issue a token with
+`workflow` scope. Do not rewrite history to work around it; do not make the
+repository public to work around it.
 
-## What you can do that the cloud session cannot
+**3. There is no customer.** The system has never run for anyone outside the
+team that built it. There is a sign-up form, a trigger that provisions an
+organisation, a working engine and working alerts — and not one company that
+received an alert and said whether it was worth anything. Everything else in
+this file is work. This is the question.
 
-This is why the user moved here. The cloud container cannot reach their
-machine, their browser, or their Supabase dashboard. You can:
+---
 
-- Create `web/.env.local` and actually run `npm run dev`, then open the
-  dashboard in a browser and look at it.
-- Run the scraper against the live database.
-- Query Supabase directly through the MCP server (see below) instead of
-  asking the user for screenshots.
-- Run Playwright against the live portals from an Israeli IP. **This matters
-  more than it sounds**: the portals may geo-restrict, and the cloud session
-  runs from elsewhere.
+## The work queue
 
-## The Supabase MCP server
+1. **Finish the harvest.** ~36,700 open tenders are reachable across TED's
+   31 CPV divisions and UK Find a Tender; 2,751 are in. At 96 per request
+   that is ~400 requests — a third of one day's free budget — but the day it
+   belongs to has to start unspent. The scheduled sweep runs at 10:05 and
+   now stops and says so when the budget is gone.
+2. **Run the deferred extraction.** `tenders_awaiting_extraction()` exists,
+   is scheduled nowhere, and currently holds **39** tenders — ones somebody
+   matched and nobody has read. This is the cheap half: 39 documents, not
+   2,751.
+3. **A manual review screen.** `needs_review` is 0 today. When it is not,
+   there is nowhere to look at it.
+4. **BALAM matches on 27 characters.** TED and FTS carry a full notice; the
+   Israeli MoD list publishes a title and nothing else. Matching there is
+   shallow by construction and there is no fix without supplier access.
+5. **`govil` stays disabled** — see the constraints.
 
-Configured, or to be configured, as:
+---
+
+## Constraints that are not negotiable
+
+Each was decided for a reason and re-deciding them is not in scope.
+
+1. **Do not lift the gov.il front end's embedded `x-client-id`.** The gateway
+   rejects requests without it, which makes it a credential rather than a
+   public constant. The route is requesting our own key from the operator.
+2. **`sapakim.mod.gov.il` is off limits.** It serves a genuine
+   `User-agent: * / Disallow: /`. Re-confirmed after a robots-parsing bug was
+   fixed, so it is policy, not artefact.
+3. **The Supabase service-role key bypasses RLS entirely.** It lives in the
+   root `.env` for the scraper and nowhere else — never in `web/`, never
+   behind `NEXT_PUBLIC_`, never in a commit.
+4. **Never persist unvalidated LLM output.** Validate against the Pydantic
+   model; on failure retry once with the errors fed back; on a second failure
+   route to `needs_review`. A `needs_review` tender is deliberately left
+   unembedded so it raises no alerts — do not "fix" that by embedding it.
+5. **Secrets never go in chat or in commits.** The user has pasted a live
+   credential into a conversation before. If it happens again: tell them to
+   revoke it, do not use it, do not write it anywhere.
+6. **Check terms of use and `robots.txt` before enabling any portal.**
+7. **Never edit an applied migration.** They are numbered and applied in
+   order. A correction is a new file.
+
+### The Supabase MCP server, and why it is read-only
 
 ```
 claude mcp add supabase --env SUPABASE_ACCESS_TOKEN=<pat> -- \
@@ -105,117 +119,43 @@ claude mcp add supabase --env SUPABASE_ACCESS_TOKEN=<pat> -- \
   --project-ref=vixuawfbayglbgitzqbj
 ```
 
-Both flags are deliberate and **you should not suggest removing them
-casually**:
+Both flags are deliberate:
 
-- `--project-ref` — the token is a **personal access token scoped to the
-  whole Supabase account**, not to one project. Without this flag the server
-  reaches every project the user has, now and in future.
-- `--read-only` — this database is about to fill with **text scraped from
-  government portals**: content neither the user nor you wrote, which you
-  will then read. That is the exact path by which instructions injected into
-  data become a problem. Read-only is the difference between an agent reading
-  something strange and an agent dropping a table.
+- `--project-ref` — the token is scoped to the **whole Supabase account**.
+  Without this the server reaches every project the user has, now and later.
+- `--read-only` — this database is full of **text scraped from government
+  portals**: content neither the user nor the assistant wrote, and then read
+  back. That is exactly the path by which instructions injected into data
+  become a problem.
 
-The cost is real and you should work with it, not around it: **you cannot
-write to the database.** Migrations, the organization insert, and any data
-fix go through the Supabase SQL Editor, where the user sees the statement
-before it runs. Give them the SQL; do not ask for the flag to be dropped
-unless they raise it first.
+The cost is real: **you cannot write to the database.** Migrations and data
+fixes go through the SQL Editor, where the user sees the statement before it
+runs. Give them the SQL. Do not ask for the flag to be dropped.
 
-## Working in parallel with the other session
-
-Both sessions push to `main` of the same repository. Assume the remote has
-moved since you last looked.
-
-**Before any work:** `git pull --rebase origin main`
-**Before any push:** `git pull --rebase origin main`, re-run the checks, then
-push. Never `git push --force` to `main`.
-
-**Ownership, to keep you out of each other's files:**
-
-| Area | Owner |
-|---|---|
-| `scraper-service/` runtime, live portal runs, `.env` | **you** (local) |
-| `web/` running, `web/.env.local`, browser verification | **you** (local) |
-| Supabase — reads via MCP, SQL handed to the user | **you** (local) |
-| `landing/`, `REPOMIX.md`, `CLAUDE.md`, `.github/` | cloud session |
-| `supabase/migrations/` | whoever writes it, but **announce it** |
-
-If you need to touch something outside your column, say so in your reply so
-the user can relay it. A migration written twice is far worse than a
-migration delayed — migrations are numbered, applied in order, and must never
-be edited once applied.
-
-## Constraints that are not negotiable
-
-These were each decided for a reason and re-deciding them is not in scope.
-
-1. **Do not lift the gov.il front end's embedded `x-client-id`.** The Apigee
-   gateway rejects requests without it, which makes it a credential rather
-   than a public constant. Using it would put this integration on someone
-   else's quota and identity. The route is requesting our own key from the
-   API operator. `govil` stays disabled until then.
-2. **`sapakim.mod.gov.il` is off limits.** It serves a genuine
-   `User-agent: * / Disallow: /`. No agent, no probe beyond the robots check,
-   no workaround. This was re-confirmed after a robots-parsing bug was fixed,
-   so it is policy, not artefact.
-3. **The Supabase service-role key bypasses RLS entirely.** It belongs in
-   `.env` for the scraper service and nowhere else — never in `web/`, never
-   behind a `NEXT_PUBLIC_` prefix, never in a commit.
-4. **Never persist unvalidated LLM output.** Validate against the Pydantic
-   model; on failure retry once with the errors fed back; on a second failure
-   route to `needs_review`. A `needs_review` tender is **deliberately left
-   unembedded** so it raises no alerts — do not "fix" that by embedding it.
-5. **Secrets never go in chat or in commits.** The user has previously pasted
-   a live credential into a conversation. If it happens again, tell them to
-   revoke it immediately, do not use it, and do not write it to any file.
-   PowerShell history is written to disk, so secrets go into `.env` through
-   an editor, not typed as commands.
-6. **Check terms of use and `robots.txt` before enabling any portal.**
-7. **Do not make the repository public** to work around a tooling
-   permission problem.
+---
 
 ## How this project expects you to work
 
-Taken from `CLAUDE.md` and from what has actually caught bugs here:
+Taken from `CLAUDE.md`, and from what has actually caught bugs here.
 
-- **Verify, do not assume.** Nearly every real defect on this project was
-  found by running something, not by reading it: CI found that `pytest -q` —
-  the command both the README and `CLAUDE.md` documented — had never worked;
-  a browser found the landing page had no viewport meta at all; introspecting
-  the installed SDK found `requirements.txt` floored `anthropic` at a version
-  where the `fallbacks` feature did not exist.
-- **A passing test that proves nothing is worse than no test.** Two checks
-  here returned green while being invalid — a stale server on the port served
-  a pre-fix build, and an RLS isolation test "passed" because the fixture
-  inserts had silently failed and the table was empty. An empty table is
-  indistinguishable from perfect isolation. Confirm the preconditions of a
-  test before believing its result.
-- **Prefer the failure that is loud.** A stale selector returning zero
-  tenders is indistinguishable from a quiet week in procurement, which is why
-  portal contracts carry a `verified` flag and refuse to run when it is off.
-- **Return `null`, never a guess.** A null flows as "not stated"; a guess
-  flows as fact. This is load-bearing in Hebrew date parsing, where
-  `03/04/2026` read as US format is a deadline a month early and still a
-  valid date.
-- **Done means:** `npm run typecheck` passes in `web/`, `pytest -q` passes in
-  `scraper-service/`, new SQL is a new numbered migration with its RLS policy
-  in the same file, and `REPOMIX.md` records any architectural change.
+**Verify, do not assume.** Nearly every real defect on this project was
+found by running something, not by reading it. A probe found TED returns a
+continuation token only if you ask for it. A browser found the landing page
+had no `<!DOCTYPE>` and was rendering in quirks mode. A dashboard screenshot
+found the binding limit was tokens per minute, not requests.
 
-## Your first move
+**A passing test that proves nothing is worse than no test.** This week two
+defects shipped behind green tests, because the tests asserted the payload
+the author had imagined rather than the one the API sends. When a test
+covers an external response, **paste the real body**.
 
-Do not start coding. Do this instead:
+**The failure mode here is silence, not noise.** `REPOMIX.md` keeps a table
+of every silent failure found on this project, and the pattern is always the
+same: counts agree, rows look right, nothing errors, and the work was not
+done. A sweep that harvested 12,000 notices and wrote zero rows reported
+itself as running. An audit query raised a false alarm because it forgot one
+`where` clause. **When a number looks plausible, that is when to check it.**
 
-1. Read `CLAUDE.md` and `REPOMIX.md`.
-2. Run `git pull --rebase origin main` and report the HEAD you land on — if
-   it is not `19b9182`, the other session has pushed and you should read
-   what changed.
-3. Confirm the checks pass locally as they stand: `pytest -q` in
-   `scraper-service/`, and `npm run typecheck` in `web/`.
-4. Tell the user, in Hebrew and briefly, what you found and what you propose
-   as the first task — and if the Supabase MCP server is configured, confirm
-   it answers by listing the tables.
-
-Then work item 1 and 2 from the queue above: get an account and organization
-in place, then get real tenders into the database.
+**Read the result back from the system, not from the log.** A log full of
+"harvested N" with zero rows written is a failed run. Harvesting is free;
+writing is what costs.

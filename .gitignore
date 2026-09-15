@@ -48,3 +48,6 @@ Thumbs.db
 npm-debug.*
 yarn-error.*
 logs/
+
+# Rendered alert bodies: they contain real recipient addresses.
+alert-*.txt
