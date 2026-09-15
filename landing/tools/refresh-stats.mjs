@@ -47,16 +47,39 @@ const live = await count("tenders", (q) => q.in("status", ["open", "closing_soon
 const sources = await count("tender_sources");
 
 // Distinct countries needs the rows, but only two columns of them.
-const { data: rows, error } = await db
-  .from("tenders")
-  .select("metadata->listing->>buyer_country, tender_sources(country)")
-  .limit(20000);
-if (error) throw new Error(`countries: ${error.message}`);
-
+//
+// Paged, and then checked against the count. `.limit(20000)` does NOT
+// override PostgREST's server-side maximum, which is 1,000 rows: the first
+// version of this asked for 20,000, silently received 1,000, and reported
+// 32 countries where the database held 37. A plausible number, no error,
+// and wrong -- in the very script written to stop this page stating numbers
+// it could not back up.
+const PAGE_SIZE = 1000;
 const seen = new Set();
-for (const r of rows ?? []) {
-  const c = r.buyer_country || r.tender_sources?.country;
-  if (c) seen.add(String(c).toUpperCase());
+let pulled = 0;
+for (let from = 0; ; from += PAGE_SIZE) {
+  const { data: rows, error } = await db
+    .from("tenders")
+    .select("metadata->listing->>buyer_country, tender_sources(country)")
+    .range(from, from + PAGE_SIZE - 1);
+  if (error) throw new Error(`countries: ${error.message}`);
+  const batch = rows ?? [];
+  pulled += batch.length;
+  for (const r of batch) {
+    const c = r.buyer_country || r.tender_sources?.country;
+    if (c) seen.add(String(c).toUpperCase());
+  }
+  if (batch.length < PAGE_SIZE) break;
+}
+
+// The check that would have caught the bug above on its first run. A
+// distinct-count from a partial read is not a smaller number, it is a
+// wrong one, and it looks exactly like a correct one.
+if (pulled !== tenders) {
+  throw new Error(
+    `read ${pulled} tenders but the table holds ${tenders}. ` +
+      `A country count from a partial read is wrong, not approximate.`
+  );
 }
 const countries = seen.size;
 
