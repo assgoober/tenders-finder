@@ -16,20 +16,36 @@ Agent working rules: [`CLAUDE.md`](CLAUDE.md).
 ```
 supabase/migrations/   PostgreSQL schema: pgvector, RLS, hybrid matching engine
 supabase/seed.sql      Local development data (never run in production)
-scraper-service/       Python · FastAPI · Playwright · Claude extraction
+scraper-service/       Python · FastAPI · Playwright · LLM extraction (Gemini or Anthropic)
 web/                   Next.js 14 dashboard
-landing/               Public landing page — one static HTML file, no build
+landing/               Public landing page — Hebrew source, English generated
 ```
 
 ## Status
 
+Read back from the live system on 2026-09-15, not asserted.
+
+| | |
+|---|---:|
+| Tenders | **2,751** — every one carrying an embedding |
+| Open for bids | **2,329** |
+| Buying countries | **37** |
+| Matches | 81 — 66 alerted, 15 skipped as closing too soon, 0 pending |
+| Tests | **320**, no network, no API keys |
+
 | Piece | State |
 |---|---|
-| Database schema, RLS, matching functions | Written; **not yet applied to a live Postgres** |
-| Aggregation agents | `mod-balam` **verified against the live portal and enabled**; `govil` written but unprobed; plus base classes, registry and an offline fixture agent |
-| NLP extraction (PEGS + Pydantic) | Complete, tested against a mocked client |
-| Alert engine | SQL functions and ingestion trigger written |
-| Dashboard | Complete, running on mock data |
+| Database schema, RLS, matching functions | **20 migrations applied and verified against the live project** |
+| Aggregation agents | `mod-balam` and `ted-eu` **live**; `uk-fts` written and tested, waiting on embedding budget; `govil` written but disabled on purpose (see below) |
+| Extraction (PEGS + Pydantic) | Running on Gemini against real TED notice documents |
+| Matching | Semantic and **cross-language** — an English capability profile has matched notices in Greek, Hebrew, Swedish and German |
+| Alert engine | **66 alerts delivered**, with a per-profile minimum lead time so nothing arrives too late to bid on |
+| Scheduling | 3 hourly `pg_cron` jobs; the harvest runs as a batch job, not a session |
+| Dashboard | Reads live data behind authentication |
+| Landing page | Live, Hebrew and English at two URLs |
+
+**Not done, and it is the one that matters: there is no customer.** The
+system has never run for anyone outside the team that built it.
 
 ## Quick start
 
@@ -174,21 +190,35 @@ knowing before concluding something is broken:
 |---|---|
 | Redirected to `/login` | Every policy keys on `auth.uid()`, so signed out reads as an empty database rather than an error. The app refuses to render one |
 | Signed in, but no alerts and no pipeline | Your account belongs to no organization. Both are scoped to membership. See [`supabase/README.md`](supabase/README.md) |
-| Signed in, no tenders at all | Nothing has been scraped into this project yet |
+| Signed in, no tenders at all | Check `EMBEDDING_PROVIDER`. A tender with no embedding is invisible to every query that matters, and the corpus is empty rather than broken |
 
-Accounts are created in the Supabase dashboard, not through a sign-up form —
-access to a tender workspace is granted, not claimed.
+Accounts come from `/signup`. A trigger on `auth.users` provisions the
+organisation and the owner membership **in the same transaction as the
+account** (migration 0017) — the web app cannot do it in a second request,
+because a closed tab between the two leaves an account that can sign in and
+see nothing, every policy resolving through a membership that does not
+exist.
 
-## Israeli portal agents
+## Sources
 
-Three candidate Israeli sources were considered. Probe results as of
-2026-08-25:
+Every source is checked before it is connected. A portal whose rules forbid
+automated collection is not connected, and the route is an access agreement
+with its operator rather than a workaround.
 
 | Portal | Agent | Status |
 |---|---|---|
-| `online.mod.gov.il/…/BalamList.aspx` — MOD tender list | `mod-balam` | **Verified and enabled.** ASP.NET WebForms; selectors, column map, pager and detail URL all confirmed live |
+| TED — the EU's official procurement journal | `ted-eu` | **Live.** Anonymous JSON API, 31 CPV divisions, one resumable walk per division. Carries the full notice, so extraction there is genuine rather than title-only |
+| `online.mod.gov.il/…/BalamList.aspx` — Israeli MOD tender list | `mod-balam` | **Live.** ASP.NET WebForms; selectors, column map, pager and detail URL confirmed against the live site. Publishes a title and a deadline only, so matching there is shallow by construction |
+| `find-tender.service.gov.uk` — UK above-threshold procurement | `uk-fts` | **Written and tested, not yet run against the live budget.** Anonymous OCDS API. Nine notices in ten are awards or plans rather than open tenders, so the filter is most of the value |
+| `gov.il` publications collector | `govil` | **JSON API found, gated by an API key.** Needs a client id from the operator. Disabled |
 | `sapakim.mod.gov.il/home` — MOD suppliers portal | none, and none planned | **`robots.txt` disallows, for `*` and for our agent. Do not scrape it.** |
-| `gov.il` publications collector | `govil` | **JSON API found, but gated by an API key.** Needs a client id from the operator. Stays disabled |
+
+### Why the matching is cross-language
+
+The corpus is embedded rather than keyword-indexed, so a capability
+description written in English has matched notices published in Greek,
+Hebrew, Swedish and German. That is not a design intention being described
+— it is what the first real alert contained.
 
 ### sapakim.mod.gov.il is off limits
 

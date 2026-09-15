@@ -1,13 +1,37 @@
 # Landing page
 
-Single self-contained HTML file — no build step, no bundler. `index.html`
-plus its static assets (`og.png`, `logo.png`, `favicon-32.png`,
-`apple-touch-icon.png`) and the crawler files below. Serve the directory from
-any static host.
+Two pages, one source. `index.html` is the Hebrew original and is edited by
+hand; `en/index.html` is **generated** from it and is not. Plus the static
+assets (`og.png`, `logo.png`, `favicon-32.png`, `apple-touch-icon.png`) and
+the crawler files below. Still no bundler — the only build step is the
+translation.
 
 ```bash
-npm run serve     # http://localhost:4173
+npm run serve        # http://localhost:4173  and  /en
+npm run build:en     # regenerate en/index.html from content/en.json
+npm run check:en     # fail if Hebrew copy has no English
+npm run stats        # rewrite the coverage numbers from the database
 ```
+
+## The two things that are generated, and why
+
+**The numbers.** The page states how many tenders and countries it covers.
+Those live in exactly one element each, tagged `data-stat`, and
+`npm run stats` writes them from the database. A count typed into a static
+page is a snapshot of a system that ingests nightly — it is stale before it
+ships. `npm run stats -- --check` fails when the page and the database
+disagree, which turns a quiet marketing overclaim into a red build.
+
+**The English.** `npm run build:en` reads `index.html`, swaps ~200 strings
+from `content/en.json`, flips `lang`/`dir`, and rewrites relative paths for
+a page one level down. The translation key is the Hebrew string itself: a
+numbered key would shift meaning when a paragraph is inserted above it, and
+the English would attach to the wrong sentence with nothing looking broken.
+Keyed on the text, edited Hebrew simply has no translation and
+`npm run check:en` names it.
+
+**Never hand-edit `en/index.html`.** A change made there is gone on the next
+build, silently.
 
 ## Deploying to Vercel
 
@@ -112,11 +136,19 @@ the facts change:
   the public visits. Declaring a local business in a machine-readable field
   would be a false claim, and search engines treat fabricated structured data
   as spam rather than as an error.
-- **`BreadcrumbList`.** The site is a single page. Markup describing a
-  hierarchy that does not exist is the same mistake in a different tag.
+- **`BreadcrumbList`.** There are two pages and they are translations of
+  each other, not a hierarchy. Markup describing a nesting that does not
+  exist is the same mistake in a different tag. The relationship between
+  them is declared where it belongs: `hreflang` on both pages, and a
+  two-entry `sitemap.xml` where each URL names every alternate including
+  itself.
 
 The canonical URL and the absolute `og:image` both hardcode
 `https://tenders-finder.vercel.app`. **If a custom domain is ever attached,
 both must be updated** — `npm run stamp -- https://your-domain` handles the
-sharing card; the canonical tag, `og:url`, `robots.txt`, `sitemap.xml` and
-`llms.txt` are currently by hand.
+sharing card; the canonical tag, `og:url`, the three `hreflang` links,
+`robots.txt`, `sitemap.xml` and `llms.txt` are currently by hand. The
+`hreflang` URLs carry **no trailing slash**: `vercel.json` sets
+`trailingSlash: false`, so `/en/` redirects to `/en`, and an `hreflang`
+pointing at a redirect is a soft error nobody sees until the English page
+fails to rank.

@@ -1,12 +1,47 @@
 # Database
 
-PostgreSQL with pgvector. Five migrations, applied in order, plus a
+PostgreSQL with pgvector. **Twenty migrations**, applied in order, plus a
 verification query and a development seed.
+
+## What each migration is for
+
+Numbers are load-bearing: later files define functions over tables earlier
+ones create, and several exist only to correct the one before. Those
+corrections are kept rather than folded in, because a migration that had to
+be fixed is the most useful thing in this directory.
+
+| | |
+|---|---|
+| `0001` | Extensions and shared enums |
+| `0002` | Tenancy: organizations, membership, and the RLS foundation |
+| `0003` | The tender record, source documents, scrape observability |
+| `0004` | Tenant-private tables: alert profiles, pipeline, notes |
+| `0005` | The competitive core — hybrid semantic + keyword matching |
+| `0006` | Inbound contact submissions from the landing page |
+| `0007` | Close an RPC PostgREST exposed to unauthenticated callers |
+| `0008` | **Finish what 0007 only appeared to do** |
+| `0009` | Stop a transient failure erasing a successful extraction |
+| `0010` | **Two corrections to 0009**, found by checking the result |
+| `0011` | Age a tender's status against the clock |
+| `0012` | Put that transition on a clock, because that is what it is about |
+| `0013` | Score against the profile's own distribution, not a constant |
+| `0014` | **0013 moved no profile off the floor** — `real` vs `numeric` |
+| `0015` | Fan a profile out across tenders that already exist |
+| `0016` | Deliver a match to the person it is for |
+| `0017` | Give a new account somewhere to live, in the same transaction |
+| `0018` | Do not alert on a tender that closes today |
+| `0019` | Let a tender enter the corpus from its listing alone |
+| `0020` | Put the lead-time skip on the clock it was reacting to |
+
+Four of those twenty (`0008`, `0010`, `0014`, and half of `0012`) exist
+because something looked applied and was not. Each ends in a query that
+reads the end state back rather than trusting the statement above it — copy
+that habit into any new migration.
 
 ## Applying
 
 Numbered files under `migrations/`, in order. The order is load-bearing:
-`0005` defines functions over tables that `0003` and `0004` create.
+`0005` defines functions over tables that `0003` and `0004` create, and `0019` alters a trigger `0009` installed.
 
 Either paste each file into the Supabase SQL Editor and run it, or use the
 CLI:

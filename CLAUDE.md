@@ -32,8 +32,14 @@ original source document.
 ## Brand and visual identity
 
 `landing/index.html` is the single source of truth for the brand. It carries
-the logo SVG, the full colour token set for both themes, and a design plan in
-a comment at the top of the file explaining why each choice was made.
+the logo, the full colour token set for both themes, and a design plan in a
+comment at the top of the file explaining why each choice was made.
+
+It is also the Hebrew source of truth for the site's copy. `landing/en/`
+is **generated** from it by `npm run build:en` against
+`landing/content/en.json` — never hand-edited, and never the file you make a
+content change in. `npm run check:en` fails when Hebrew has been edited and
+its translation has not.
 
 Read it before producing anything the brand appears on -- a deck, a diagram,
 a report cover, a second page. Do not invent a palette or a typeface pairing;
@@ -110,6 +116,28 @@ A refusal is not an exception. It arrives as a successful HTTP 200 with
 `stop_reason: "refusal"` and empty content, so branch on `stop_reason` — never
 on the presence of `stop_details`, which is absent on some refusals.
 
+### A tender is matchable before it is read
+
+A tender enters the matching corpus embedded from its **listing** — the
+title, description and CPV codes the contracting authority published — and
+the full PEGS extraction is deferred until the tender matches somebody's
+profile (ADR-22). This is not a weakening of the rule above; it is the
+same rule. A listing is the buyer's own words, so at ingestion there is no
+model output to validate, because there is no model.
+
+Two consequences that are easy to get wrong:
+
+- **`extraction_status = 'pending'` with an embedding is a healthy row**,
+  not an unfinished one. Provenance lives in
+  `metadata.embedding.source = 'listing'`. Do not "fix" such rows by
+  extracting them on sight; `tenders_awaiting_extraction()` decides which
+  ones have earned the cost.
+- **A row must never lose its embedding.** An unembedded tender is present
+  in every count and absent from every result, which is the worst state
+  available — worse than a missing row, which at least announces itself.
+  The trigger in 0019 refuses any write that replaces a vector with null,
+  whatever the statuses say.
+
 ### Extraction prompt structure — PEGS
 
 Every extraction prompt must organize the tender document along PEGS:
@@ -166,6 +194,27 @@ Do not commit code that has not passed the checks above.
 
 ## Model usage
 
-Use `claude-opus-5` for extraction. Set the model through
-`ANTHROPIC_MODEL` in the service config — never hardcode a model ID at a
-call site.
+**Two providers, and which one is live is a setting, not a constant.**
+`EXTRACTION_PROVIDER` selects `anthropic` or `gemini`; `extraction_model`
+resolves to `ANTHROPIC_MODEL` or `GEMINI_MODEL` accordingly. The running
+deployment uses **Gemini** for both extraction and embeddings. Never
+hardcode a model id at a call site, and never assume a provider from this
+file — read the setting. A version of this section said "use
+`claude-opus-5`" for a week after the service had switched, and `/health`
+announced a model the service was not running.
+
+**Embeddings are not interchangeable the way extraction models are.**
+Extraction output is validated against a schema, so a different model
+produces output that either passes or does not. An embedding is a position
+in a space that only that model defines: vectors from two models are not
+comparable, and cosine similarity between them is noise wearing a score.
+Changing `EMBEDDING_PROVIDER` therefore means **re-embedding the entire
+corpus**, and is a migration, not a config change. `_assert_dimensions` is
+not the guard for this — a wrong-model vector has the right shape.
+
+**The embedding budget is the real ceiling on ingestion.** Gemini's free
+tier allows 1,000 embedding *requests* per day and 30,000 *tokens* per
+minute. Tokens bind first: a listing averages ~198 tokens, so throughput is
+about 150 tenders a minute regardless of batch size. Batching buys request
+headroom, not speed. Anything that embeds in a loop, one item per call, will
+spend a day's budget on a thousand rows — that has happened here twice.
