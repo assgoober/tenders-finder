@@ -60,14 +60,14 @@
       "name": "Tenders Finder",
       "url": "https://tenders-finder.vercel.app/",
       "logo": "https://tenders-finder.vercel.app/logo.png",
-      "description": "פלטפורמה לCollection מכרזי רכש מפורטלים ממשלתיים מבודדים, Extraction תנאי הסף והמועדים, וMatching סמנטית לפרופיל היכולות של הCompany."
+      "description": "פלטפורמה לאיסוף מכרזי רכש מפורטלים ממשלתיים מבודדים, Extraction תנאי הסף והמועדים, והתאמה סמנטית לפרופיל היכולות של החברה."
     },
     {
       "@type": "WebSite",
       "@id": "https://tenders-finder.vercel.app/#website",
       "url": "https://tenders-finder.vercel.app/",
       "name": "Tenders Finder",
-      "inLanguage": "he-IL",
+      "inLanguage": "en-GB",
       "publisher": { "@id": "https://tenders-finder.vercel.app/#organization" }
     },
     {
@@ -77,7 +77,7 @@
       "operatingSystem": "Web",
       "url": "https://tenders-finder.vercel.app/",
       "publisher": { "@id": "https://tenders-finder.vercel.app/#organization" },
-      "description": "Collection אוטומטי של מכרזי רכש, Extraction מובנה של תנאי סף ומועדי הגשה, וAlerting כשמכרז מתאים לפרופיל הCompany."
+      "description": "Collection אוטומטי של מכרזי רכש, Extraction מובנה של תנאי סף ומועדי הגשה, והתראה כשמכרז מתאים לפרופיל החברה."
     }
   ]
 }
@@ -1181,11 +1181,11 @@ section { padding-block: clamp(60px, 8vw, 100px); }
            claim is instead of having to trust it. -->
       <ul class="scale" aria-label="Coverage">
         <li>
-          <span class="scale-num mono" data-stat="tenders">2751</span>
+          <span class="scale-num mono" data-stat="tenders">3711</span>
           <span class="scale-label">tenders indexed</span>
         </li>
         <li>
-          <span class="scale-num mono" data-stat="live">2340</span>
+          <span class="scale-num mono" data-stat="live">3210</span>
           <span class="scale-label">open for bids right now</span>
         </li>
         <li>
@@ -1198,7 +1198,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
         </li>
       </ul>
       <p class="scale-note">
-        Measured against the database on <time datetime="2026-09-15" data-stat="asof">15.09.2026</time>. The numbers are written by <code dir="ltr">npm run stats</code> rather than typed — there is no second copy that can fall behind.
+        Measured against the database on <time datetime="2026-09-16" data-stat="asof">16.09.2026</time>. The numbers are written by <code dir="ltr">npm run stats</code> rather than typed — there is no second copy that can fall behind.
       </p>
 
     </div>
@@ -1814,109 +1814,109 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   var TENDERS = [
     {
       id: "t1", ref: "1000957926", sector: "defense", match: 0.91,
-      title: "אספקת מערכות קשר טקטיות ניידות ואביזרים נלווים",
-      buyer: "משרד הביטחון — אגף הרכש",
-      deadline: inHours(74), source: "רשימת המכרזים של משרד הביטחון",
+      title: "Supply of portable tactical communication systems and accessories",
+      buyer: "Ministry of Defence — Procurement Directorate",
+      deadline: inHours(74), source: "Israeli MoD tender list",
       pegs: {
         participation: [
-          "הסמכת <strong>AS9100D</strong> בתוקף במועד ההגשה",
-          "סיווג ביטחוני למתקן ברמה 3 ומעלה",
-          "שלושה פרויקטים דומים בחמש השנים האחרונות"
+          "Valid <strong>AS9100D</strong> certification at the submission date",
+          "Facility security clearance at level 3 or above",
+          "Three comparable projects in the last five years"
         ],
         evaluation: [
-          "עמידה טכנית — <strong>45%</strong>",
-          "מחיר — <strong>35%</strong>",
-          "לוח זמנים לאספקה — <strong>10%</strong>",
-          "השתתפות תעשייתית מקומית — <strong>10%</strong>"
+          "Technical compliance — <strong>45%</strong>",
+          "Price — <strong>35%</strong>",
+          "Delivery schedule — <strong>10%</strong>",
+          "Local industrial participation — <strong>10%</strong>"
         ],
         guidelines: [
-          "480 מכשירי קשר ידניים",
-          "טווח טמפרטורות <span dir=\"ltr\">-30°C</span> עד <span dir=\"ltr\">+60°C</span>",
-          "כמות מינימלית להזמנה חוזרת: 24 יחידות"
+          "480 handheld radios",
+          "Temperature range <span dir=\"ltr\">-30°C</span> to <span dir=\"ltr\">+60°C</span>",
+          "Minimum reorder quantity: 24 units"
         ],
         standards: ["MIL-STD-810H", "MIL-STD-461G", "IP67"],
-        selection: "הניקוד המשוקלל הגבוה ביותר · זוכה יחיד"
+        selection: "Highest weighted score · single winner"
       }
     },
     {
       id: "t2", ref: "MUNI-2026-0088", sector: "civil", match: 0.64,
-      title: "הסכם מסגרת לשיקום קווי מים עירוניים",
-      buyer: "תאגיד המים המטרופוליני",
-      deadline: inHours(196), source: "אוסף הפרסומים הממשלתי",
+      title: "Framework agreement for municipal water main rehabilitation",
+      buyer: "Metropolitan Water Utility",
+      deadline: inHours(196), source: "Government publications collection",
       pegs: {
         participation: [
-          "סיווג קבלני <strong>ג'-4</strong> ומעלה לעבודות מים וביוב",
-          "הסמכות <strong>ISO 9001:2015</strong> ו-<strong>ISO 45001</strong>",
-          "ביטוח אחריות מקצועית בסך 2,000,000 אירו"
+          "Contractor classification <strong>C-4</strong> or above for water and sewage works",
+          "<strong>ISO 9001:2015</strong> and <strong>ISO 45001</strong> certification",
+          "Professional indemnity insurance of EUR 2,000,000"
         ],
         evaluation: [
-          "מחיר — <strong>60%</strong>",
-          "מתודולוגיה טכנית — <strong>25%</strong>",
-          "תוכנית ניהול סביבתי — <strong>15%</strong>"
+          "Price — <strong>60%</strong>",
+          "Technical methodology — <strong>25%</strong>",
+          "Environmental management plan — <strong>15%</strong>"
         ],
         guidelines: [
-          "כ-60 ק\"מ קווים בקטרים <span dir=\"ltr\">DN100–DN400</span>",
-          "חומרי ריפוד מאושרים למגע עם מי שתייה",
-          "משך ההסכם: ארבע שנים"
+          "About 60 km of mains, diameters <span dir=\"ltr\">DN100–DN400</span>",
+          "Lining materials approved for contact with drinking water",
+          "Agreement term: four years"
         ],
         standards: ["EN 805", "EN ISO 11295"],
-        selection: "ההצעה הכדאית ביותר · עד שלושה זוכים במסגרת"
+        selection: "Most economically advantageous tender · up to three framework winners"
       }
     },
     {
       id: "t3", ref: "NASA-CUAS-2026-11", sector: "defense", match: 0.78,
-      title: "מערכות גילוי ומעקב אחר כלי טיס בלתי מאוישים",
-      buyer: "רשות ביטחון שדות התעופה",
-      deadline: inHours(19), source: "אוסף הפרסומים הממשלתי",
+      title: "Detection and tracking systems for unmanned aircraft",
+      buyer: "Airports Security Authority",
+      deadline: inHours(19), source: "Government publications collection",
       pegs: {
         participation: [
-          "ספק רשום במדינה החברה באיחוד האירופי",
-          "אישור ביטחוני לעבודה בתשתיות קריטיות",
-          "הסמכת <strong>ISO 27001</strong>"
+          "Supplier registered in an EU member state",
+          "Security clearance for work on critical infrastructure",
+          "<strong>ISO 27001</strong> certification"
         ],
         evaluation: [
-          "ביצועי גילוי ושיעור התרעות שווא — <strong>40%</strong>",
-          "אינטגרציה עם מערכות שליטה קיימות — <strong>30%</strong>",
-          "מחיר — <strong>30%</strong>"
+          "Detection performance and false-alarm rate — <strong>40%</strong>",
+          "Integration with existing command systems — <strong>30%</strong>",
+          "Price — <strong>30%</strong>"
         ],
         guidelines: [
-          "12 עמדות גילוי קבועות",
-          "3 ערכות ניידות",
-          "גילוי בטווח שאינו נמוך מ-5 ק\"מ"
+          "12 fixed detection stations",
+          "3 mobile kits",
+          "Detection range of not less than 5 km"
         ],
         standards: ["EN 303 883"],
-        selection: "הניקוד האיכותי הגבוה ביותר · זוכה יחיד"
+        selection: "Highest quality score · single winner"
       },
-      unclear: "נספח רישוי תדרים — סריקה חלקית, סומן לבדיקה אנושית"
+      unclear: "Frequency licensing annex — partially parsed, flagged for human review"
     },
     {
       id: "t4", ref: "JASC-MRO-2026-03", sector: "defense", match: null,
-      title: "שירותי אחזקה, תיקון ושיפוץ לצי מסוקים",
-      buyer: "פיקוד התמיכה האווירית",
-      deadline: inHours(-52), source: "רשימת המכרזים של משרד הביטחון",
+      title: "Maintenance, repair and overhaul services for a helicopter fleet",
+      buyer: "Air Support Command",
+      deadline: inHours(-52), source: "Israeli MoD tender list",
       needsReview: true
     },
     {
       id: "t5", ref: "HLTH-2026-214", sector: "civil", match: 0.55,
-      title: "אספקת ציוד ניטור למחלקות טיפול נמרץ",
-      buyer: "מרכז רפואי אזורי",
-      deadline: inHours(430), source: "אוסף הפרסומים הממשלתי",
+      title: "Supply of monitoring equipment for intensive care units",
+      buyer: "Regional Medical Centre",
+      deadline: inHours(430), source: "Government publications collection",
       pegs: {
         participation: [
-          "רישום אמ\"ר בפנקס הציוד הרפואי",
-          "נציגות שירות מקומית עם זמן תגובה של עד 24 שעות"
+          "Medical device registration in the national device register",
+          "Local service representation with a response time of up to 24 hours"
         ],
         evaluation: [
-          "מחיר — <strong>50%</strong>",
-          "מפרט טכני — <strong>30%</strong>",
-          "שירות ואחריות — <strong>20%</strong>"
+          "Price — <strong>50%</strong>",
+          "Technical specification — <strong>30%</strong>",
+          "Service and warranty — <strong>20%</strong>"
         ],
         guidelines: [
-          "48 מוניטורים רב-פרמטריים",
-          "אינטגרציה למערכת ניהול חולים קיימת"
+          "48 multi-parameter monitors",
+          "Integration with the existing patient management system"
         ],
         standards: ["IEC 60601-1", "MDR 2017/745"],
-        selection: "הניקוד המשוקלל הגבוה ביותר"
+        selection: "Highest weighted score"
       }
     }
   ];
@@ -1932,7 +1932,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 
   function countdownText(t) {
     var ms = t.deadline - Date.now();
-    if (ms < 0) return "נסגר";
+    if (ms < 0) return "closed";
     var d = Math.floor(ms / (24 * HOUR));
     var h = Math.floor((ms % (24 * HOUR)) / HOUR);
     var m = Math.floor((ms % HOUR) / 60000);
@@ -1941,13 +1941,17 @@ section { padding-block: clamp(60px, 8vw, 100px); }
     // abbreviation into a monospaced LTR number ("3ד 01:59") parses badly
     // in RTL, and this is the one number on the page that has to be
     // unambiguous.
-    if (d >= 2) return d + " ימים";
-    if (d === 1) return "יום " + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    if (d >= 2) return d + " days";
+    if (d === 1) return "day " + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   }
 
   function fmtDate(d) {
-    return d.toLocaleDateString("he-IL", { day: "numeric", month: "short", year: "numeric" });
+    // Follows the document, not a hardcoded locale. The English page was
+    // rendering "14 בספט׳ 2026" in an otherwise English tender board --
+    // a date is copy, and it belongs to whichever language the page is in.
+    return d.toLocaleDateString(document.documentElement.lang || "he-IL",
+      { day: "numeric", month: "short", year: "numeric" });
   }
 
   /* ---------- Row rendering ---------- */
@@ -1955,16 +1959,16 @@ section { padding-block: clamp(60px, 8vw, 100px); }
     var sev = severity(t);
     var chip = "";
     if (t.needsReview) {
-      chip = '<span class="chip chip-soon">ממתין לבדיקה</span>';
+      chip = '<span class="chip chip-soon">awaiting review</span>';
     } else if (sev === "closed") {
-      chip = '<span class="chip chip-live" style="opacity:.6">נסגר</span>';
+      chip = '<span class="chip chip-live" style="opacity:.6">closed</span>';
     } else if (sev === "urgent") {
-      chip = '<span class="chip chip-urgent">נסגר בקרוב</span>';
+      chip = '<span class="chip chip-urgent">closing soon</span>';
     } else {
-      chip = '<span class="chip chip-live">פתוח</span>';
+      chip = '<span class="chip chip-live">open</span>';
     }
     var match = t.match !== null && t.match !== undefined
-      ? '<span class="chip chip-match">' + Math.round(t.match * 100) + '% התאמה</span>'
+      ? '<span class="chip chip-match">' + Math.round(t.match * 100) + '% match</span>'
       : "";
 
     return '' +
@@ -1979,7 +1983,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
       '</span>' +
       '<span class="row-side">' +
         '<span class="countdown" data-deadline="' + t.id + '">' + countdownText(t) + '</span>' +
-        '<span class="countdown-label">' + (severity(t) === "closed" ? fmtDate(t.deadline) : "עד ההגשה") + '</span>' +
+        '<span class="countdown-label">' + (severity(t) === "closed" ? fmtDate(t.deadline) : "to deadline") + '</span>' +
       '</span>';
   }
 
@@ -2005,7 +2009,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   /* ---------- Hero feed ---------- */
   var heroItems = TENDERS.filter(function (t) { return !t.needsReview; }).slice(0, 4);
   renderRows(document.getElementById("heroRows"), heroItems, false);
-  document.getElementById("feedCount").textContent = heroItems.length + " מכרזים";
+  document.getElementById("feedCount").textContent = heroItems.length + " tenders";
 
   /* ---------- Demo ---------- */
   var demoRows = document.getElementById("demoRows");
@@ -2023,7 +2027,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   }
 
   function renderDetail(t) {
-    if (!t) { detail.innerHTML = '<p class="null-note">בחרו מכרז מהרשימה.</p>'; return; }
+    if (!t) { detail.innerHTML = '<p class="null-note">Pick a tender from the list.</p>'; return; }
 
     var head =
       '<h3>' + t.title + '</h3>' +
@@ -2031,17 +2035,17 @@ section { padding-block: clamp(60px, 8vw, 100px); }
       '<a class="source-link" href="https://www.online.mod.gov.il/Online2016/Pages/General/Balam/BalamList.aspx?Reset=1" target="_blank" rel="noopener noreferrer">' +
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">' +
         '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>' +
-        'פתיחת פורטל המקור' +
+        'Open the source portal' +
       '</a>' +
-      '<p class="null-note" style="margin-block-start:10px;">מקור: ' + t.source + ' · המכרז שלמעלה הוא דוגמה מייצגת; הקישור פותח את הפורטל האמיתי ' + 'שממנו המערכת קוצרת. במערכת עצמה הכפתור מוביל לעמוד המכרז הספציפי.</p>';
+      '<p class="null-note" style="margin-block-start:10px;">Source: ' + t.source + ' · the tender above is a representative sample; the link opens the real portal ' + 'the system harvests from. In the product itself the button leads to that tender&rsquo;s own page.</p>';
 
     if (t.needsReview) {
       detail.innerHTML = head +
         '<div class="pegs"><div class="pegs-block">' +
-        '<p class="pegs-key">מצב החילוץ</p>' +
+        '<p class="pegs-key">Extraction status</p>' +
         '<p class="null-note">' +
-        'החילוץ האוטומטי לא עבר אימות עבור מכרז זה, ולכן לא נשמרו שדות. ' +
-        'המסמך סומן לבדיקה אנושית. עד אז — הפרסום המקורי הוא המקור היחיד.' +
+        'Automated extraction did not pass validation for this tender, so no fields were stored. ' +
+        'The document is flagged for human review. Until then, the original notice is the only source.' +
         '</p></div></div>';
       return;
     }
@@ -2053,19 +2057,19 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 
     detail.innerHTML = head +
       '<div class="pegs">' +
-        '<div class="pegs-block"><p class="pegs-key">תנאי השתתפות</p><ul>' +
+        '<div class="pegs-block"><p class="pegs-key">Participation</p><ul>' +
           p.participation.map(function (x) { return "<li>" + x + "</li>"; }).join("") +
         '</ul></div>' +
-        '<div class="pegs-block"><p class="pegs-key">קריטריוני ניקוד</p><ul>' +
+        '<div class="pegs-block"><p class="pegs-key">Evaluation</p><ul>' +
           p.evaluation.map(function (x) { return "<li>" + x + "</li>"; }).join("") +
         '</ul></div>' +
-        '<div class="pegs-block"><p class="pegs-key">מפרט וכמויות</p><ul>' +
+        '<div class="pegs-block"><p class="pegs-key">Guidelines</p><ul>' +
           p.guidelines.map(function (x) { return "<li>" + x + "</li>"; }).join("") +
         '</ul><p style="margin-block-start:10px;">' + stds + '</p></div>' +
-        '<div class="pegs-block"><p class="pegs-key">קריטריון זכייה</p>' +
+        '<div class="pegs-block"><p class="pegs-key">Selection</p>' +
           '<p style="font-size:.94rem; color:var(--steel);">' + p.selection + '</p></div>' +
         (t.unclear
-          ? '<div class="pegs-block"><p class="pegs-key">סומן כלא ברור</p>' +
+          ? '<div class="pegs-block"><p class="pegs-key">Flagged as unclear</p>' +
             '<p class="null-note">' + t.unclear + '</p></div>'
           : '') +
       '</div>';
@@ -2074,7 +2078,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   function renderDemo() {
     var items = TENDERS.filter(matches);
     renderRows(demoRows, items, true);
-    demoCount.textContent = items.length + " מתוך " + TENDERS.length;
+    demoCount.textContent = items.length + " of " + TENDERS.length;
     demoEmpty.style.display = items.length ? "none" : "block";
 
     var active = demoRows.querySelector('[data-id="' + activeId + '"]');
@@ -2190,8 +2194,8 @@ section { padding-block: clamp(60px, 8vw, 100px); }
     if (bad.length) {
       status.setAttribute("data-kind", "err");
       status.textContent = bad.length === 1
-        ? "יש שדה אחד שדורש תיקון. המיקוד הועבר אליו."
-        : "יש " + bad.length + " שדות שדורשים תיקון. המיקוד הועבר לראשון שבהם.";
+        ? "One field needs correcting. Focus has moved to it."
+        : "There are " + bad.length + " fields need correcting. Focus has moved to the first of them.";
       var first = document.getElementById(bad[0]);
       if (first) first.focus();
       return;
@@ -2213,7 +2217,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
 
     if (ENDPOINT) {
       status.setAttribute("data-kind", "ok");
-      status.textContent = "שולח…";
+      status.textContent = "Sending…";
       fetch(ENDPOINT, {
         method: "POST",
         headers: {
@@ -2231,11 +2235,11 @@ section { padding-block: clamp(60px, 8vw, 100px); }
       }).then(function (r) {
         if (!r.ok) throw new Error(String(r.status));
         status.setAttribute("data-kind", "ok");
-        status.textContent = "הפרטים התקבלו. נחזור אליכם בקרוב.";
+        status.textContent = "We have your details. We will be in touch shortly.";
         form.reset();
       }).catch(function () {
         status.setAttribute("data-kind", "err");
-        status.textContent = "השליחה נכשלה. נסו שוב, או כתבו לנו ישירות ל-" + FALLBACK_EMAIL + ".";
+        status.textContent = "Sending failed. Try again, or write to us directly at " + FALLBACK_EMAIL + ".";
       });
       return;
     }
@@ -2243,21 +2247,21 @@ section { padding-block: clamp(60px, 8vw, 100px); }
     // No endpoint configured: hand the details to the user's mail client
     // rather than pretending they were received.
     var body =
-      "שם: " + payload.full_name + "\n" +
-      "חברה: " + payload.company + "\n" +
-      'דוא"ל: ' + payload.email + "\n" +
-      "טלפון: " + (payload.phone || "—") + "\n" +
-      "תחום: " + (payload.sector || "—") + "\n" +
-      "הערות: " + (payload.notes || "—");
+      "Name: " + payload.full_name + "\n" +
+      "Company: " + payload.company + "\n" +
+      'Email: ' + payload.email + "\n" +
+      "Phone: " + (payload.phone || "—") + "\n" +
+      "Field: " + (payload.sector || "—") + "\n" +
+      "Notes: " + (payload.notes || "—");
 
     window.location.href = "mailto:" + FALLBACK_EMAIL +
-      "?subject=" + encodeURIComponent("פנייה מדף הנחיתה — " + payload.company) +
+      "?subject=" + encodeURIComponent("Enquiry from the landing page — " + payload.company) +
       "&body=" + encodeURIComponent(body);
 
     status.setAttribute("data-kind", "ok");
     status.textContent =
-      "הדף הזה עדיין לא מחובר לשרת, ולכן הפרטים לא נשלחו מעצמם — " +
-      "נפתחה טיוטת מייל עם הפרטים שמילאתם. שליחתה תגיע אלינו.";
+      "This page is not yet wired to a server, so the details were not sent on their own — " +
+      "a draft email with what you filled in has been opened. Sending it reaches us.";
   });
 })();
 </script>

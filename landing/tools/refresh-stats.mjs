@@ -31,6 +31,8 @@ if (!url || !key) {
   process.exit(2);
 }
 
+const PAGE_SIZE = 1000;
+
 const db = createClient(url, key, { auth: { persistSession: false } });
 
 /** Count rows without pulling them. `head: true` sends no body. */
@@ -44,7 +46,24 @@ async function count(table, apply = (q) => q) {
 
 const tenders = await count("tenders");
 const live = await count("tenders", (q) => q.in("status", ["open", "closing_soon"]));
-const sources = await count("tender_sources");
+// Sources that have actually contributed a tender, not rows in
+// `tender_sources`. A source row is created the moment an agent runs, before
+// it ingests anything -- so the day UK Find a Tender harvested 2,220 notices
+// and embedded none of them, the page went from "2 portals under automatic
+// scan" to "3" while the corpus still came from two. The label makes a claim
+// about coverage; the table was answering a question about configuration.
+const contributing = new Set();
+for (let from = 0; ; from += PAGE_SIZE) {
+  const { data: rows, error } = await db
+    .from("tenders")
+    .select("source_id")
+    .range(from, from + PAGE_SIZE - 1);
+  if (error) throw new Error(`sources: ${error.message}`);
+  const batch = rows ?? [];
+  for (const r of batch) if (r.source_id) contributing.add(r.source_id);
+  if (batch.length < PAGE_SIZE) break;
+}
+const sources = contributing.size;
 
 // Distinct countries needs the rows, but only two columns of them.
 //
@@ -54,7 +73,6 @@ const sources = await count("tender_sources");
 // 32 countries where the database held 37. A plausible number, no error,
 // and wrong -- in the very script written to stop this page stating numbers
 // it could not back up.
-const PAGE_SIZE = 1000;
 const seen = new Set();
 let pulled = 0;
 for (let from = 0; ; from += PAGE_SIZE) {
