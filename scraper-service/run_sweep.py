@@ -150,7 +150,21 @@ def main() -> int:
                         help="fetch and filter, write nothing")
     parser.add_argument("--log-dir", default=str(ROOT / "logs"))
     args = parser.parse_args()
-    args.source = args.source or ["ted-eu", "uk-fts"]
+    # Israel first, deliberately, and not only for completeness.
+    #
+    # This defaulted to ["ted-eu", "uk-fts"] and the Israeli MoD list -- the
+    # source this product is sold against first -- was simply not in it. It
+    # went unswept for five days while the daily job reported success every
+    # morning. Measured on the sixth: 204 BALAM tenders held, only 98 still
+    # open, and 166 open on the live portal. A third of the Israeli market
+    # invisible, with nothing failing.
+    #
+    # It runs FIRST because the embedding budget is finite and the earlier
+    # sources spend it. When the budget runs out mid-sweep the run aborts,
+    # and whatever is last in this list gets nothing -- which is exactly
+    # what happened to uk-fts today. Order here is a priority, not a
+    # sequence, and the home market outranks the volume.
+    args.source = args.source or ["mod-balam", "ted-eu", "uk-fts"]
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     log_path = Path(args.log_dir) / f"sweep-{stamp}.log"
