@@ -1,0 +1,2 @@
+[mcp_servers.supabase]
+url = "https://mcp.supabase.com/mcp?project_ref=vixuawfbayglbgitzqbj&read_only=true&features=docs%2Cdatabase%2Cdebugging"

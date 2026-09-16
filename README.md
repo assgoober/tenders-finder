@@ -9,7 +9,7 @@ Built B2G-first (defense procurement) on a content-agnostic data model, so the
 same pipeline handles civilian and commercial tenders without a schema change.
 
 Full architecture, decision records, and rationale: [`REPOMIX.md`](REPOMIX.md).
-Agent working rules: [`CLAUDE.md`](CLAUDE.md).
+Agent working rules: [`AGENTS.md`](AGENTS.md).
 
 ## Layout
 

@@ -8,8 +8,8 @@ and 190 tests, the other said "nothing schedules the scraper". Two handoffs
 is how a handoff becomes archaeology, so there is one, and every number in
 it was read back from the live system on **2026-09-15**.
 
-**Read `CLAUDE.md` first** — the behaviour contract, and authoritative over
-anything here. Then `REPOMIX.md`, the knowledge base in Hebrew: vision,
+**Read `AGENTS.md` first** — the behaviour contract, and authoritative over
+anything here. (`CLAUDE.md` is a pointer to it; one contract, two doors.) Then `REPOMIX.md`, the knowledge base in Hebrew: vision,
 stack rationale, **26 architecture decision records**, and a table of silent
 failures that is the single most useful page in this repository.
 
@@ -136,7 +136,7 @@ runs. Give them the SQL. Do not ask for the flag to be dropped.
 
 ## How this project expects you to work
 
-Taken from `CLAUDE.md`, and from what has actually caught bugs here.
+Taken from `AGENTS.md`, and from what has actually caught bugs here.
 
 **Verify, do not assume.** Nearly every real defect on this project was
 found by running something, not by reading it. A probe found TED returns a
