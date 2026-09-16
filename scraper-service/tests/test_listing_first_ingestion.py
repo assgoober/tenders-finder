@@ -435,3 +435,34 @@ def test_the_daily_cap_is_recognised_from_the_real_body():
 
     with pytest.raises(EmbeddingQuotaExhausted):
         asyncio.run(provider._embed_batch_with_retry(["a"], "RETRIEVAL_DOCUMENT", _Types))
+
+
+def test_an_aborted_run_reports_what_it_never_reached():
+    """`found 2220, ingested 0, skipped 0, failed 0` is four numbers that do
+    not add up to anything.
+
+    That is what a real UK Find a Tender run printed when the embedding
+    budget was already spent by the source before it: 2,220 open notices
+    discovered, and the very first batch aborted the run. Nothing failed --
+    nothing was tried. But a reader scanning those four numbers sees a
+    source with no problems.
+    """
+    from app.pipeline import IngestReport
+
+    report = IngestReport(source_key="uk-fts")
+    report.found = 2220
+    attempted = report.ingested + report.skipped + report.failed + report.needs_review
+    report.unattempted = max(0, report.found - attempted)
+
+    assert report.unattempted == 2220
+    assert (report.ingested + report.skipped + report.failed
+            + report.needs_review + report.unattempted) == report.found
+
+
+def test_a_complete_run_has_nothing_unattempted():
+    from app.pipeline import IngestReport
+
+    report = IngestReport(source_key="ted-eu")
+    report.found, report.ingested, report.skipped = 100, 60, 40
+    attempted = report.ingested + report.skipped + report.failed + report.needs_review
+    assert max(0, report.found - attempted) == 0

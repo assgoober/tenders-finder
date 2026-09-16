@@ -51,6 +51,15 @@ class IngestReport:
     #: problem, a wall of refusals is a policy boundary.
     refused: int = 0
     failed: int = 0
+    #: Discovered, and then never attempted, because the run stopped first.
+    #:
+    #: Without this a quota abort reports `found 2220, ingested 0, skipped 0,
+    #: failed 0` -- four numbers that do not add up to anything and read, to
+    #: anyone scanning them, like a source that simply had nothing wrong with
+    #: it. `partial` says the run stopped; this says how much it stopped in
+    #: front of.
+    unattempted: int = 0
+
     #: Tenders already extracted, unchanged since, under the same prompt and
     #: model -- so re-fetching and re-extracting them would spend a browser
     #: launch and an LLM call to arrive at the row that is already there.
@@ -286,6 +295,16 @@ class IngestionPipeline:
                     # a reader sees partial=false, failed=0 and concludes the
                     # sweep finished.
                     report.partial = True
+                    # Everything discovered and not reached, including the
+                    # batch that was in hand when the budget ran out. These
+                    # are not failures -- nothing was tried on them -- but
+                    # they are not successes either, and a report where
+                    # found, ingested, skipped and failed do not reconcile is
+                    # a report nobody can check.
+                    attempted = (report.ingested + report.skipped
+                                 + report.failed + report.needs_review)
+                    report.unattempted = max(0, report.found - attempted)
+                    pending_batch = []
                     break
                 except Exception as exc:  # noqa: BLE001
                     # One bad tender must not abort the run — the remaining
@@ -305,7 +324,7 @@ class IngestionPipeline:
                     # about the run, and the tail is not a second chance at it.
                     quota_exhausted = True
                     report.partial = True
-                    report.failed += len(pending_batch)
+                    report.unattempted += len(pending_batch)
                     report.errors.append(f"run aborted on the final batch: {exc}")
                     logger.error("[%s] %s", agent.key, exc)
                 except Exception as exc:  # noqa: BLE001

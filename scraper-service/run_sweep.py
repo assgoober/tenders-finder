@@ -112,6 +112,9 @@ async def run(args, log: logging.Logger) -> int:
         log.info("    ingested %d", report.ingested)
         log.info("    skipped  %d", report.skipped)
         log.info("    failed   %d", report.failed)
+        if report.unattempted:
+            log.info("    UNATTEMPTED %d -- the run stopped before reaching them",
+                     report.unattempted)
         log.info("    partial  %s", report.partial)
         for err in report.errors[:5]:
             log.info("    err: %s", err[:200])
