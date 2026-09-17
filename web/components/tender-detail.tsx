@@ -16,15 +16,40 @@ import { ExtractionBadge, TenderStatusBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Tender } from "@/lib/types";
+import { PIPELINE_COLUMNS, type PipelineStatus, type Tender } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
+
+/**
+ * How this tender sits in the organization's own pipeline, and what can be
+ * done about it from here.
+ *
+ * Optional, because the same component renders at /tenders/[id], where there
+ * is no client-side board to keep in step. Reading a tender never depends on
+ * being able to write to it.
+ */
+export interface PipelineControls {
+  /** Null when the tender is not on the board. */
+  status: PipelineStatus | null;
+  busy: boolean;
+  onTrack: () => void;
+  onMove: (status: PipelineStatus) => void;
+  onUntrack: () => void;
+}
 
 /**
  * Renders as a slide-over panel when `onClose` is given, and as a plain
  * inline document when it is not — the deep-link page at /tenders/[id] shows
  * the same extraction without an overlay to dismiss.
  */
-export function TenderDetail({ tender, onClose }: { tender: Tender; onClose?: () => void }) {
+export function TenderDetail({
+  tender,
+  onClose,
+  pipeline,
+}: {
+  tender: Tender;
+  onClose?: () => void;
+  pipeline?: PipelineControls;
+}) {
   const { metadata } = tender;
   const isPanel = Boolean(onClose);
 
@@ -62,6 +87,7 @@ export function TenderDetail({ tender, onClose }: { tender: Tender; onClose?: ()
                 Open original notice <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </Button>
+            {pipeline && <PipelineControl tender={tender} controls={pipeline} />}
             <span className="text-xs text-slate-500">
               {tender.source_name ?? "Source portal"} · published {formatDate(tender.publication_date)}
             </span>
@@ -338,6 +364,58 @@ export function TenderDetail({ tender, onClose }: { tender: Tender; onClose?: ()
       >
         {body}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The bridge from "this tender matched us" to "we are bidding on it".
+ *
+ * Until this existed the alert was a dead end: the board had seven columns
+ * and no way to put anything in them. Deliberately placed in the header,
+ * beside the link to the original notice, because deciding to pursue a tender
+ * happens while reading it — not after scrolling back to a list.
+ *
+ * The stage names here come from `PIPELINE_COLUMNS`, the same list the board
+ * renders, so a stage can never exist in one place and not the other.
+ */
+function PipelineControl({
+  tender,
+  controls,
+}: {
+  tender: Tender;
+  controls: PipelineControls;
+}) {
+  const { status, busy, onTrack, onMove, onUntrack } = controls;
+
+  if (status === null) {
+    return (
+      <Button variant="outline" size="sm" onClick={onTrack} disabled={busy}>
+        Track this bid
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <label className="flex items-center gap-2">
+        <span className="sr-only">Bid stage for {tender.title}</span>
+        <select
+          value={status}
+          disabled={busy}
+          onChange={(event) => onMove(event.target.value as PipelineStatus)}
+          className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:opacity-50"
+        >
+          {PIPELINE_COLUMNS.map((column) => (
+            <option key={column.status} value={column.status}>
+              {column.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button variant="ghost" size="sm" onClick={onUntrack} disabled={busy}>
+        Stop tracking
+      </Button>
     </div>
   );
 }

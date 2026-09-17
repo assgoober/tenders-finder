@@ -12,6 +12,11 @@
  * that ships its own sensor system and context provider is not worth it at
  * this size. Every card also carries a keyboard-accessible move control, so
  * the board is fully usable without dragging.
+ *
+ * The board holds no state of its own beyond the drag gesture. Entries and
+ * the move handler come from `Workspace`, because the same rows are written
+ * from the detail panel too, and two copies of the list would disagree the
+ * moment a tender was tracked from anywhere but here.
  */
 
 import { useMemo, useState } from "react";
@@ -24,12 +29,17 @@ export function PipelineBoard({
   tenders,
   entries,
   onSelect,
+  onMove,
+  busy = false,
 }: {
   tenders: Tender[];
   entries: PipelineEntry[];
   onSelect: (tender: Tender) => void;
+  onMove: (tenderId: string, status: PipelineStatus) => void;
+  /** A write is in flight. Cards stay readable but cannot be moved again
+   *  until it settles, so a failed move rolls back to a known list. */
+  busy?: boolean;
 }) {
-  const [board, setBoard] = useState<PipelineEntry[]>(entries);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [hoverColumn, setHoverColumn] = useState<PipelineStatus | null>(null);
 
@@ -38,24 +48,17 @@ export function PipelineBoard({
     [tenders],
   );
 
-  function move(tenderId: string, status: PipelineStatus) {
-    setBoard((current) =>
-      current.map((entry) => (entry.tender_id === tenderId ? { ...entry, status } : entry)),
-    );
-    // With Supabase wired up this is where the optimistic update reconciles:
-    // update tender_pipeline under RLS, roll back on failure.
-  }
-
   return (
     <div className="overflow-x-auto pb-2">
       <div className="flex min-w-max gap-4">
         {PIPELINE_COLUMNS.map((column) => {
-          const columnEntries = board.filter((entry) => entry.status === column.status);
+          const columnEntries = entries.filter((entry) => entry.status === column.status);
 
           return (
             <section
               key={column.status}
               onDragOver={(event) => {
+                if (busy) return;
                 event.preventDefault();
                 setHoverColumn(column.status);
               }}
@@ -63,7 +66,11 @@ export function PipelineBoard({
               onDrop={(event) => {
                 event.preventDefault();
                 const tenderId = event.dataTransfer.getData("text/plain") || draggingId;
-                if (tenderId) move(tenderId, column.status);
+                // Dropping a card back where it started is a no-op, not a write.
+                const entry = tenderId ? entries.find((e) => e.tender_id === tenderId) : undefined;
+                if (tenderId && entry && entry.status !== column.status) {
+                  onMove(tenderId, column.status);
+                }
                 setDraggingId(null);
                 setHoverColumn(null);
               }}
@@ -82,12 +89,15 @@ export function PipelineBoard({
               <div className="flex flex-1 flex-col gap-2 px-2 pb-3">
                 {columnEntries.map((entry) => {
                   const tender = tenderById.get(entry.tender_id);
+                  // A tracked tender outside the loaded window — the feed is
+                  // capped at 500 rows. Skipping it keeps the board honest
+                  // rather than rendering a card with no title.
                   if (!tender) return null;
 
                   return (
                     <article
                       key={entry.tender_id}
-                      draggable
+                      draggable={!busy}
                       onDragStart={(event) => {
                         event.dataTransfer.setData("text/plain", entry.tender_id);
                         event.dataTransfer.effectAllowed = "move";
@@ -128,8 +138,9 @@ export function PipelineBoard({
                         <span className="sr-only">Move {tender.title} to another stage</span>
                         <select
                           value={entry.status}
-                          onChange={(event) => move(entry.tender_id, event.target.value as PipelineStatus)}
-                          className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                          disabled={busy}
+                          onChange={(event) => onMove(entry.tender_id, event.target.value as PipelineStatus)}
+                          className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:opacity-60"
                         >
                           {PIPELINE_COLUMNS.map((option) => (
                             <option key={option.status} value={option.status}>

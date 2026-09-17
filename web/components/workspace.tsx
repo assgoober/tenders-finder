@@ -19,6 +19,11 @@
  * everywhere else: a tender that failed extraction is deliberately left
  * unembedded, so it raises no alert and matches no profile. Counting it in a
  * tile without offering anywhere to go was the gap this closes.
+ *
+ * This component owns the pipeline rows because two surfaces write them — the
+ * board and the detail panel — and the summary tiles read them. Held lower
+ * down, a tender tracked from an alert would not appear on the board until a
+ * reload, which reads as the click having failed.
  */
 
 import { useState } from "react";
@@ -30,19 +35,95 @@ import { TenderDetail } from "@/components/tender-detail";
 import { TenderFeed } from "@/components/tender-feed";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { PipelineEntry, Tender, TenderMatch } from "@/lib/types";
+import {
+  movePipelineEntry,
+  trackTender,
+  untrackTender,
+  type ActionResult,
+} from "@/lib/actions/pipeline";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import type { PipelineEntry, PipelineStatus, Tender, TenderMatch } from "@/lib/types";
 import { daysUntil } from "@/lib/utils";
 
 export function Workspace({
   tenders,
   matches,
-  pipeline,
+  pipeline: initialPipeline,
 }: {
   tenders: Tender[];
   matches: TenderMatch[];
   pipeline: PipelineEntry[];
 }) {
   const [selected, setSelected] = useState<Tender | null>(null);
+  const [pipeline, setPipeline] = useState<PipelineEntry[]>(initialPipeline);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  /**
+   * Apply a pipeline change optimistically, then let the database confirm it.
+   *
+   * The screen updates first because the alternative — a spinner on every
+   * card drag — makes a board feel broken. But the row is the organization's
+   * record of what it is bidding on, so an optimistic update that quietly
+   * survived a refused write would be worse than no update at all: the board
+   * would show a bid nobody is running. On failure the previous list is put
+   * back and the reason is shown.
+   *
+   * One write at a time, enforced by `busy`. It keeps `previous` below from
+   * going stale under a second overlapping change, which would roll back to a
+   * list that never existed.
+   */
+  async function apply(next: PipelineEntry[], run: () => Promise<ActionResult>) {
+    if (busy) return;
+    const previous = pipeline;
+
+    setPipeline(next);
+    setError(null);
+
+    // Fixtures have no database behind them. The board is a demonstration
+    // there, and moving a card is allowed to be nothing more than that —
+    // calling the action would only produce an error about a project that was
+    // never configured.
+    if (!isSupabaseConfigured) return;
+
+    setBusy(true);
+    try {
+      const result = await run();
+      if (!result.ok) {
+        setPipeline(previous);
+        setError(result.error);
+      }
+    } catch (cause) {
+      // A network failure, or a server action that threw. Same outcome as a
+      // refusal: put the board back and say so, rather than leave someone
+      // looking at a move that never landed.
+      setPipeline(previous);
+      setError(cause instanceof Error ? cause.message : "The change could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleMove(tenderId: string, status: PipelineStatus) {
+    apply(
+      pipeline.map((entry) => (entry.tender_id === tenderId ? { ...entry, status } : entry)),
+      () => movePipelineEntry(tenderId, status),
+    );
+  }
+
+  function handleTrack(tenderId: string) {
+    if (pipeline.some((entry) => entry.tender_id === tenderId)) return;
+    apply([...pipeline, { tender_id: tenderId, status: "new", owner: null, notes: null }], () =>
+      trackTender(tenderId),
+    );
+  }
+
+  function handleUntrack(tenderId: string) {
+    apply(
+      pipeline.filter((entry) => entry.tender_id !== tenderId),
+      () => untrackTender(tenderId),
+    );
+  }
 
   const openCount = tenders.filter((t) => t.status === "open" || t.status === "closing_soon").length;
   const closingThisWeek = tenders.filter((t) => {
@@ -58,11 +139,37 @@ export function Workspace({
     (t) => t.extraction_status === "needs_review" || t.extraction_status === "failed",
   ).length;
 
+  const selectedEntry = selected
+    ? (pipeline.find((entry) => entry.tender_id === selected.id) ?? null)
+    : null;
+
   return (
     <div className="space-y-6">
+      {error && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+        >
+          <p>
+            <span className="font-medium">The pipeline change was not saved.</span> {error}
+          </p>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="shrink-0 text-xs text-rose-700 underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Open tenders" value={openCount} />
-        <Stat label="Closing within 7 days" value={closingThisWeek} tone={closingThisWeek > 0 ? "urgent" : "default"} />
+        <Stat
+          label="Closing within 7 days"
+          value={closingThisWeek}
+          tone={closingThisWeek > 0 ? "urgent" : "default"}
+        />
         <Stat label="Bids in flight" value={inFlight} />
         <Stat
           label="Awaiting human review"
@@ -88,7 +195,22 @@ export function Workspace({
           </TabsContent>
 
           <TabsContent value="pipeline">
-            <PipelineBoard tenders={tenders} entries={pipeline} onSelect={setSelected} />
+            {/* An empty board is the normal first state, and an empty board
+                with no explanation reads as a broken one. Say where cards
+                come from. */}
+            {pipeline.length === 0 && (
+              <p className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Nothing is being tracked yet. Open a tender and choose{" "}
+                <span className="font-medium">Track this bid</span> to put it on the board.
+              </p>
+            )}
+            <PipelineBoard
+              tenders={tenders}
+              entries={pipeline}
+              onSelect={setSelected}
+              onMove={handleMove}
+              busy={busy}
+            />
           </TabsContent>
 
           <TabsContent value="review">
@@ -101,7 +223,25 @@ export function Workspace({
         </aside>
       </div>
 
-      {selected && <TenderDetail tender={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <TenderDetail
+          tender={selected}
+          onClose={() => setSelected(null)}
+          // Fixtures are not writable: there is no database behind them, and
+          // a control that always fails is worse than no control.
+          pipeline={
+            isSupabaseConfigured
+              ? {
+                  status: selectedEntry?.status ?? null,
+                  busy,
+                  onTrack: () => handleTrack(selected.id),
+                  onMove: (status) => handleMove(selected.id, status),
+                  onUntrack: () => handleUntrack(selected.id),
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }
