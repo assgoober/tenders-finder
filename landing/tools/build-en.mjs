@@ -112,6 +112,36 @@ $(".lang-switch a").removeAttr("aria-current");
 $('.lang-switch a[hreflang="en"]').attr("aria-current", "true");
 $(".lang-switch").attr("aria-label", "Language");
 
+// --- dates ----------------------------------------------------------------
+//
+// The Hebrew page writes 17.09.2026, and that string survived translation
+// untouched because it contains no Hebrew to translate. On an English page it
+// is ambiguous: a reader in the United States reads dd.mm as mm.dd, and on
+// any day of the month up to the twelfth the misreading is silent -- the date
+// is wrong and looks fine. Today it happened to be the seventeenth, which is
+// the only reason it was legible at all.
+//
+// The `datetime` attribute is the authority, not the visible text: it is ISO,
+// it is what `refresh-stats.mjs` writes, and it is unambiguous by definition.
+// The month name is looked up from a table rather than formatted by
+// `toLocaleDateString`, because `new Date("2026-09-17")` is UTC midnight and
+// formatting it in a timezone behind UTC silently yields the sixteenth.
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+$("time[datetime]").each((_, el) => {
+  const node = $(el);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(node.attr("datetime") || "");
+  // A `datetime` that is not a plain calendar date -- a duration, a time --
+  // is left exactly as it is rather than guessed at.
+  if (!iso) return;
+  const [, year, month, day] = iso;
+  const name = MONTHS[Number(month) - 1];
+  if (!name) return;
+  node.text(`${Number(day)} ${name} ${year}`);
+});
+
 // These two are absolute site paths, so the climb below must not touch
 // them -- and they are already correct for both editions.
 
