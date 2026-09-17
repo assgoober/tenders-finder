@@ -310,6 +310,34 @@ a { color: inherit; }
   gap: 28px;
   min-height: 72px;
 }
+/* Unconditional, not only on a phone. A two-word Hebrew label wrapping
+   inside a button is how the header announces that it has run out of room,
+   and it announced it at 640px -- a width nobody thinks to check. */
+@media (min-width: 521px) { .head-row .btn { white-space: nowrap; } }
+
+/* Sign in.
+   A link rather than a button, for two reasons that happen to agree.
+   The honest one: this page is still selling to someone who has not signed
+   up, so signing in is the smaller of the header's two jobs and should not
+   carry equal weight to the call to action.
+   The measured one: as a ghost button it did not fit. With it hidden the
+   header overflows by 0px at every width from 360 to 1280; with it, the row
+   runs past its container everywhere between 760px and roughly 1100px -- by
+   23px in Hebrew and 93px in English at 1024px, one of the most common
+   laptop widths there is. The header was already full. */
+.head-signin {
+  text-decoration: none;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--steel);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color .15s, background .15s;
+}
+.head-signin:hover { color: var(--paper); background: var(--surface-2); }
+
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; flex-shrink: 0; }
 .brand-mark { height: 34px; width: auto; display: block; }
 .brand-name { font-family: "Heebo", sans-serif; font-weight: 900; font-size: 1.12rem; letter-spacing: -.02em; }
@@ -326,7 +354,13 @@ a { color: inherit; }
   transition: color .15s, background .15s;
 }
 .site-nav a:hover { color: var(--paper); background: var(--surface-2); }
-@media (max-width: 900px) { .site-nav { display: none; } }
+/* The nav leaves at 1000, not 900. Between 901 and roughly 980 the header
+   holds a brand, five nav links, a language switcher, a theme toggle, a
+   sign-in link and a call to action -- and in English, whose labels set
+   wider than the Hebrew ones, it overflowed its container by up to 55px in
+   that band alone. Hebrew fitted, which is exactly why this needed
+   measuring in both. */
+@media (max-width: 1000px) { .site-nav { display: none; } }
 
 /* Below this the brand, the theme toggle and the CTA stop fitting at full
    size and the CTA pushes past the gutter. Tighten rather than wrap — a
@@ -1080,10 +1114,33 @@ section { padding-block: clamp(60px, 8vw, 100px); }
   font-weight: 600;
 }
 
+/* 28px between six items was sized for a header that had five, and the nav
+   is five items whose English labels set wider than their Hebrew ones. This
+   block lives HERE, below `.site-nav a`, and not up beside `.head-row`: at
+   equal specificity the later rule wins, and the first draft of it sat above
+   the padding it was trying to reduce. Measured `padding-inline` stayed 14px
+   at every width -- the rule was in the file, in the right media query, and
+   doing nothing. */
+@media (max-width: 1100px) {
+  .head-row { gap: 16px; }
+  .site-nav a { padding-inline: 9px; }
+}
+
 @media (max-width: 760px) {
-  /* The switcher is the one control that must survive a narrow header: a
-     reader who cannot read the page needs the way out more than the nav. */
-  .site-nav { display: none; }
+  /* The language switcher is the one control that must survive a narrow
+     header: a reader who cannot read the page needs the way out more than
+     anything else here, so it is never the thing that goes. */
+
+  /* Sign-in leaves at the same width and for the same reason, and the
+     footer carries it exactly as it carries the nav links. Measured, in
+     Hebrew, which is the wider of the two languages here: at 375px the row
+     needs 418px inside a 335px container -- the brand is pushed off the
+     edge and the whole document scrolls sideways. At 640px it still
+     overflows by 14px, and the visible symptom is not a tight header but
+     the call to action breaking onto two lines. Below 760 there is no room
+     for a fifth control; above it there is. */
+  .head-signin { display: none; }
+
 }
 @media (max-width: 520px) {
   /* At this width the header carries a mark, a wordmark, a language
@@ -1091,7 +1148,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
      the wordmark is the one thing the logo already says. */
   .head-row { gap: 12px; }
   .brand-name { display: none; }
-  .site-head .btn-primary { padding-inline: 14px; white-space: nowrap; }
+  .site-head .btn-primary { padding-inline: 14px; }
 }
 
 
@@ -1132,6 +1189,13 @@ section { padding-block: clamp(60px, 8vw, 100px); }
         <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
       </svg>
     </button>
+    <!-- The door into the product. The page invited people to leave their
+         details and had no way in for anyone who already had an account:
+         every outbound link on it pointed at itself or at a source portal.
+         Ghost rather than primary, because the page is still selling to
+         someone who has not signed up -- signing in is the smaller of the
+         two jobs it does, not the equal one. -->
+    <a class="head-signin" href="https://tenders-finder-app.vercel.app/login">התחברות</a>
     <a class="btn btn-primary" href="#lead">השארת פרטים</a>
   </div>
 </header>
@@ -1728,6 +1792,7 @@ section { padding-block: clamp(60px, 8vw, 100px); }
         <a href="#accessibility">הצהרת נגישות</a>
         <a href="#privacy">פרטיות</a>
         <a href="#lead">יצירת קשר</a>
+        <a href="https://tenders-finder-app.vercel.app/login">התחברות</a>
       </nav>
     </div>
 
