@@ -10,6 +10,10 @@ nothing, because it is believed.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -432,10 +436,23 @@ async def test_the_quota_abort_sets_partial_on_the_real_path():
 
 # --- customer match alerts (migration 0016) --------------------------------
 
+# The deadline is computed, not typed.
+#
+# It used to read "2026-09-17T09:00:00+02:00", which was three days away when
+# it was written and was in the past by 18 September 2026. The test below
+# asserts that the body says how many days are left; against a deadline that
+# has been and gone the body correctly says "(closed)" instead, and the suite
+# went red for a reason that had nothing to do with any change. A fixture that
+# expires is a test with a shelf life, and this one reached the end of it.
+#
+# Relative to now, "three days from now" stays three days from now.
+_SOON = datetime.now(timezone.utc) + timedelta(days=10)
+_PAST = datetime.now(timezone.utc) - timedelta(days=3)
+
 SAMPLE_MATCHES = [
     {
         "match_id": "m1", "organization": "AIR", "recipient": "bd@air.example",
-        "profile_name": "cargo drone", "score": 0.6668, "deadline": "2026-09-17T09:00:00+02:00",
+        "profile_name": "cargo drone", "score": 0.6668, "deadline": _SOON.isoformat(),
         "title": "Germany - Non-piloted aircraft - 25 Drohnen inklusive Zubehoer",
         "buyer_name": "Polizei Berlin", "source_url": "https://ted.europa.eu/x",
         "external_id": "583275-2026",
@@ -486,8 +503,27 @@ def test_the_body_counts_days_rather_than_printing_a_timestamp():
     from app.notifications import build_match_alert
 
     _, body = build_match_alert("AIR", SAMPLE_MATCHES)
-    assert "days left" in body or "closes today" in body or "1 day left" in body
-    assert "2026-09-17T09:00:00" not in body
+
+    # A count, not a timestamp -- and a positive one. The exact figure is not
+    # pinned: the formatter floors across a day boundary, so ten days out can
+    # legitimately render as nine, and asserting "10 days left" would be a
+    # brittle assertion replacing an expired one rather than fixing anything.
+    left = re.search(r"(\d+) days left", body)
+    assert left, f"no day count in the body: {body!r}"
+    assert 8 <= int(left.group(1)) <= 10
+    assert _SOON.isoformat() not in body
+
+
+def test_a_deadline_that_has_passed_says_closed_rather_than_a_negative_count():
+    """The other half of the same behaviour, which only came to light because
+    the fixture above aged into it: "-1 days left" would be worse than the
+    timestamp this formatting exists to replace."""
+    from app.notifications import build_match_alert
+
+    expired = [dict(SAMPLE_MATCHES[0], deadline=_PAST.isoformat())]
+    _, body = build_match_alert("AIR", expired)
+    assert "closed" in body
+    assert "-" not in body.split("Soonest deadline")[-1]
 
 
 def test_a_tender_with_no_published_deadline_says_so(monkeypatch):
