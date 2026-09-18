@@ -41,18 +41,24 @@ import {
   untrackTender,
   type ActionResult,
 } from "@/lib/actions/pipeline";
+import type { WorkspaceCounts } from "@/lib/api";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import type { PipelineEntry, PipelineStatus, Tender, TenderMatch } from "@/lib/types";
-import { daysUntil } from "@/lib/utils";
 
 export function Workspace({
   tenders,
   matches,
   pipeline: initialPipeline,
+  counts,
 }: {
   tenders: Tender[];
   matches: TenderMatch[];
   pipeline: PipelineEntry[];
+  /** Counted against the whole corpus. The feed is a window of a few hundred
+   *  rows, so deriving these from `tenders` describes the page rather than
+   *  the market -- which is how this screen came to report 488 open tenders
+   *  on a database holding 4,786. */
+  counts: WorkspaceCounts;
 }) {
   const [selected, setSelected] = useState<Tender | null>(null);
   const [pipeline, setPipeline] = useState<PipelineEntry[]>(initialPipeline);
@@ -125,16 +131,13 @@ export function Workspace({
     );
   }
 
-  const openCount = tenders.filter((t) => t.status === "open" || t.status === "closing_soon").length;
-  const closingThisWeek = tenders.filter((t) => {
-    const days = daysUntil(t.deadline);
-    return days !== null && days >= 0 && days <= 7;
-  }).length;
   const inFlight = pipeline.filter((entry) =>
     ["evaluating", "drafting", "submitted"].includes(entry.status),
   ).length;
   // Matches the review queue's own filter exactly: a figure that disagrees
-  // with the list it links to is worse than no figure.
+  // with the list it links to is worse than no figure. Safe to count from the
+  // loaded set because `fetchWorkspace` loads every such tender by id rather
+  // than leaving it to the feed window.
   const needsReview = tenders.filter(
     (t) => t.extraction_status === "needs_review" || t.extraction_status === "failed",
   ).length;
@@ -164,11 +167,11 @@ export function Workspace({
       )}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Open tenders" value={openCount} />
+        <Stat label="Open tenders" value={counts.open} />
         <Stat
           label="Closing within 7 days"
-          value={closingThisWeek}
-          tone={closingThisWeek > 0 ? "urgent" : "default"}
+          value={counts.closingWithinSevenDays}
+          tone={counts.closingWithinSevenDays > 0 ? "urgent" : "default"}
         />
         <Stat label="Bids in flight" value={inFlight} />
         <Stat

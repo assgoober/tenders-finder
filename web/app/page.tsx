@@ -27,6 +27,7 @@ import { fetchWorkspace } from "@/lib/api";
 import { MOCK_MATCHES, MOCK_PIPELINE, MOCK_TENDERS } from "@/lib/mock-data";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { daysUntil } from "@/lib/utils";
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -71,7 +72,22 @@ export default async function Page() {
     return (
       <Shell>
         <DemoNotice />
-        <Workspace tenders={MOCK_TENDERS} matches={MOCK_MATCHES} pipeline={MOCK_PIPELINE} />
+        <Workspace
+          tenders={MOCK_TENDERS}
+          matches={MOCK_MATCHES}
+          pipeline={MOCK_PIPELINE}
+          // Fixtures are the whole corpus in demo mode, so counting them is
+          // not the shortcut it would be against a real database.
+          counts={{
+            open: MOCK_TENDERS.filter(
+              (t) => t.status === "open" || t.status === "closing_soon",
+            ).length,
+            closingWithinSevenDays: MOCK_TENDERS.filter((t) => {
+              const d = daysUntil(t.deadline);
+              return d !== null && d >= 0 && d <= 7;
+            }).length,
+          }}
+        />
       </Shell>
     );
   }
@@ -84,7 +100,7 @@ export default async function Page() {
   // State 2 — signed out.
   if (!user) redirect("/login");
 
-  const { tenders, matches, pipeline } = await fetchWorkspace();
+  const { tenders, matches, pipeline, counts } = await fetchWorkspace();
 
   // RLS makes this the honest test for membership: the policy on
   // `organizations` is `is_org_member(id)`, so a user in no organization gets
@@ -111,7 +127,7 @@ export default async function Page() {
         </Notice>
       ) : null}
 
-      <Workspace tenders={tenders} matches={matches} pipeline={pipeline} />
+      <Workspace tenders={tenders} matches={matches} pipeline={pipeline} counts={counts} />
     </Shell>
   );
 }

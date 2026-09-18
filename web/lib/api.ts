@@ -281,18 +281,97 @@ export async function fetchPipeline(): Promise<PipelineEntry[]> {
   });
 }
 
+/**
+ * The figures on the summary tiles.
+ *
+ * Counted against the whole corpus, not against the feed, and that is the
+ * entire point of them existing separately. The tiles are read as facts about
+ * the market -- "there are N open tenders" -- while the feed is deliberately a
+ * window of a few hundred rows. Deriving one from the other made the tile a
+ * statement about the page: it read "Open tenders: 488" on a database holding
+ * 4,786, and "Closing within 7 days: 512" at the same time, which is a figure
+ * larger than the set it is a subset of.
+ *
+ * `head: true` sends no rows back, so this costs three counts rather than
+ * three page-loads of data. RLS still applies, as everywhere else here.
+ */
+export interface WorkspaceCounts {
+  open: number;
+  closingWithinSevenDays: number;
+}
+
+async function fetchCounts(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<WorkspaceCounts> {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfSeventhDay = new Date(startOfToday);
+  endOfSeventhDay.setDate(endOfSeventhDay.getDate() + 8);
+
+  const [open, closing] = await Promise.all([
+    supabase
+      .from("tenders")
+      .select("id", { count: "exact", head: true })
+      .in("status", OPEN_STATUSES),
+    supabase
+      .from("tenders")
+      .select("id", { count: "exact", head: true })
+      // Open ones only. A tender already marked closed is not "closing" --
+      // it closed, and counting it here is what made this figure exceed the
+      // number of open tenders. Every one of the hundred most recently closed
+      // rows carried today's date, so all hundred were being counted.
+      .in("status", OPEN_STATUSES)
+      .gte("deadline", startOfToday.toISOString())
+      .lt("deadline", endOfSeventhDay.toISOString()),
+  ]);
+
+  if (open.error) throw new Error(`fetchCounts (open): ${open.error.message}`);
+  if (closing.error) throw new Error(`fetchCounts (closing): ${closing.error.message}`);
+
+  return {
+    open: open.count ?? 0,
+    closingWithinSevenDays: closing.count ?? 0,
+  };
+}
+
+/** Everything the extractor could not validate, regardless of deadline.
+ *
+ *  Fetched by id rather than left to the feed window, so the "Awaiting human
+ *  review" tile and the list it links to cannot disagree -- the tab lists what
+ *  is loaded, so the tile may only count what is loaded. */
+async function reviewQueueIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("tenders")
+    .select("id")
+    .in("extraction_status", ["needs_review", "failed"])
+    .limit(200);
+
+  if (error) throw new Error(`reviewQueueIds: ${error.message}`);
+  return (data ?? []).map((r) => (r as { id: string }).id);
+}
+
 export async function fetchWorkspace() {
-  // Matches and pipeline first, because what they reference decides which
-  // tenders the feed must carry no matter where they sort.
-  const [matches, pipeline] = await Promise.all([fetchMatches(), fetchPipeline()]);
+  const supabase = await createClient();
+
+  // Matches, pipeline and the review queue first, because what they reference
+  // decides which tenders the feed must carry no matter where they sort.
+  const [matches, pipeline, review, counts] = await Promise.all([
+    fetchMatches(),
+    fetchPipeline(),
+    reviewQueueIds(supabase),
+    fetchCounts(supabase),
+  ]);
 
   const required = Array.from(
     new Set([
       ...matches.map((m) => m.tender_id),
       ...pipeline.map((p) => p.tender_id),
+      ...review,
     ]),
   );
 
   const tenders = await fetchFeed(required);
-  return { tenders, matches, pipeline };
+  return { tenders, matches, pipeline, counts };
 }
