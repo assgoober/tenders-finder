@@ -347,6 +347,26 @@ class IngestionPipeline:
                 )
         except Exception as exc:  # noqa: BLE001
             report.errors.append(f"discover: {type(exc).__name__}: {exc}")
+            # Discovery raising means this run covered NONE of what the source
+            # offered, which is the most complete case of `partial` there is
+            # -- and it was the one path that did not say so. Every other
+            # failure in this method either sets this flag or adds to
+            # `failed`; this one left both at their defaults, so the report
+            # read `found 0, ingested 0, failed 0, partial False`: identical,
+            # to the scheduler and to anyone reading the log, to a source that
+            # was checked and genuinely had nothing new.
+            #
+            # On 2026-09-18 that is exactly what happened. The Israeli MoD
+            # agent could not launch its browser, contributed nothing, and
+            # the sweep exited 0. The home market was missing from the corpus
+            # and the run reported success -- the same outcome as the five
+            # days it spent absent from the source list, reached by a
+            # different road.
+            #
+            # `run_sweep.py` already tests `report.partial or report.failed`.
+            # It needed no change; it was being told the truth about the
+            # wrong field.
+            report.partial = True
             logger.exception("[%s] discovery failed", agent.key)
             if not self.settings.dry_run:
                 self.repository.finish_run(
