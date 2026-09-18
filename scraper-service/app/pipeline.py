@@ -138,14 +138,40 @@ class IngestionPipeline:
 
         reports = list(await asyncio.gather(*(guarded(agent) for agent in agents)))
 
-        # Before the digest, so a mail failure cannot skip it, and never
-        # inside a source's try: the clock is a property of the corpus, not of
-        # any one portal. Failure here is logged, not raised -- a sweep that
-        # harvested correctly is not a failed sweep because a status refresh
-        # could not run.
-        # Unlike extraction, this one IS conditioned on dry_run: it is a write
-        # to shared rows, and a dry run that mutates the corpus is not a dry
-        # run.
+        await self.finish_sweep(reports)
+
+        return reports
+
+    async def finish_sweep(self, reports: list[IngestReport]) -> bool:
+        """Everything a sweep owes once every source has finished.
+
+        This is a method, and not the tail of `run()` where it used to live,
+        because `run()` is not the only thing that sweeps. `run_sweep.py` --
+        the script the scheduler actually runs -- drives `run_source()` in a
+        loop of its own, so that it can order the sources by priority and
+        report each one separately. It therefore never reached any of this.
+
+        The effect was that the scheduled sweep aged nothing, sent no operator
+        digest, and, most of all, delivered no customer alerts. Ever. Matches
+        were found by the database trigger and sat there: 31 of them on
+        2026-09-18, alongside 79 that had gone out only because a human asked
+        for them by hand each time. The code was written, correct and tested,
+        and the path that runs every morning did not call it.
+
+        Two orchestrators where only one did the finishing work is the shape
+        of that bug, so the fix is one place that does it and two callers.
+
+        Returns True when everything that was supposed to go out went out, so
+        a caller can put it in an exit code. Nothing here raises: a sweep that
+        harvested correctly is not a failed harvest because mail was down --
+        but it is not a clean run either, and saying so is the whole point.
+        """
+        ok = True
+
+        # Before the digest, and never inside a source's try: the clock is a
+        # property of the corpus, not of any one portal.
+        # Unlike extraction, this IS conditioned on dry_run: it is a write to
+        # shared rows, and a dry run that mutates the corpus is not a dry run.
         if not self.settings.dry_run:
             try:
                 aged = await asyncio.to_thread(self.repository.age_tender_status)
@@ -153,23 +179,26 @@ class IngestionPipeline:
                     logger.info("aged tender status: %s", aged)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("could not age tender status: %s", exc)
+                ok = False
 
         # Customer alerts before the operator digest. If only one of the two
         # can get out, it should be the one a bid team is waiting for.
         if not self.settings.dry_run:
             try:
                 delivered = await self.deliver_match_alerts()
-                if delivered:
-                    logger.info("delivered %d match alerts", delivered)
+                logger.info("delivered %d match alert(s)", delivered)
             except Exception as exc:  # noqa: BLE001
                 logger.error("could not deliver match alerts: %s", exc)
+                ok = False
 
         # After every source has finished, so one mail covers the whole run.
-        # Never inside the try of a source: a mail failure must not be able to
-        # mark a successful scrape as failed.
-        await self.notifier.send_run_digest(reports)
+        try:
+            await self.notifier.send_run_digest(reports)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("could not send the run digest: %s", exc)
+            ok = False
 
-        return reports
+        return ok
 
     async def deliver_match_alerts(self, limit: int = 500) -> int:
         """Send every undelivered match to the people it belongs to.

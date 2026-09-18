@@ -94,6 +94,10 @@ async def run(args, log: logging.Logger) -> int:
     pipeline = IngestionPipeline(settings=settings)
 
     worst = 0
+    # Kept, not just printed. The per-source report was logged and dropped,
+    # which was fine while nothing downstream wanted it; the operator digest
+    # is built from the whole set.
+    reports = []
     for key in args.source:
         agent = get_agent(key, settings)
         started = time.time()
@@ -105,6 +109,8 @@ async def run(args, log: logging.Logger) -> int:
             log.exception("[%s] aborted: %s", key, exc)
             worst = max(worst, 1)
             continue
+
+        reports.append(report)
 
         minutes = (time.time() - started) / 60
         log.info("=== %s finished in %.1f min ===", key, minutes)
@@ -121,6 +127,28 @@ async def run(args, log: logging.Logger) -> int:
 
         if report.partial or report.failed:
             worst = max(worst, 1)
+
+    # Everything the sweep owes once the sources are done: age the corpus,
+    # deliver the customer alerts, send the operator digest.
+    #
+    # This call is the whole of a defect that lasted as long as this script
+    # has existed. All three of those live at the end of `pipeline.run()`,
+    # and this script does not call `run()` -- it drives `run_source()` in
+    # the loop above so it can order the sources by priority and report each
+    # one on its own. So none of them happened here. The scheduled sweep,
+    # every morning, harvested tenders, wrote them, let the trigger match
+    # them against customer profiles, and told nobody.
+    #
+    # On 2026-09-18 that was 31 matches waiting, next to 79 that had been
+    # delivered only because someone asked for them by hand, one batch at a
+    # time. Nothing was broken and nothing was missing: the alerting worked,
+    # and the morning run did not reach it.
+    #
+    # A failed delivery counts against the exit code. "Ran, but did not
+    # finish" is what exit 1 is for, and a sweep whose alerts did not leave
+    # the building has not finished the job this product is sold to do.
+    if not await pipeline.finish_sweep(reports):
+        worst = max(worst, 1)
 
     # The only number that says whether this worked. Read back from the
     # database rather than trusted from the counters above: a sweep can
