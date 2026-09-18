@@ -131,18 +131,84 @@ const TENDER_COLUMNS =
   "estimated_value,currency,extraction_status,extraction_error,extraction_model," +
   "metadata,tender_sources(display_name)";
 
-export async function fetchTenders(): Promise<Tender[]> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("tenders")
-    .select(TENDER_COLUMNS)
-    // Soonest deadline first, with undated tenders last rather than first —
-    // a null deadline is "unknown", not "urgent".
-    .order("deadline", { ascending: true, nullsFirst: false })
-    .limit(500);
+/**
+ * How much of the corpus the workspace loads, and in what shape.
+ *
+ * The feed used to be one query: soonest deadline first, 500 rows. That was
+ * correct while the corpus was a few hundred tenders and most of them were
+ * still open. At 5,631 rows it became the opposite of correct -- the 500
+ * earliest deadlines were ALL in the past, so the dashboard fetched the 500
+ * most expired tenders in the database and nothing else.
+ *
+ * Measured on 2026-09-18, the first day anyone signed in to the deployed app:
+ * open tenders inside that window, 0. Open tenders in the database, 4,786.
+ * The tile read "Open tenders: 0", which was true of what had been fetched
+ * and false about the world, and nothing anywhere raised an error. A bid team
+ * was being shown precisely the tenders it could no longer bid on.
+ *
+ * So the window is now anchored on what is still biddable rather than on what
+ * sorts first, and it is assembled from three pieces:
+ */
+/** Still open, soonest deadline first. This is the product. */
+const OPEN_LIMIT = 400;
+/** Most recently closed. Enough for the Closed filter to mean something,
+ *  not enough to bury the tenders somebody can still win. */
+const CLOSED_LIMIT = 100;
 
-  if (error) throw new Error(`fetchTenders: ${error.message}`);
-  return (data ?? []).map((row) => toTender(row as unknown as TenderRow));
+const OPEN_STATUSES = ["open", "closing_soon"];
+const CLOSED_STATUSES = ["closed", "awarded", "cancelled"];
+
+export async function fetchTenders(): Promise<Tender[]> {
+  return fetchFeed([]);
+}
+
+/**
+ * The feed, plus any tender the rest of the workspace needs regardless.
+ *
+ * `required` carries the tenders referenced by a live match or a pipeline
+ * entry. Without it the alerts panel silently drops alerts whose tender falls
+ * outside the window -- which is exactly what happened: 42 alerts were
+ * delivered by email that morning for tenders closing the following week, and
+ * the panel showed 13, every one of them already expired, because only those
+ * 13 happened to sort into the first 500 rows. An alert the product emailed
+ * and then cannot display is worse than one it never sent.
+ */
+async function fetchFeed(required: string[]): Promise<Tender[]> {
+  const supabase = await createClient();
+
+  const [open, closed] = await Promise.all([
+    supabase
+      .from("tenders")
+      .select(TENDER_COLUMNS)
+      .in("status", OPEN_STATUSES)
+      // Soonest deadline first, with undated tenders last rather than first —
+      // a null deadline is "unknown", not "urgent".
+      .order("deadline", { ascending: true, nullsFirst: false })
+      .limit(OPEN_LIMIT),
+    supabase
+      .from("tenders")
+      .select(TENDER_COLUMNS)
+      .in("status", CLOSED_STATUSES)
+      // Descending here, deliberately: the useful closed tender is the one
+      // that closed yesterday, not the one that closed in 2023.
+      .order("deadline", { ascending: false, nullsFirst: false })
+      .limit(CLOSED_LIMIT),
+  ]);
+
+  if (open.error) throw new Error(`fetchTenders (open): ${open.error.message}`);
+  if (closed.error) throw new Error(`fetchTenders (closed): ${closed.error.message}`);
+
+  const rows = [...(open.data ?? []), ...(closed.data ?? [])];
+  const seen = new Set(rows.map((r) => (r as unknown as TenderRow).id));
+
+  const missing = required.filter((id) => !seen.has(id));
+  if (missing.length > 0) {
+    const extra = await supabase.from("tenders").select(TENDER_COLUMNS).in("id", missing);
+    if (extra.error) throw new Error(`fetchTenders (referenced): ${extra.error.message}`);
+    rows.push(...(extra.data ?? []));
+  }
+
+  return rows.map((row) => toTender(row as unknown as TenderRow));
 }
 
 /** One tender by id, or null when it does not exist or RLS hides it. */
@@ -216,10 +282,17 @@ export async function fetchPipeline(): Promise<PipelineEntry[]> {
 }
 
 export async function fetchWorkspace() {
-  const [tenders, matches, pipeline] = await Promise.all([
-    fetchTenders(),
-    fetchMatches(),
-    fetchPipeline(),
-  ]);
+  // Matches and pipeline first, because what they reference decides which
+  // tenders the feed must carry no matter where they sort.
+  const [matches, pipeline] = await Promise.all([fetchMatches(), fetchPipeline()]);
+
+  const required = Array.from(
+    new Set([
+      ...matches.map((m) => m.tender_id),
+      ...pipeline.map((p) => p.tender_id),
+    ]),
+  );
+
+  const tenders = await fetchFeed(required);
   return { tenders, matches, pipeline };
 }
