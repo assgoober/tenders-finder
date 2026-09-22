@@ -24,20 +24,62 @@ consistent across the repository; keep it.
 | | |
 |---|---|
 | Repository | `omer-izhaki/tenders-finder`, private, default branch `main` |
-| Supabase | `vixuawfbayglbgitzqbj`, Frankfurt, free tier, healthy |
-| Tenders | **2,751** — every one carrying an embedding |
-| Open for bids | **2,329** |
+| Supabase | `vixuawfbayglbgitzqbj`, Frankfurt, **free plan**, 102 MB used |
+| Tenders | **5,645** — every one carrying an embedding |
+| Open for bids | **4,786** |
 | Buying countries | **37** |
-| Live sources | **2** (Israeli MoD, TED/EU) + UK Find a Tender written and tested, waiting on budget |
-| Matches | 81 — 66 alerted, 15 skipped as too late, **0 pending** |
-| Tests | **320**, ~23s, no network and no API keys |
+| Live sources | 3 configured, **2 contributing**: `mod-balam` broken since 17/09, `uk-fts` finds ~2,250 a night and ingests 0 (starved, not broken) |
+| Matches | 138 — **all alerted**, 0 pending |
+| Tests | **332**, ~12s, no network and no API keys |
 | Scheduled | 3 pg_cron jobs + a Windows Task Scheduler sweep at 10:05 |
+| Dashboard | **live**, `https://tenders-finder-app.vercel.app` (deployed 18/09) |
 | Landing page | live, Hebrew + English, `https://tenders-finder.vercel.app` |
+| Known-good state | commit `069e687`, tag + branch `handoff-2026-09-22` |
 
 The product has run end to end: harvest → filter → embed → match → email.
-**66 alerts have actually been delivered.** Cross-language matching is not a
+**121 alerts have actually been delivered.** Cross-language matching is not a
 claim — an English capability profile has matched notices published in
 Greek, Hebrew, Swedish and German.
+
+Since 18/09 the sweep finishes itself: it delivers customer alerts, sends the
+operator digest, and exits non-zero when a source failed. Verified running
+unattended on 19/09.
+
+---
+
+## Two clocks, running now (written 22/09)
+
+Nobody is at the machine for a month. These are not hypotheses; both numbers
+were measured, and the second is quoted from Supabase's own documentation.
+
+**Clock 1 — the database fills up in about 24 days.** 102 MB used, ~19 KB per
+tender (the 1024-dim vector plus its HNSW index), 960 tenders ingested every
+day, and the free plan's ceiling is 500 MB. Supabase: *"Free Plan projects
+enter read-only mode when your database size exceeds 500 MB."*
+
+Read-only has a consequence worth stating plainly, because it is worse than a
+stalled harvest: `mark_matches_alerted` is a **write**. An alert email would
+go out, the stamp would fail, the match would stay pending — and the same
+alert would be sent again the next day, and the day after. To customers.
+
+**Clock 2 — the project is paused after 7 days of low activity.** Supabase:
+*"We may pause applications on the Free Plan that exhibit low activity in a
+7-day period."* Restorable from the dashboard, but silent until someone looks.
+
+**The two are mutually exclusive, which is the point.** If the machine keeps
+running, clock 1 wins. If it is switched off, clock 2 does. Within a month,
+one of them fires either way.
+
+The free plan also gives **no restorable backup**: *"Database backups are not
+available for download for Free Plan projects."* Point-in-time recovery is a
+paid add-on. **The export taken on 22/09 is the only restore path that
+exists** — see the backup folder's `RESTORE.md`.
+
+Deciding what to do about this was deliberately left to whoever picks the
+project up. Upgrading to Pro (~$25/month) buys all three: 7 days of daily
+backups, 8 GB instead of 500 MB, and a guarantee against the inactivity
+pause. Staying on free is a legitimate choice; not knowing about the clocks
+is not.
 
 ---
 
@@ -51,13 +93,20 @@ The options are a paid Gemini tier (cents, and it changes nothing else) or a
 because vectors from two models are not comparable. That is a decision, not
 a quick fix.
 
-**2. Six CI lines cannot be pushed.** GitHub refuses a workflow change from
-an OAuth App without `workflow` scope. Two checks written this week are not
-in `.github/workflows/ci.yml` on the remote: the coverage-stat check
-(`data-stat`) and the English-translation check (`npm run check:en`). Either
-the user pastes them into GitHub's web editor, or they issue a token with
-`workflow` scope. Do not rewrite history to work around it; do not make the
-repository public to work around it.
+**2. A CI commit cannot be pushed.** GitHub refuses a workflow change from an
+OAuth App without `workflow` scope. The commit exists, on the branch
+`claude/handoff-md-review-979716` and in the backup bundle: it adds two
+landing-page checks to CI — `npm run check:en`, and a regeneration check that
+rebuilds `en/index.html` and diffs it, which is the one that catches an
+English page shipped a version behind. Either paste the file into GitHub's
+web editor, or issue a token with `workflow` scope. Do not rewrite history to
+work around it; do not make the repository public to work around it.
+
+**Branch protection is not enabled.** `main` and `backup/handoff-2026-09-22`
+both sit at the known-good commit `069e687`, and nothing stops a force push
+from erasing either. Settings → Branches → Add rule, then block force pushes
+and deletions. This matters more than usual while people who did not build it
+are working on it.
 
 **3. There is no customer.** The system has never run for anyone outside the
 team that built it. There is a sign-up form, a trigger that provisions an
@@ -69,21 +118,43 @@ this file is work. This is the question.
 
 ## The work queue
 
-1. **Finish the harvest.** ~36,700 open tenders are reachable across TED's
-   31 CPV divisions and UK Find a Tender; 2,751 are in. At 96 per request
-   that is ~400 requests — a third of one day's free budget — but the day it
-   belongs to has to start unspent. The scheduled sweep runs at 10:05 and
-   now stops and says so when the budget is gone.
-2. **Run the deferred extraction.** `tenders_awaiting_extraction()` exists,
-   is scheduled nowhere, and currently holds **39** tenders — ones somebody
-   matched and nobody has read. This is the cheap half: 39 documents, not
-   2,751.
-3. **A manual review screen.** `needs_review` is 0 today. When it is not,
-   there is nowhere to look at it.
-4. **BALAM matches on 27 characters.** TED and FTS carry a full notice; the
-   Israeli MoD list publishes a title and nothing else. Matching there is
-   shallow by construction and there is no fix without supplier access.
-5. **`govil` stays disabled** — see the constraints.
+Ordered by what is broken rather than by what is interesting.
+
+1. **`mod-balam` has harvested nothing since 17/09.** Five consecutive nights:
+   `BrowserType.launch: Executable doesn't exist at
+   …chromium_headless_shell-1148\chrome-win\headless_shell.exe`. This is the
+   Israeli MoD list — the home market, and the source this product is sold
+   against first. **The clue:** that executable *does* exist and runs
+   correctly when launched by hand from an interactive shell (verified,
+   Chromium 131.0.6778.33). So `playwright install chromium` may not be the
+   fix; the difference between that shell and the scheduled task is where to
+   look. The run now exits 1 instead of reporting success, which is the only
+   reason this is visible at all.
+2. **Nothing watches the exit code.** A failed source makes the sweep exit 1
+   and send a digest, and no alarm reads either. `added_today = 0` is the
+   other signal nobody watches. This is the cheapest work on the list and it
+   is what turns every future silent failure into a loud one.
+3. **No password reset anywhere in the app.** There is `login`, `signup`,
+   `auth/signout`, and nothing else — a customer who forgets their password is
+   locked out permanently. Found the hard way on 18/09. It is two pieces: a
+   `/forgot-password` page, and a handler for the token that comes back.
+   Supabase already issues a working recovery link; the app has nowhere to
+   receive it. Prefer PKCE with `/auth/callback` over the implicit flow — it
+   works with `@supabase/ssr` without special code and keeps the token out of
+   the URL bar.
+4. **Run the deferred extraction.** `tenders_awaiting_extraction()` exists and
+   is scheduled nowhere. 5,645 tenders are in the corpus listing-only; the
+   ones somebody actually matched are the cheap and valuable subset.
+5. **Onboarding is a SQL insert.** An alert profile — the paragraph that
+   decides what a customer is shown — is written by hand. Until there is a
+   screen, every new customer needs whoever holds the service-role key.
+6. **`uk-fts` is starved, not broken.** ~2,250 notices found a night, 0
+   ingested, because TED spends the day's embedding budget first. The order is
+   deliberate (the home market outranks the volume). The fix is budget.
+7. **BALAM matches on 27 characters.** TED and FTS carry a full notice; the
+   Israeli MoD list publishes a title and nothing else. Shallow by
+   construction, and no fix without supplier access.
+8. **`govil` stays disabled** — see the constraints.
 
 ---
 
