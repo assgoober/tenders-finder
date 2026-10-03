@@ -217,6 +217,12 @@ class Settings(BaseSettings):
     # How many matched-but-unread tenders to extract per run. This is the
     # spending dial: the queue is ordered by deadline, so a budget that runs
     # out runs out on the tenders with the most time left.
+    #
+    # The scheduled sweep spends it BEFORE harvesting (run_sweep.py): each
+    # extraction costs one model call and one embedding request, and the
+    # harvest spends whatever embedding budget it is given, so run after it
+    # this would get nothing. 50 is 5% of Gemini's 1,000 free embedding
+    # requests a day, taken from the tail of the last source. 0 disables it.
     extract_matched_limit: int = 50
 
     # Tenders per embedding REQUEST. The free tier limits requests per

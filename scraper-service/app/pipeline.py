@@ -607,10 +607,16 @@ class IngestionPipeline:
                 report = IngestReport(source_key=agent.key)
                 await self._ingest_one(fetched, None, report)
                 done += report.ingested
-            except ExtractionQuotaExhausted as exc:
+            except (ExtractionQuotaExhausted, EmbeddingQuotaExhausted) as exc:
                 # Same reasoning as the ingest loop: a spent quota is a
                 # property of the run. Stop and keep the queue for tomorrow.
-                logger.error("extraction budget exhausted after %d tenders: %s", done, exc)
+                #
+                # The embedding quota is here too because each extraction
+                # re-embeds its tender. Caught only as a generic failure, an
+                # exhausted embedding budget made every remaining item pay
+                # for a model call and then throw its result away -- once per
+                # tender, to the end of the queue.
+                logger.error("budget exhausted after %d extracted tenders: %s", done, exc)
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.warning("could not extract %s: %s", item.get("external_id"), exc)

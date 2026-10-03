@@ -15,7 +15,7 @@ import pytest
 
 from app.agents.base import FetchedTender, TenderStub
 from app.config import Settings
-from app.pipeline import IngestionPipeline
+from app.pipeline import IngestionPipeline, IngestReport
 
 
 def make_settings(**kw) -> Settings:
@@ -466,3 +466,104 @@ def test_a_complete_run_has_nothing_unattempted():
     report.found, report.ingested, report.skipped = 100, 60, 40
     attempted = report.ingested + report.skipped + report.failed + report.needs_review
     assert max(0, report.found - attempted) == 0
+
+
+# --- the queue is actually worked, and stops when the money does ----------
+
+@pytest.mark.asyncio
+async def test_an_exhausted_embedding_budget_stops_extraction():
+    """Each extraction re-embeds its tender. When the embedding quota is
+    gone, carrying on means paying for a model call per remaining tender
+    and discarding every result."""
+    from app.nlp.embeddings import EmbeddingQuotaExhausted
+
+    attempts = []
+
+    class _Repo:
+        def tenders_awaiting_extraction(self, limit):
+            return [{"external_id": f"t{i}", "source_url": "https://x/t", "title": "t"}
+                    for i in range(5)]
+
+    pipeline = IngestionPipeline(settings=make_settings(), repository=_Repo())
+
+    class _Agent:
+        key = "x"
+
+        async def fetch(self, stub):
+            attempts.append(stub.external_id)
+            raise EmbeddingQuotaExhausted("daily embedding quota spent")
+
+    pipeline._agent_for_source = lambda item: _Agent()
+    assert await pipeline.extract_matched() == 0
+    assert attempts == ["t0"], "extraction kept spending after the budget ran out"
+
+
+@pytest.mark.asyncio
+async def test_the_scheduled_sweep_extracts_before_it_harvests(monkeypatch):
+    """`extract_matched` existed and nothing called it."""
+    import logging
+    from types import SimpleNamespace
+
+    import app.agents
+    import app.pipeline as pipeline_module
+    import run_sweep
+
+    order = []
+
+    class _FakePipeline:
+        def __init__(self, settings):
+            self.settings = settings
+
+        async def extract_matched(self):
+            order.append("extract")
+            return 3
+
+        async def run_source(self, agent, limit=25):
+            order.append(f"harvest:{agent.key}")
+            return IngestReport(source_key=agent.key, found=1, ingested=1)
+
+        async def finish_sweep(self, reports, **kwargs):
+            return True
+
+    monkeypatch.setattr(pipeline_module, "IngestionPipeline", _FakePipeline)
+    monkeypatch.setattr(app.agents, "get_agent",
+                        lambda key, settings: SimpleNamespace(key=key, display_name=key))
+    monkeypatch.setattr(run_sweep, "count_tenders", lambda settings, since: (10, 1))
+
+    args = SimpleNamespace(source=["mod-balam", "ted-eu"], limit=5, dry_run=False)
+    assert await run_sweep.run(args, logging.getLogger("t")) == 0
+    assert order == ["extract", "harvest:mod-balam", "harvest:ted-eu"]
+
+
+@pytest.mark.asyncio
+async def test_a_dry_run_sweep_spends_nothing_on_extraction(monkeypatch):
+    import logging
+    from types import SimpleNamespace
+
+    import app.agents
+    import app.pipeline as pipeline_module
+    import run_sweep
+
+    called = []
+
+    class _FakePipeline:
+        def __init__(self, settings):
+            pass
+
+        async def extract_matched(self):
+            called.append(True)
+            return 0
+
+        async def run_source(self, agent, limit=25):
+            return IngestReport(source_key=agent.key, found=1, ingested=1)
+
+        async def finish_sweep(self, reports, **kwargs):
+            return True
+
+    monkeypatch.setattr(pipeline_module, "IngestionPipeline", _FakePipeline)
+    monkeypatch.setattr(app.agents, "get_agent",
+                        lambda key, settings: SimpleNamespace(key=key, display_name=key))
+
+    args = SimpleNamespace(source=["ted-eu"], limit=5, dry_run=True)
+    await run_sweep.run(args, logging.getLogger("t"))
+    assert called == []

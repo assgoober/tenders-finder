@@ -92,6 +92,9 @@ def _patch(monkeypatch, run_source):
         def __init__(self, settings):
             self.settings = settings
 
+        async def extract_matched(self):
+            return 0
+
         async def run_source(self, agent, limit=25):
             return await run_source(agent)
 

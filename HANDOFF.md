@@ -152,9 +152,15 @@ Ordered by what is broken rather than by what is interesting.
    that list is silently replaced by the Site URL. Known limit: a PKCE link
    only works in the browser that requested it; switching the email
    templates to `{{ .TokenHash }}` removes that with no code change.
-4. **Run the deferred extraction.** `tenders_awaiting_extraction()` exists and
-   is scheduled nowhere. 5,645 tenders are in the corpus listing-only; the
-   ones somebody actually matched are the cheap and valuable subset.
+4. **Deferred extraction now runs every sweep (03/10).** `run_sweep.py`
+   calls `extract_matched()` before harvesting, capped at
+   `EXTRACT_MATCHED_LIMIT` (default 50; 0 disables). Before the harvest on
+   purpose: the harvest spends whatever embedding budget it gets, so after
+   it this would never run. It also stops on an exhausted *embedding* quota
+   now, not only an extraction one -- before, it paid a model call per
+   remaining tender and discarded each result. Watch the first runs: the
+   cost is 50 model calls and 50 embedding requests a night, taken from the
+   tail of the last source.
 5. **Alert profiles have a screen (03/10): `/profiles`.** Create, edit,
    pause; never delete (matches cascade). The dashboard stores text only;
    the nightly sweep's `finish_sweep` now embeds pending profiles and

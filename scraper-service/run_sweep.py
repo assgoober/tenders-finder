@@ -155,6 +155,24 @@ async def run(args, log: logging.Logger) -> int:
     pipeline = IngestionPipeline(settings=settings)
     sweep_started = datetime.now(timezone.utc)
 
+    # Read the tenders somebody matched, BEFORE harvesting more.
+    #
+    # `extract_matched()` was written with listing-first ingestion (ADR-22)
+    # and then called by nothing: 5,645 tenders sat listing-only, including
+    # every one a customer had been alerted to. It goes first because the
+    # harvest spends whatever embedding budget it is given -- uk-fts is
+    # starved every night -- so placed after it this step would never get a
+    # request. Capped by EXTRACT_MATCHED_LIMIT, and skipped on a dry run
+    # because extraction is spend, not a write, and a dry run should cost
+    # nothing.
+    if not settings.dry_run and settings.extract_matched_limit > 0:
+        try:
+            extracted = await pipeline.extract_matched()
+            log.info("extracted %d matched tender(s) before harvesting", extracted)
+        except Exception as exc:  # noqa: BLE001
+            # Not the harvest's failure, and must not cost the harvest.
+            log.warning("could not extract matched tenders: %s", exc)
+
     worst = 0
     # Kept, not just printed. The per-source report was logged and dropped,
     # which was fine while nothing downstream wanted it; the operator digest
