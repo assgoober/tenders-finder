@@ -40,4 +40,11 @@ pytest-asyncio==0.25.0
 # Gemini extraction backend (EXTRACTION_PROVIDER=gemini). Optional at
 # runtime -- app/nlp/extractor.py imports it lazily, so an Anthropic-only
 # deployment never loads it.
-google-genai>=1.0.0
+#
+# The floor is 1.22.0, not 1.0.0: app/nlp/gemini.py passes
+# `response_json_schema` to GenerateContentConfig, which earlier SDKs reject
+# as an extra input. An environment holding 1.2.0 satisfied ">=1.0.0", so
+# pip left it alone and 10 Gemini tests failed with a pydantic error, while
+# a fresh CI install pulled the latest and passed. Verified by running
+# tests/test_gemini_extractor.py against 1.21.0 (fails) and 1.22.0 (passes).
+google-genai>=1.22.0
