@@ -26,7 +26,7 @@ type Row = {
   excluded_keywords: string[] | null;
   notify_email: boolean;
   is_active: boolean;
-  embedding: unknown;
+  has_embedding: boolean;
   tender_matches: { count: number }[] | null;
 };
 
@@ -42,12 +42,12 @@ export default async function ProfilesPage() {
   const { data: orgs } = await supabase.from("organizations").select("id").limit(1);
   const hasOrganization = (orgs?.length ?? 0) > 0;
 
-  // `embedding` is fetched only to ask whether it is null. A handful of
-  // profiles per organization makes that cheaper than a view to compute it.
+  // `has_embedding` (migration 0022) rather than the 1024-float vector itself,
+  // which this page only ever needed to test for null.
   const { data, error } = await supabase
     .from("alert_profiles")
     .select(
-      "id, name, description, keywords, excluded_keywords, notify_email, is_active, embedding, tender_matches(count)",
+      "id, name, description, keywords, excluded_keywords, notify_email, is_active, has_embedding, tender_matches(count)",
     )
     .order("created_at", { ascending: true });
 
@@ -59,7 +59,7 @@ export default async function ProfilesPage() {
     excludedKeywords: row.excluded_keywords ?? [],
     notifyEmail: row.notify_email,
     isActive: row.is_active,
-    embedded: row.embedding !== null,
+    embedded: row.has_embedding,
     matchCount: row.tender_matches?.[0]?.count ?? 0,
   }));
 

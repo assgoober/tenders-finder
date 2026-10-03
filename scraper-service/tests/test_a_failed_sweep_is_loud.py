@@ -269,3 +269,72 @@ def test_the_start_ping_sees_a_heartbeat_url_from_dotenv(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["run_sweep.py", "--log-dir", str(tmp_path / "logs")])
     assert run_sweep.main() == 0
     assert pings[0] == "https://hc-ping.com/xyz/start"
+
+
+# --- review follow-ups -------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_zero_new_on_a_narrow_run_is_not_an_alarm(monkeypatch):
+    """A hand-run of one source can legitimately add nothing. Alarming on it
+    trains people to ignore the alarm."""
+    import run_sweep
+
+    async def run_source(agent):
+        return IngestReport(source_key=agent.key, found=2, ingested=2)
+
+    finished = _patch(monkeypatch, run_source)
+    monkeypatch.setattr(run_sweep, "count_tenders", lambda settings, since: (10, 0))
+    args = SimpleNamespace(source=["mod-balam"], limit=5, dry_run=False, full_run=False)
+    assert await run_sweep.run(args, logging.getLogger("test-sweep")) == 0
+    assert finished[0][1] == {}, "a narrow run's zero must not head the digest"
+
+
+@pytest.mark.parametrize("argv, full", [
+    ([], True),
+    (["--source", "ted-eu"], False),
+    (["--limit", "5"], False),
+])
+def test_only_the_default_invocation_is_a_full_run(monkeypatch, tmp_path, argv, full):
+    import run_sweep
+
+    seen = []
+
+    async def capture(args, log):
+        seen.append(args.full_run)
+        return 0
+
+    monkeypatch.setattr(run_sweep, "run", capture)
+    monkeypatch.setattr(run_sweep, "heartbeat", lambda code, body="": None)
+    monkeypatch.setattr("sys.argv", ["run_sweep.py", "--log-dir", str(tmp_path), *argv])
+    run_sweep.main()
+    assert seen == [full]
+
+
+def test_a_crash_after_setup_is_not_called_could_not_start(monkeypatch, tmp_path):
+    import run_sweep
+
+    alarms = []
+
+    async def dies_while_finishing(args, log):
+        run_sweep.STAGE["now"] = "finishing (alerts and digest)"
+        raise RuntimeError("SMTP socket closed")
+
+    monkeypatch.setattr(run_sweep, "run", dies_while_finishing)
+    monkeypatch.setattr(run_sweep, "send_alarm", lambda s, b: alarms.append((s, b)))
+    monkeypatch.setattr(run_sweep, "heartbeat", lambda code, body="": None)
+    monkeypatch.setattr("sys.argv", ["run_sweep.py", "--log-dir", str(tmp_path)])
+
+    assert run_sweep.main() == 2
+    subject, body = alarms[0]
+    assert "could not start" not in subject.lower()
+    assert "crashed during finishing" in subject
+    assert "SMTP socket closed" in body
+
+
+def test_a_failed_browser_install_is_named_in_the_hint(monkeypatch):
+    import run_sweep
+
+    monkeypatch.setenv("PLAYWRIGHT_INSTALL_EXIT", "1")
+    hint = run_sweep.browser_hint(RuntimeError("Executable doesn't exist at X"))
+    assert "install" in hint and "playwright-install.log" in hint

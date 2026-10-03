@@ -19,7 +19,12 @@ REM already there; it is here so a fresh checkout, a Playwright upgrade, or a
 REM wiped folder repairs itself instead of costing the home market a night.
 REM A failed install is not fatal: mod-balam then aborts, and the digest says so.
 set "PLAYWRIGHT_BROWSERS_PATH=%~dp0.playwright-browsers"
-python -m playwright install chromium
+REM Its output goes to a file and its exit code into the run, so a failed
+REM install is in the sweep log and the digest rather than in a console
+REM window nobody sees.
+if not exist "%~dp0logs" mkdir "%~dp0logs"
+python -m playwright install chromium > "%~dp0logs\playwright-install.log" 2>&1
+set "PLAYWRIGHT_INSTALL_EXIT=%ERRORLEVEL%"
 
 python "%~dp0scraper-service\run_sweep.py" %*
 exit /b %ERRORLEVEL%

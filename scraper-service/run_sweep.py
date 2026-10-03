@@ -48,6 +48,14 @@ from datetime import datetime, timezone
 from typing import Optional
 from pathlib import Path
 
+#: Where the run is, for the crash email. Module-level because the crash is
+#: caught in main(), outside the coroutine that knows.
+STAGE = {"now": "setup"}
+
+#: Tenders per source on the scheduled sweep. Named because "is this the
+#: full run" is decided by comparing against it.
+DEFAULT_LIMIT = 20000
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
@@ -132,6 +140,13 @@ def browser_hint(exc: Exception) -> Optional[str]:
     if "Executable doesn't exist" not in str(exc):
         return None
     where = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "(unset -- per-user default)"
+    install_exit = os.environ.get("PLAYWRIGHT_INSTALL_EXIT")
+    if install_exit not in (None, "", "0"):
+        return (
+            f"hint: the browser install before this run exited {install_exit}. "
+            "Its output is in logs/playwright-install.log (often no network, or "
+            "a disk or permission problem in the .playwright-browsers folder)."
+        )
     return (
         f"hint: the sweep ran as '{_user()}' with PLAYWRIGHT_BROWSERS_PATH={where}. "
         "Run it through run_sweep.cmd, which pins the browsers inside the project "
@@ -158,6 +173,7 @@ def count_tenders(settings, since: datetime) -> tuple[Optional[int], Optional[in
 
 
 async def run(args, log: logging.Logger) -> int:
+    STAGE["now"] = "setup"
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
 
@@ -178,6 +194,12 @@ async def run(args, log: logging.Logger) -> int:
     log.info("runtime   : user=%s python=%s", _user(), sys.executable)
     log.info("browsers  : %s", os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
              or f"(default) {os.environ.get('LOCALAPPDATA', '?')}\\ms-playwright")
+    # run_sweep.cmd installs the browser before this script starts and hands
+    # over the result; absent when the script is run some other way.
+    install_exit = os.environ.get("PLAYWRIGHT_INSTALL_EXIT")
+    if install_exit not in (None, "", "0"):
+        log.warning("browser install exited %s -- see logs/playwright-install.log; "
+                    "mod-balam will likely abort", install_exit)
     log.info("sources   : %s", ", ".join(args.source))
     log.info("limit     : %d per source", args.limit)
     log.info("dry run   : %s", settings.dry_run)
@@ -194,6 +216,7 @@ async def run(args, log: logging.Logger) -> int:
     # on a normal night has spent the budget, so a new customer's profile
     # sat at "waiting for tonight's run" night after night. A handful of
     # profiles is one batched request; it outranks any tender.
+    STAGE["now"] = "profile embedding"
     if not settings.dry_run:
         try:
             embedded = await pipeline.embed_pending_profiles()
@@ -213,6 +236,7 @@ async def run(args, log: logging.Logger) -> int:
     # request. Capped by EXTRACT_MATCHED_LIMIT, and skipped on a dry run
     # because extraction is spend, not a write, and a dry run should cost
     # nothing.
+    STAGE["now"] = "matched-tender extraction"
     if not settings.dry_run and settings.extract_matched_limit > 0:
         try:
             extracted = await pipeline.extract_matched()
@@ -226,6 +250,7 @@ async def run(args, log: logging.Logger) -> int:
     # is built from the whole set.
     reports = []
     for key in args.source:
+        STAGE["now"] = f"harvest of {key}"
         agent = get_agent(key, settings)
         started = time.time()
         try:
@@ -288,6 +313,7 @@ async def run(args, log: logging.Logger) -> int:
     # database rather than trusted from the counters above: a sweep can
     # report `ingested` for rows a trigger then refused. Read BEFORE the
     # digest, so the digest can say "the corpus did not grow".
+    STAGE["now"] = "the tender count"
     new_tenders = None
     if not settings.dry_run:
         try:
@@ -296,9 +322,17 @@ async def run(args, log: logging.Logger) -> int:
         except Exception as exc:  # noqa: BLE001
             log.warning("could not read the tender count back: %s", exc)
         if new_tenders == 0:
-            log.warning("NO NEW TENDERS -- the corpus did not grow")
-            worst = max(worst, 1)
+            # An alarm only on the full scheduled sweep. A hand-run of one
+            # source, or a --limit smoke test, can legitimately add nothing,
+            # and an alarm that fires on those trains people to ignore it.
+            if getattr(args, "full_run", True):
+                log.warning("NO NEW TENDERS -- the corpus did not grow")
+                worst = max(worst, 1)
+            else:
+                log.info("no new tenders (narrow run: --source/--limit given, not an alarm)")
+                new_tenders = None  # keeps the digest from heading with it
 
+    STAGE["now"] = "finishing (alerts and digest)"
     if new_tenders is None:
         finished = await pipeline.finish_sweep(reports)
     else:
@@ -314,7 +348,7 @@ def main() -> int:
     parser.add_argument("--source", action="append",
                         choices=["ted-eu", "uk-fts", "mod-balam"],
                         help="repeatable; defaults to ted-eu and uk-fts")
-    parser.add_argument("--limit", type=int, default=20000,
+    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT,
                         help="max tenders per source (default 20000)")
     parser.add_argument("--dry-run", action="store_true",
                         help="fetch and filter, write nothing")
@@ -334,6 +368,10 @@ def main() -> int:
     # and whatever is last in this list gets nothing -- which is exactly
     # what happened to uk-fts today. Order here is a priority, not a
     # sequence, and the home market outranks the volume.
+    # Decided before the defaults are filled in: only a run with neither
+    # --source nor --limit is the scheduled sweep whose silence means
+    # something is broken.
+    args.full_run = args.source is None and args.limit == DEFAULT_LIMIT
     args.source = args.source or ["mod-balam", "ted-eu", "uk-fts"]
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -350,19 +388,28 @@ def main() -> int:
         log.warning("could not load .env before the start ping: %s", exc)
     heartbeat("start")
 
+    STAGE["now"] = "setup"
     try:
         code = asyncio.run(run(args, log))
     except KeyboardInterrupt:
         log.warning("interrupted")
         code = 1
     except Exception as exc:  # noqa: BLE001
-        log.exception("could not start: %s", exc)
+        stage = STAGE["now"]
+        log.exception("crashed during %s: %s", stage, exc)
         # No digest is built on this path, so without this the run ends
-        # without a word to anyone.
+        # without a word to anyone. The stage is named because "could not
+        # start" -- this email's old subject -- was also what it said about a
+        # run that harvested for an hour and then died while finishing.
+        started = stage == "setup"
         send_alarm(
-            "[Tenders Finder] Sweep could not start",
-            "The scheduled sweep exited 2 before harvesting anything.\n\n"
-            f"{type(exc).__name__}: {exc}\n\nLog: {log_path}",
+            "[Tenders Finder] Sweep could not start" if started
+            else f"[Tenders Finder] Sweep crashed during {stage}",
+            ("The scheduled sweep exited 2 before harvesting anything.\n\n" if started
+             else f"The scheduled sweep crashed during {stage} and exited 2. Anything "
+                  "harvested before that point was written; alerts and the digest "
+                  "were not sent.\n\n")
+            + f"{type(exc).__name__}: {exc}\n\nLog: {log_path}",
         )
         code = 2
 

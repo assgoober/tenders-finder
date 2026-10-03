@@ -32,8 +32,8 @@ was written about **the original**:
 | Nightly sweep | runs on the original's machine | **none scheduled** |
 | Data | ~5,600 tenders | empty — started fresh on purpose |
 
-The copy's Supabase has all 21 migrations (verified: RLS on every table,
-forced on the five tenant tables, 3 cron jobs, signup and 0021 triggers),
+The copy's Supabase has all 22 migrations (verified: RLS on every table,
+forced on the five tenant tables, 3 cron jobs, signup, 0021 and 0022 triggers),
 Site URL `http://localhost:3000`, and `http://localhost:3000/auth/callback`
 plus `http://localhost:3000/**` on the redirect allow-list (the wildcard
 because the callback carries `?next=...`, and an exact entry may not match it). Keys live in the gitignored `.env` (DB password,
@@ -198,9 +198,14 @@ Ordered by what is broken rather than by what is interesting.
    the nightly sweep's `finish_sweep` now embeds pending profiles and
    backfills each against open tenders before alerts go out -- before this,
    `embed_pending_profiles()` was reachable only from `POST /profiles/embed`,
-   which nothing calls. Migration 0021 (an edited profile's text clears its
-   embedding) is **applied on the copy** and verified end to end; the
-   original still needs it applied.
+   which nothing calls. Profiles are embedded at the START of the sweep
+   (the harvest spends the budget), with the score cut set before the first
+   backfill. Migrations 0021 and 0022 are **applied on the copy** and
+   verified end to end: editing the text or resuming a paused profile
+   re-embeds and backfills it; a newly excluded keyword dismisses matching
+   matches; members can write only the screen's columns and cannot DELETE
+   (column grants -- RLS still scopes rows). The original needs both before
+   this web code is deployed there: `/profiles` reads `has_embedding` (0022).
 6. **`uk-fts` is starved, not broken.** ~2,250 notices found a night, 0
    ingested, because TED spends the day's embedding budget first. The order is
    deliberate (the home market outranks the volume). The fix is budget.

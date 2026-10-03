@@ -24,7 +24,13 @@ const INPUT =
   "w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900";
 
 function Status({ profile }: { profile: ProfileView }) {
-  if (!profile.isActive) return <span className="text-slate-500">Paused</span>;
+  if (!profile.isActive) {
+    return (
+      <span className="text-slate-500">
+        Paused. Resuming catches up on tenders that arrived meanwhile, from tonight&apos;s run.
+      </span>
+    );
+  }
   if (!profile.embedded) {
     // Said plainly, because the alternative reading of "no matches yet" is
     // "this is broken".
@@ -154,7 +160,8 @@ function ProfileForm({
           className={INPUT}
         />
         <p className="text-xs text-slate-500">
-          Comma-separated. A tender whose title or summary contains any of these is never matched.
+          Comma-separated. A tender whose title or summary contains any of these is never matched,
+          and matches you already have that contain a newly added word leave your feed.
         </p>
       </div>
 
