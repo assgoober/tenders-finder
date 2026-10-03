@@ -23,6 +23,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { resolveOrganization } from "@/lib/organization";
 import { PIPELINE_COLUMNS, type PipelineStatus } from "@/lib/types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -33,39 +34,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  *  the two cannot drift apart. */
 const STATUSES = new Set<string>(PIPELINE_COLUMNS.map((column) => column.status));
 
-/**
- * The caller's organization, read through their own session.
- *
- * RLS on `organizations` is `is_org_member(id)`, so this returns only
- * organizations the user actually belongs to — the filter is the policy, not
- * a where clause someone has to remember to write.
- *
- * A user in two organizations is refused rather than resolved arbitrarily.
- * There is no organization switcher in this UI yet, so picking the first row
- * would file a tender into a pipeline the user did not choose — and in a
- * product whose whole premise is that competing contractors share a database,
- * guessing is the wrong failure mode.
- */
-async function resolveOrganization(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<{ id: string } | { error: string }> {
-  const { data, error } = await supabase.from("organizations").select("id").limit(2);
-
-  if (error) return { error: error.message };
-  if (!data || data.length === 0) {
-    return {
-      error:
-        "Your account is not a member of an organization, so it has no pipeline to add to.",
-    };
-  }
-  if (data.length > 1) {
-    return {
-      error:
-        "Your account belongs to more than one organization and this screen cannot yet ask which one to use.",
-    };
-  }
-  return { id: (data[0] as { id: string }).id };
-}
 
 /** Guard shared by every action: a configured project and a well-formed id. */
 function precheck(tenderId: string): string | null {

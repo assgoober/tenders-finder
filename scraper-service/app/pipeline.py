@@ -188,6 +188,17 @@ class IngestionPipeline:
                 logger.warning("could not age tender status: %s", exc)
                 ok = False
 
+        # Profiles written in the dashboard since the last run, embedded and
+        # backfilled BEFORE alerts go out -- so a customer who signs up and
+        # describes themselves today gets their first alert this morning
+        # rather than waiting a further day for it.
+        if not self.settings.dry_run:
+            try:
+                await self.embed_pending_profiles()
+            except Exception as exc:  # noqa: BLE001
+                logger.error("could not embed pending alert profiles: %s", exc)
+                ok = False
+
         # Customer alerts before the operator digest. If only one of the two
         # can get out, it should be the one a bid team is waiting for.
         if not self.settings.dry_run:
@@ -729,12 +740,23 @@ class IngestionPipeline:
         return row
 
     async def embed_pending_profiles(self, limit: int = 100) -> int:
-        """Vectorize alert profiles created through the web app.
+        """Vectorize alert profiles created or edited through the web app,
+        then give each one the corpus that already exists.
 
         The dashboard writes a profile's text under the user's own session;
-        it has no embedding provider. This backfills them. A profile without
-        an embedding matches nothing (see `match_tenders_for_profile`), so
-        this runs on the same schedule as ingestion.
+        it has no embedding provider. A profile without an embedding matches
+        nothing, and migration 0021 nulls the embedding whenever the text
+        changes, so this is the one door every profile passes through.
+
+        Embedding alone was not enough. The tender-side trigger only matches
+        tenders that arrive after the profile is embedded, so a customer
+        would get nothing from the thousands of open tenders already held --
+        the exact first impression 0015 was written to prevent. Each newly
+        embedded profile is therefore backfilled here, in the same step.
+
+        "Runs on the same schedule as ingestion" was this docstring's claim
+        for as long as only `POST /profiles/embed` called it. `finish_sweep`
+        now does.
         """
         profiles = self.repository.profiles_missing_embeddings(limit)
         if not profiles:
@@ -743,10 +765,20 @@ class IngestionPipeline:
         vectors = await self.embedder.embed(
             [p["description"] for p in profiles], input_type="query"
         )
+        matched = 0
         for profile, vector in zip(profiles, vectors):
             self.repository.set_profile_embedding(profile["id"], vector)
+            try:
+                matched += self.repository.generate_matches_for_profile(profile["id"])
+            except Exception as exc:  # noqa: BLE001
+                # The embedding is saved either way; tomorrow's tenders will
+                # still reach this profile through the trigger. Logged at
+                # ERROR because the backfill is what a new customer sees first.
+                logger.error("could not backfill matches for profile %s: %s",
+                             profile["id"], exc)
 
-        logger.info("embedded %d alert profiles", len(profiles))
+        logger.info("embedded %d alert profile(s); backfilled %d match(es)",
+                    len(profiles), matched)
         return len(profiles)
 
 

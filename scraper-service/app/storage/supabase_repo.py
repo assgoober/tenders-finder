@@ -229,6 +229,18 @@ class SupabaseRepository:
         )
         return result.data or []
 
+    def generate_matches_for_profile(self, profile_id: str) -> int:
+        """Score one profile against every open tender (migration 0015).
+
+        The tender-side trigger only ever matches tenders arriving AFTER a
+        profile exists; this is the half that gives a new profile the corpus
+        that was already there.
+        """
+        result = self.client.rpc(
+            "generate_matches_for_profile", {"p_profile_id": profile_id}
+        ).execute()
+        return int(result.data or 0)
+
     def set_profile_embedding(self, profile_id: str, embedding: list[float]) -> None:
         self.client.table("alert_profiles").update({"embedding": embedding}).eq(
             "id", profile_id

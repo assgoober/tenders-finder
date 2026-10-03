@@ -155,9 +155,15 @@ Ordered by what is broken rather than by what is interesting.
 4. **Run the deferred extraction.** `tenders_awaiting_extraction()` exists and
    is scheduled nowhere. 5,645 tenders are in the corpus listing-only; the
    ones somebody actually matched are the cheap and valuable subset.
-5. **Onboarding is a SQL insert.** An alert profile — the paragraph that
-   decides what a customer is shown — is written by hand. Until there is a
-   screen, every new customer needs whoever holds the service-role key.
+5. **Alert profiles have a screen (03/10): `/profiles`.** Create, edit,
+   pause; never delete (matches cascade). The dashboard stores text only;
+   the nightly sweep's `finish_sweep` now embeds pending profiles and
+   backfills each against open tenders before alerts go out -- before this,
+   `embed_pending_profiles()` was reachable only from `POST /profiles/embed`,
+   which nothing calls. **Operator step:** apply
+   `supabase/migrations/0021_profile_text_change_reembeds.sql` in the SQL
+   Editor. Without it, editing a profile's text leaves it matching on the
+   old text.
 6. **`uk-fts` is starved, not broken.** ~2,250 notices found a night, 0
    ingested, because TED spends the day's embedding budget first. The order is
    deliberate (the home market outranks the volume). The fix is budget.

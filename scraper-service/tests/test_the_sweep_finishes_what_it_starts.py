@@ -64,7 +64,11 @@ def _pipeline(settings, *, delivered=3, raises=None):
         return delivered
 
     pipeline.deliver_match_alerts = _deliver
-    pipeline.repository = SimpleNamespace(age_tender_status=lambda: {})
+    pipeline.repository = SimpleNamespace(
+        age_tender_status=lambda: {},
+        # finish_sweep also embeds dashboard profiles now; none are pending here.
+        profiles_missing_embeddings=lambda limit=100: [],
+    )
     return pipeline, calls
 
 

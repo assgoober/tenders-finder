@@ -19,6 +19,7 @@
  *      project. Nothing is wrong; nothing has run.
  */
 
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { DemoNotice } from "@/components/demo-notice";
@@ -40,14 +41,22 @@ function Shell({ children }: { children: React.ReactNode }) {
           </p>
         </div>
         {isSupabaseConfigured ? (
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
+          <div className="flex items-center gap-2">
+            <Link
+              href="/profiles"
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
             >
-              Sign out
-            </button>
-          </form>
+              Alert profiles
+            </Link>
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         ) : null}
       </header>
       {children}
