@@ -74,6 +74,11 @@ class IngestReport:
     #: and the pair read as a complete run -- which is the third time in this
     #: codebase that work not done failed to reach whoever read the result.
     partial: bool = False
+    #: The source raised before it could report anything. Kept as a report
+    #: rather than dropped, because the operator digest is built from the
+    #: kept reports -- and a source that crashed used to be the one source
+    #: the digest did not mention (mod-balam, five nights from 17/09).
+    aborted: bool = False
     errors: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -142,7 +147,9 @@ class IngestionPipeline:
 
         return reports
 
-    async def finish_sweep(self, reports: list[IngestReport]) -> bool:
+    async def finish_sweep(
+        self, reports: list[IngestReport], new_tenders: int | None = None
+    ) -> bool:
         """Everything a sweep owes once every source has finished.
 
         This is a method, and not the tail of `run()` where it used to live,
@@ -193,7 +200,12 @@ class IngestionPipeline:
 
         # After every source has finished, so one mail covers the whole run.
         try:
-            await self.notifier.send_run_digest(reports)
+            # Passed only when known, so a notifier that predates the count
+            # (and every test double of one) keeps working unchanged.
+            if new_tenders is None:
+                await self.notifier.send_run_digest(reports)
+            else:
+                await self.notifier.send_run_digest(reports, new_tenders=new_tenders)
         except Exception as exc:  # noqa: BLE001
             logger.error("could not send the run digest: %s", exc)
             ok = False

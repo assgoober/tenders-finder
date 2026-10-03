@@ -44,14 +44,31 @@ MAX_ERRORS_PER_SOURCE = 5
 class Notifier(Protocol):
     """So tests and dry runs can substitute a recorder for real mail."""
 
-    async def send_run_digest(self, reports: list[IngestReport]) -> bool: ...
+    async def send_run_digest(
+        self, reports: list[IngestReport], new_tenders: int | None = None
+    ) -> bool: ...
 
 
-def needs_attention(reports: list[IngestReport]) -> bool:
-    return any(r.needs_review or r.failed or r.errors for r in reports)
+def needs_attention(reports: list[IngestReport], new_tenders: int | None = None) -> bool:
+    """Whether this run is worth an email even with NOTIFY_ON_SUCCESS off.
+
+    `new_tenders` is how many rows the corpus gained, read back from the
+    database by the caller (None when unknown, e.g. a dry run). Zero is
+    attention on its own: at ~960 new tenders a day a sweep that adds none
+    is broken somewhere, even if every source it reached reported clean.
+    """
+    if new_tenders == 0:
+        return True
+    return any(
+        r.needs_review or r.failed or r.errors
+        or getattr(r, "partial", False) or getattr(r, "aborted", False)
+        for r in reports
+    )
 
 
-def build_digest(reports: list[IngestReport]) -> tuple[str, str]:
+def build_digest(
+    reports: list[IngestReport], new_tenders: int | None = None
+) -> tuple[str, str]:
     """Render (subject, body). Pure — the tests read this, not a mailbox."""
     review = sum(r.needs_review for r in reports)
     refused = sum(r.refused for r in reports)
@@ -59,9 +76,19 @@ def build_digest(reports: list[IngestReport]) -> tuple[str, str]:
     ingested = sum(r.ingested for r in reports)
     found = sum(r.found for r in reports)
 
-    partial = [r.source_key for r in reports if getattr(r, "partial", False)]
+    aborted = [r.source_key for r in reports if getattr(r, "aborted", False)]
+    partial = [
+        r.source_key for r in reports
+        if getattr(r, "partial", False) and not getattr(r, "aborted", False)
+    ]
 
-    if partial:
+    if aborted:
+        # A source that crashed outranks everything else in the subject: it
+        # is the one failure that produces no numbers to be suspicious of.
+        headline = f"FAILED: {', '.join(aborted)} — {ingested} ingested from the rest"
+    elif new_tenders == 0:
+        headline = "NO NEW TENDERS — the corpus did not grow"
+    elif partial:
         # Said first and said plainly. "60 ingested, clean" was true of every
         # row that arrived and false about the run, which is the worst kind of
         # subject line: it is not wrong enough to notice.
@@ -75,6 +102,8 @@ def build_digest(reports: list[IngestReport]) -> tuple[str, str]:
     policy_note = f"  (of these, {refused} declined by policy)" if refused else ""
     lines = [
         f"Found {found} tenders across {len(reports)} source(s).",
+        *([f"  new rows     {new_tenders}  (read back from the database)"]
+          if new_tenders is not None else []),
         f"  ingested     {ingested}",
         f"  needs review {review}{policy_note}",
         f"  failed       {failed}",
@@ -89,6 +118,11 @@ def build_digest(reports: list[IngestReport]) -> tuple[str, str]:
         ]
 
     for report in reports:
+        if getattr(report, "aborted", False):
+            lines.append(f"[{report.source_key}] ABORTED -- harvested nothing")
+            for error in report.errors[:MAX_ERRORS_PER_SOURCE]:
+                lines.append(f"    - {error}")
+            continue
         lines.append(
             f"[{report.source_key}] found={report.found} ingested={report.ingested} "
             f"review={report.needs_review} refused={report.refused} failed={report.failed}"
@@ -243,16 +277,18 @@ class EmailNotifier:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
 
-    async def send_run_digest(self, reports: list[IngestReport]) -> bool:
+    async def send_run_digest(
+        self, reports: list[IngestReport], new_tenders: int | None = None
+    ) -> bool:
         """Returns whether a message was actually sent."""
         if not reports:
             return False
 
-        attention = needs_attention(reports)
+        attention = needs_attention(reports, new_tenders)
         if not attention and not self.settings.notify_on_success:
             return False
 
-        subject, body = build_digest(reports)
+        subject, body = build_digest(reports, new_tenders)
 
         if not self.settings.has_email_notifications:
             # Deliberately not silent: without this the only record that a
@@ -322,6 +358,28 @@ class EmailNotifier:
             return False
 
         logger.info("match alert sent to %s (%s)", recipient, subject)
+        return True
+
+    def send_operator_alarm(self, subject: str, body: str) -> bool:
+        """A plain message to the operator, outside any digest.
+
+        Synchronous on purpose: it is called when the run could not start,
+        which is also when there may be no event loop worth trusting.
+        """
+        if not self.settings.has_email_notifications:
+            logger.warning("email is not configured; alarm not sent\n%s\n%s", subject, body)
+            return False
+        message = EmailMessage()
+        message["Subject"] = subject
+        message["From"] = self.settings.mail_from
+        message["To"] = self.settings.notify_email
+        message.set_content(body)
+        try:
+            self._send(message)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("failed to send an alarm: %s: %s\n%s",
+                         type(exc).__name__, exc, explain_smtp_failure(exc))
+            return False
         return True
 
     def _send(self, message: EmailMessage) -> None:

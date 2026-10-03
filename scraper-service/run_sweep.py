@@ -23,8 +23,17 @@ Usage:
 
 Exit codes are meant to be read by a scheduler:
     0  every source finished and wrote what it found
-    1  ran, but at least one source was partial or the embedding budget ran out
+    1  ran, but at least one source was partial or aborted, the embedding
+       budget ran out, or the corpus gained no new tenders at all
     2  could not start (missing configuration, unreachable database)
+
+Nobody reads an exit code, so each one is also said out loud:
+    * exit 1 -- the operator digest, whose subject names what went wrong;
+    * exit 2 -- a last-ditch alarm email, since no digest is ever built;
+    * the machine is off, asleep, or the task never fired -- nothing on this
+      machine can report that. Set HEARTBEAT_URL to a dead-man's-switch check
+      (healthchecks.io, or anything that accepts `<url>/start` and
+      `<url>/<exit code>`) and it will complain when the pings stop.
 """
 
 from __future__ import annotations
@@ -36,6 +45,7 @@ import os
 import sys
 import time
 from datetime import datetime, timezone
+from typing import Optional
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -69,6 +79,57 @@ def build_logger(log_path: Path) -> logging.Logger:
     return logging.getLogger("sweep")
 
 
+def _post(url: str, body: str) -> None:
+    import httpx
+    httpx.post(url, content=body.encode("utf-8"), timeout=10)
+
+
+def heartbeat(signal, body: str = "") -> None:
+    """Ping the dead-man's switch, if one is configured. Never raises.
+
+    `signal` is "start" or an exit code. The check turns red on a non-zero
+    code, and -- the reason it exists -- on silence, which is the one failure
+    the run itself can never report. Read from the environment directly,
+    not from Settings, because exit 2 is often Settings failing to load.
+    """
+    url = (os.environ.get("HEARTBEAT_URL") or "").strip().rstrip("/")
+    if not url:
+        return
+    try:
+        _post(f"{url}/{signal}", body)
+    except Exception as exc:  # noqa: BLE001 - the ping reports the job; it is not the job
+        logging.getLogger("sweep").warning("heartbeat ping failed: %s", exc)
+
+
+def send_alarm(subject: str, body: str) -> None:
+    """Best-effort email for the run that never got far enough to digest."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(ROOT / ".env")
+        from app.config import Settings
+        from app.notifications import EmailNotifier
+        EmailNotifier(Settings()).send_operator_alarm(subject, body)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("sweep").error("could not send the alarm either: %s", exc)
+
+
+def count_tenders(settings, since: datetime) -> tuple[Optional[int], Optional[int]]:
+    """(total, created since `since`), read back from the database.
+
+    The second number is the one HANDOFF called the signal nobody watches:
+    the counters can say `ingested 900` for rows that were already there, or
+    that a trigger then refused. Only the table knows whether the corpus grew.
+    """
+    from app.storage.supabase_repo import SupabaseRepository
+    client = SupabaseRepository(settings).client
+    total = client.table("tenders").select("id", count="exact").limit(1).execute().count
+    new = (
+        client.table("tenders").select("id", count="exact")
+        .gte("created_at", since.isoformat()).limit(1).execute().count
+    )
+    return total, new
+
+
 async def run(args, log: logging.Logger) -> int:
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
@@ -92,6 +153,7 @@ async def run(args, log: logging.Logger) -> int:
              settings.embed_max_tokens_per_request, settings.embed_tokens_per_minute)
 
     pipeline = IngestionPipeline(settings=settings)
+    sweep_started = datetime.now(timezone.utc)
 
     worst = 0
     # Kept, not just printed. The per-source report was logged and dropped,
@@ -108,6 +170,13 @@ async def run(args, log: logging.Logger) -> int:
             # got TED and lost the UK is a partial sweep, not a dead one.
             log.exception("[%s] aborted: %s", key, exc)
             worst = max(worst, 1)
+            # Kept, so the digest names it. Dropping it here made the source
+            # that failed the one source the digest did not mention.
+            from app.pipeline import IngestReport
+            reports.append(IngestReport(
+                source_key=key, aborted=True, partial=True,
+                errors=[f"aborted: {type(exc).__name__}: {exc}"],
+            ))
             continue
 
         reports.append(report)
@@ -147,22 +216,27 @@ async def run(args, log: logging.Logger) -> int:
     # A failed delivery counts against the exit code. "Ran, but did not
     # finish" is what exit 1 is for, and a sweep whose alerts did not leave
     # the building has not finished the job this product is sold to do.
-    if not await pipeline.finish_sweep(reports):
-        worst = max(worst, 1)
-
-    # The only number that says whether this worked. Read back from the
+    # The only numbers that say whether this worked. Read back from the
     # database rather than trusted from the counters above: a sweep can
-    # report `ingested` for rows a trigger then refused.
+    # report `ingested` for rows a trigger then refused. Read BEFORE the
+    # digest, so the digest can say "the corpus did not grow".
+    new_tenders = None
     if not settings.dry_run:
         try:
-            from app.storage.supabase_repo import SupabaseRepository
-            repo = SupabaseRepository(settings)
-            result = repo.client.table("tenders").select(
-                "id", count="exact"
-            ).limit(1).execute()
-            log.info("DATABASE NOW HOLDS %s TENDERS", result.count)
+            total, new_tenders = count_tenders(settings, sweep_started)
+            log.info("DATABASE NOW HOLDS %s TENDERS (%s new this run)", total, new_tenders)
         except Exception as exc:  # noqa: BLE001
             log.warning("could not read the tender count back: %s", exc)
+        if new_tenders == 0:
+            log.warning("NO NEW TENDERS -- the corpus did not grow")
+            worst = max(worst, 1)
+
+    if new_tenders is None:
+        finished = await pipeline.finish_sweep(reports)
+    else:
+        finished = await pipeline.finish_sweep(reports, new_tenders=new_tenders)
+    if not finished:
+        worst = max(worst, 1)
 
     return worst
 
@@ -198,18 +272,35 @@ def main() -> int:
     log_path = Path(args.log_dir) / f"sweep-{stamp}.log"
     log = build_logger(log_path)
     log.info("log file  : %s", log_path)
+    heartbeat("start")
 
     try:
         code = asyncio.run(run(args, log))
     except KeyboardInterrupt:
         log.warning("interrupted")
-        return 1
+        code = 1
     except Exception as exc:  # noqa: BLE001
         log.exception("could not start: %s", exc)
-        return 2
+        # No digest is built on this path, so without this the run ends
+        # without a word to anyone.
+        send_alarm(
+            "[Tenders Finder] Sweep could not start",
+            "The scheduled sweep exited 2 before harvesting anything.\n\n"
+            f"{type(exc).__name__}: {exc}\n\nLog: {log_path}",
+        )
+        code = 2
 
     log.info("exit %d", code)
+    heartbeat(code, _tail(log_path))
     return code
+
+
+def _tail(path: Path, limit: int = 10_000) -> str:
+    """The end of the log, so the heartbeat check shows why, not only that."""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")[-limit:]
+    except OSError:
+        return ""
 
 
 if __name__ == "__main__":

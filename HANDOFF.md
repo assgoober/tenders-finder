@@ -130,10 +130,15 @@ Ordered by what is broken rather than by what is interesting.
    fix; the difference between that shell and the scheduled task is where to
    look. The run now exits 1 instead of reporting success, which is the only
    reason this is visible at all.
-2. **Nothing watches the exit code.** A failed source makes the sweep exit 1
-   and send a digest, and no alarm reads either. `added_today = 0` is the
-   other signal nobody watches. This is the cheapest work on the list and it
-   is what turns every future silent failure into a loud one.
+2. **Sweep alarms are built (03/10); one is waiting on a setting.** The
+   digest now names a source that crashed (it used to be the one source the
+   digest left out), heads with `NO NEW TENDERS` when the corpus did not
+   grow (also exit 1), and exit 2 sends its own alarm email. What no email
+   from the sweep can report is the sweep not running at all, so
+   `run_sweep.py` pings `HEARTBEAT_URL` (`/start`, then `/<exit code>` with
+   the log tail). **Operator step, on the machine that runs the sweep:** pull,
+   create a healthchecks.io check (period 1 day), and put its URL in `.env`.
+   Without SMTP configured there, all of it is logged and nothing is sent.
 3. **Password reset and the email-link landing are built (03/10), not yet
    live until two dashboard settings are made.** `/forgot-password`,
    `/reset-password`, and `/auth/callback` (PKCE `?code=`, plus
