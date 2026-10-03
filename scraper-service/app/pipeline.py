@@ -188,13 +188,17 @@ class IngestionPipeline:
                 logger.warning("could not age tender status: %s", exc)
                 ok = False
 
-        # Profiles written in the dashboard since the last run, embedded and
-        # backfilled BEFORE alerts go out -- so a customer who signs up and
-        # describes themselves today gets their first alert this morning
-        # rather than waiting a further day for it.
+        # A second chance for profiles, before alerts go out. The scheduled
+        # sweep embeds them BEFORE harvesting (run_sweep.py), because by now
+        # the harvest has usually spent the embedding budget; this catches
+        # `run()` callers and profiles written while the sweep was running.
+        # A spent budget here is expected, not a failure: the next run's
+        # first step picks the profile up with a fresh budget.
         if not self.settings.dry_run:
             try:
                 await self.embed_pending_profiles()
+            except EmbeddingQuotaExhausted as exc:
+                logger.warning("profiles left for the next run (budget spent): %s", exc)
             except Exception as exc:  # noqa: BLE001
                 logger.error("could not embed pending alert profiles: %s", exc)
                 ok = False
@@ -771,21 +775,45 @@ class IngestionPipeline:
         vectors = await self.embedder.embed(
             [p["description"] for p in profiles], input_type="query"
         )
+        stored = [
+            profile["id"]
+            for profile, vector in zip(profiles, vectors)
+            # Conditional on the text: an edit since the read leaves the
+            # embedding null for the next run instead of mismatched.
+            if self.repository.set_profile_embedding(
+                profile["id"], vector, description=profile["description"]
+            )
+        ]
+        if not stored:
+            return 0
+
+        # The cut BEFORE the backfill. A fresh profile has none (and 0021
+        # clears it on every edit); cron would set it within the hour, but
+        # the backfill runs now, and without a cut it matches on the loose
+        # `min_score` floor. Those matches are kept and emailed this morning.
+        # So if the cut cannot be set, the backfill is skipped: tomorrow's
+        # tenders still reach the profile through the trigger, at the right
+        # threshold, which beats a first email full of weak matches.
+        try:
+            self.repository.refresh_profile_score_cuts()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("could not set score cuts; backfill skipped for %d profile(s): %s",
+                         len(stored), exc)
+            return len(stored)
+
         matched = 0
-        for profile, vector in zip(profiles, vectors):
-            self.repository.set_profile_embedding(profile["id"], vector)
+        for profile_id in stored:
             try:
-                matched += self.repository.generate_matches_for_profile(profile["id"])
+                matched += self.repository.generate_matches_for_profile(profile_id)
             except Exception as exc:  # noqa: BLE001
                 # The embedding is saved either way; tomorrow's tenders will
                 # still reach this profile through the trigger. Logged at
                 # ERROR because the backfill is what a new customer sees first.
-                logger.error("could not backfill matches for profile %s: %s",
-                             profile["id"], exc)
+                logger.error("could not backfill matches for profile %s: %s", profile_id, exc)
 
         logger.info("embedded %d alert profile(s); backfilled %d match(es)",
-                    len(profiles), matched)
-        return len(profiles)
+                    len(stored), matched)
+        return len(stored)
 
 
 def _iso(value: datetime | None) -> str | None:

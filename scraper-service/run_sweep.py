@@ -187,6 +187,21 @@ async def run(args, log: logging.Logger) -> int:
 
     pipeline = IngestionPipeline(settings=settings)
     sweep_started = datetime.now(timezone.utc)
+    worst = 0
+
+    # Customers' alert profiles first of all, while the embedding budget is
+    # whole. This used to happen in finish_sweep, after the harvest -- which
+    # on a normal night has spent the budget, so a new customer's profile
+    # sat at "waiting for tonight's run" night after night. A handful of
+    # profiles is one batched request; it outranks any tender.
+    if not settings.dry_run:
+        try:
+            embedded = await pipeline.embed_pending_profiles()
+            if embedded:
+                log.info("embedded %d alert profile(s) before harvesting", embedded)
+        except Exception as exc:  # noqa: BLE001
+            log.error("could not embed pending alert profiles: %s", exc)
+            worst = max(worst, 1)
 
     # Read the tenders somebody matched, BEFORE harvesting more.
     #
@@ -206,7 +221,6 @@ async def run(args, log: logging.Logger) -> int:
             # Not the harvest's failure, and must not cost the harvest.
             log.warning("could not extract matched tenders: %s", exc)
 
-    worst = 0
     # Kept, not just printed. The per-source report was logged and dropped,
     # which was fine while nothing downstream wanted it; the operator digest
     # is built from the whole set.
@@ -326,6 +340,14 @@ def main() -> int:
     log_path = Path(args.log_dir) / f"sweep-{stamp}.log"
     log = build_logger(log_path)
     log.info("log file  : %s", log_path)
+    # Loaded here as well as in run(): heartbeat() reads os.environ, and
+    # HEARTBEAT_URL lives in .env. Without this the /start ping never fired,
+    # so a run that hung was only noticed after the whole period plus grace.
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(ROOT / ".env")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("could not load .env before the start ping: %s", exc)
     heartbeat("start")
 
     try:

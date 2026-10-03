@@ -35,7 +35,8 @@ was written about **the original**:
 The copy's Supabase has all 21 migrations (verified: RLS on every table,
 forced on the five tenant tables, 3 cron jobs, signup and 0021 triggers),
 Site URL `http://localhost:3000`, and `http://localhost:3000/auth/callback`
-on the redirect allow-list. Keys live in the gitignored `.env` (DB password,
+plus `http://localhost:3000/**` on the redirect allow-list (the wildcard
+because the callback carries `?next=...`, and an exact entry may not match it). Keys live in the gitignored `.env` (DB password,
 service-role key) and `web/.env.local` (anon key). The Supabase CLI on the
 operator's machine is logged into an account that can also reach the
 original's project — always pass `gfetpegbmlctsmpqagqi` explicitly.
@@ -178,8 +179,8 @@ Ordered by what is broken rather than by what is interesting.
    the copy** (localhost; see the section at the top). For a deployed site,
    set Authentication ->
    URL Configuration -> Site URL to `https://tenders-finder-app.vercel.app`
-   and add `https://tenders-finder-app.vercel.app/auth/callback` and
-   `http://localhost:3000/auth/callback` to Redirect URLs. A target not on
+   and add `https://<site>/**` and `http://localhost:3000/**` to Redirect
+   URLs (wildcards: the callback carries `?next=...`). A target not on
    that list is silently replaced by the Site URL. Known limit: a PKCE link
    only works in the browser that requested it; switching the email
    templates to `{{ .TokenHash }}` removes that with no code change.

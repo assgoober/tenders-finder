@@ -33,22 +33,37 @@ def make_settings(**kw) -> Settings:
 
 
 class _Repo:
-    def __init__(self, pending, backfill_raises=False):
+    def __init__(self, pending, backfill_raises=False, cuts_raise=False, edited=()):
         self.pending = pending
         self.embedded = {}
         self.backfilled = []
+        self.calls = []
         self.backfill_raises = backfill_raises
+        self.cuts_raise = cuts_raise
+        # Profiles whose text changed after they were read.
+        self.edited = set(edited)
 
     def profiles_missing_embeddings(self, limit=100):
         return [p for p in self.pending if p["id"] not in self.embedded]
 
-    def set_profile_embedding(self, profile_id, embedding):
+    def set_profile_embedding(self, profile_id, embedding, description=None):
+        if profile_id in self.edited:
+            return False  # the conditional update matched no row
         self.embedded[profile_id] = embedding
+        self.calls.append(("embed", profile_id))
+        return True
+
+    def refresh_profile_score_cuts(self):
+        if self.cuts_raise:
+            raise RuntimeError("rpc failed")
+        self.calls.append(("cuts",))
+        return 1
 
     def generate_matches_for_profile(self, profile_id):
         if self.backfill_raises:
             raise RuntimeError("rpc failed")
         self.backfilled.append(profile_id)
+        self.calls.append(("backfill", profile_id))
         return 7
 
     # Everything else finish_sweep touches.
@@ -109,3 +124,47 @@ async def test_a_dry_run_embeds_nothing():
 
     await pipeline.finish_sweep([])
     assert repo.embedded == {}
+
+
+@pytest.mark.asyncio
+async def test_the_score_cut_is_set_before_the_backfill():
+    """Without a cut the backfill uses the loose min_score floor, and those
+    matches are kept and emailed the same morning."""
+    repo = _Repo([{"id": "p1", "description": "Tactical radio systems for armed forces"}])
+    await _pipeline(repo).embed_pending_profiles()
+    assert repo.calls == [("embed", "p1"), ("cuts",), ("backfill", "p1")]
+
+
+@pytest.mark.asyncio
+async def test_no_cut_means_no_backfill():
+    repo = _Repo([{"id": "p1", "description": "Tactical radio systems for armed forces"}],
+                 cuts_raise=True)
+    assert await _pipeline(repo).embed_pending_profiles() == 1
+    assert "p1" in repo.embedded
+    assert repo.backfilled == [], "backfilled on the loose floor"
+
+
+@pytest.mark.asyncio
+async def test_text_edited_mid_run_is_not_given_the_old_vector():
+    repo = _Repo([{"id": "p1", "description": "old text about radios and antennas"},
+                  {"id": "p2", "description": "thermal imaging for border security"}],
+                 edited={"p1"})
+    assert await _pipeline(repo).embed_pending_profiles() == 1
+    assert "p1" not in repo.embedded and repo.backfilled == ["p2"]
+
+
+@pytest.mark.asyncio
+async def test_a_spent_budget_at_the_end_of_the_sweep_is_not_a_failure():
+    """The scheduled sweep embeds profiles before harvesting; one written
+    mid-sweep is picked up by the next run with a fresh budget."""
+    from app.nlp.embeddings import EmbeddingQuotaExhausted
+
+    repo = _Repo([{"id": "p1", "description": "Satellite ground stations and telemetry"}])
+    pipeline = _pipeline(repo)
+
+    class _SpentEmbedder:
+        async def embed(self, texts, input_type="document"):
+            raise EmbeddingQuotaExhausted("spent")
+
+    pipeline.embedder = _SpentEmbedder()
+    assert await pipeline.finish_sweep([]) is True

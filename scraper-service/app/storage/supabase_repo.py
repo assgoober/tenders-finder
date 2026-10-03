@@ -224,6 +224,9 @@ class SupabaseRepository:
             self.client.table("alert_profiles")
             .select("id, description")
             .is_("embedding", "null")
+            # A paused profile matches nothing, so embedding it spends a
+            # request on a vector nobody uses. It is embedded on resume.
+            .eq("is_active", True)
             .limit(limit)
             .execute()
         )
@@ -241,7 +244,34 @@ class SupabaseRepository:
         ).execute()
         return int(result.data or 0)
 
-    def set_profile_embedding(self, profile_id: str, embedding: list[float]) -> None:
-        self.client.table("alert_profiles").update({"embedding": embedding}).eq(
+    def refresh_profile_score_cuts(self) -> int:
+        """Recompute every active profile's percentile cut (migration 0013).
+
+        Cron does this hourly. Called directly before a backfill because a
+        freshly embedded profile has no cut yet, and without one the backfill
+        falls back to the loose `min_score` floor -- whose matches are kept
+        and emailed, so a new customer's first impression would be a flood.
+        """
+        result = self.client.rpc("refresh_profile_score_cuts", {}).execute()
+        return int(result.data or 0)
+
+    def set_profile_embedding(
+        self, profile_id: str, embedding: list[float], description: str | None = None
+    ) -> bool:
+        """Store a profile's vector. Returns whether a row was written.
+
+        With `description`, the write only lands if the text is still the
+        text that was embedded. A customer editing the profile between the
+        read and this write would otherwise get the old text's vector on the
+        new text -- the silent mismatch migration 0021 exists to prevent,
+        which its trigger cannot see because this update does not touch
+        `description`. A miss leaves the embedding null, so the next run
+        embeds the new text.
+        """
+        query = self.client.table("alert_profiles").update({"embedding": embedding}).eq(
             "id", profile_id
-        ).execute()
+        )
+        if description is not None:
+            query = query.eq("description", description)
+        result = query.execute()
+        return bool(result.data)

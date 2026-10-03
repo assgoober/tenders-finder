@@ -500,7 +500,9 @@ async def test_an_exhausted_embedding_budget_stops_extraction():
 
 @pytest.mark.asyncio
 async def test_the_scheduled_sweep_extracts_before_it_harvests(monkeypatch):
-    """`extract_matched` existed and nothing called it."""
+    """`extract_matched` existed and nothing called it. Profiles go first of
+    all: the harvest spends the embedding budget, and a customer's profile
+    embedded after it waited night after night."""
     import logging
     from types import SimpleNamespace
 
@@ -513,6 +515,10 @@ async def test_the_scheduled_sweep_extracts_before_it_harvests(monkeypatch):
     class _FakePipeline:
         def __init__(self, settings):
             self.settings = settings
+
+        async def embed_pending_profiles(self):
+            order.append("profiles")
+            return 1
 
         async def extract_matched(self):
             order.append("extract")
@@ -532,7 +538,7 @@ async def test_the_scheduled_sweep_extracts_before_it_harvests(monkeypatch):
 
     args = SimpleNamespace(source=["mod-balam", "ted-eu"], limit=5, dry_run=False)
     assert await run_sweep.run(args, logging.getLogger("t")) == 0
-    assert order == ["extract", "harvest:mod-balam", "harvest:ted-eu"]
+    assert order == ["profiles", "extract", "harvest:mod-balam", "harvest:ted-eu"]
 
 
 @pytest.mark.asyncio
@@ -549,6 +555,9 @@ async def test_a_dry_run_sweep_spends_nothing_on_extraction(monkeypatch):
     class _FakePipeline:
         def __init__(self, settings):
             pass
+
+        async def embed_pending_profiles(self):
+            return 0
 
         async def extract_matched(self):
             called.append(True)

@@ -92,6 +92,9 @@ def _patch(monkeypatch, run_source):
         def __init__(self, settings):
             self.settings = settings
 
+        async def embed_pending_profiles(self):
+            return 0
+
         async def extract_matched(self):
             return 0
 
@@ -246,3 +249,23 @@ async def test_the_digest_carries_the_browser_hint(monkeypatch):
 
     errors = finished[0][0][0].errors
     assert any(e.startswith("hint:") for e in errors)
+
+
+def test_the_start_ping_sees_a_heartbeat_url_from_dotenv(monkeypatch, tmp_path):
+    """heartbeat() reads os.environ, and .env was only loaded inside run() --
+    after the /start ping, which therefore never fired."""
+    import run_sweep
+
+    (tmp_path / ".env").write_text("HEARTBEAT_URL=https://hc-ping.com/xyz\n", encoding="utf-8")
+    monkeypatch.delenv("HEARTBEAT_URL", raising=False)
+    monkeypatch.setattr(run_sweep, "ROOT", tmp_path)
+    pings = []
+    monkeypatch.setattr(run_sweep, "_post", lambda url, body: pings.append(url))
+
+    async def quick(args, log):
+        return 0
+
+    monkeypatch.setattr(run_sweep, "run", quick)
+    monkeypatch.setattr("sys.argv", ["run_sweep.py", "--log-dir", str(tmp_path / "logs")])
+    assert run_sweep.main() == 0
+    assert pings[0] == "https://hc-ping.com/xyz/start"

@@ -26,10 +26,21 @@ export function authCallbackUrl(next = "/"): string {
  * Accept only same-site paths for `next`. `//evil.example` and absolute URLs
  * would turn the callback into an open redirect that runs right after a
  * successful sign-in -- the moment a phishing page is most believable.
+ *
+ * Resolve, then compare origins. An earlier version checked the string's
+ * prefix instead, and `/%09/evil.example` walked straight through it: the
+ * URL parser drops tabs and newlines, so the string that passed the check
+ * was not the string that was followed. Asking the parser where the URL
+ * actually goes is the only check that cannot disagree with the parser.
  */
-export function safeNextPath(next: string | null | undefined): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+export function safeNextPath(next: string | null | undefined, origin: string): string {
+  if (!next) return "/";
+  let resolved: URL;
+  try {
+    resolved = new URL(next, origin);
+  } catch {
     return "/";
   }
-  return next;
+  if (resolved.origin !== new URL(origin).origin) return "/";
+  return resolved.pathname + resolved.search + resolved.hash;
 }
