@@ -13,9 +13,36 @@ anything here. (`CLAUDE.md` is a pointer to it; one contract, two doors.) Then `
 stack rationale, **26 architecture decision records**, and a table of silent
 failures that is the single most useful page in this repository.
 
-The user is Israeli and writes in Hebrew. **Reply in Hebrew.** Code,
-comments, commit messages and documentation stay in English — that split is
-consistent across the repository; keep it.
+Reply in the language the user writes in. (This line said "Reply in Hebrew";
+the user of this copy asked for English.) Code, comments, commit messages
+and documentation stay in English — keep that split.
+
+---
+
+## THIS REPOSITORY IS A COPY — read before touching anything live
+
+Since 03/10 there are two Tenders Finders, and everything below this section
+was written about **the original**:
+
+| | Original (not ours — never write to it) | This copy |
+|---|---|---|
+| GitHub | `omer-izhaki/tenders-finder` | `assgoober/tenders-finder` (standalone, not a fork) |
+| Supabase | `vixuawfbayglbgitzqbj`, org "tenders finders Org" | `gfetpegbmlctsmpqagqi`, org "Tenders Finder (copy)", Frankfurt, free plan |
+| Website | `tenders-finder-app.vercel.app` | local only (`localhost:3000`) |
+| Nightly sweep | runs on the original's machine | **none scheduled** |
+| Data | ~5,600 tenders | empty — started fresh on purpose |
+
+The copy's Supabase has all 21 migrations (verified: RLS on every table,
+forced on the five tenant tables, 3 cron jobs, signup and 0021 triggers),
+Site URL `http://localhost:3000`, and `http://localhost:3000/auth/callback`
+on the redirect allow-list. Keys live in the gitignored `.env` (DB password,
+service-role key) and `web/.env.local` (anon key). The Supabase CLI on the
+operator's machine is logged into an account that can also reach the
+original's project — always pass `gfetpegbmlctsmpqagqi` explicitly.
+
+"Operator steps" in the work queue that name the original's project, its
+Vercel URL or "the sweep machine" are about the original. For this copy
+they are either done (auth URLs, 0021) or not yet applicable (no sweep).
 
 ---
 
@@ -147,8 +174,9 @@ Ordered by what is broken rather than by what is interesting.
    `/reset-password`, and `/auth/callback` (PKCE `?code=`, plus
    `?token_hash=` for edited templates). Sign-up and the login page's new
    "send the confirmation again" button both target the callback; before,
-   confirmation links went to the Site URL, which had no handler. **Operator
-   step:** in the live project (`vixuawfbayglbgitzqbj`) set Authentication ->
+   confirmation links went to the Site URL, which had no handler. **Done for
+   the copy** (localhost; see the section at the top). For a deployed site,
+   set Authentication ->
    URL Configuration -> Site URL to `https://tenders-finder-app.vercel.app`
    and add `https://tenders-finder-app.vercel.app/auth/callback` and
    `http://localhost:3000/auth/callback` to Redirect URLs. A target not on
@@ -169,10 +197,9 @@ Ordered by what is broken rather than by what is interesting.
    the nightly sweep's `finish_sweep` now embeds pending profiles and
    backfills each against open tenders before alerts go out -- before this,
    `embed_pending_profiles()` was reachable only from `POST /profiles/embed`,
-   which nothing calls. **Operator step:** apply
-   `supabase/migrations/0021_profile_text_change_reembeds.sql` in the SQL
-   Editor. Without it, editing a profile's text leaves it matching on the
-   old text.
+   which nothing calls. Migration 0021 (an edited profile's text clears its
+   embedding) is **applied on the copy** and verified end to end; the
+   original still needs it applied.
 6. **`uk-fts` is starved, not broken.** ~2,250 notices found a night, 0
    ingested, because TED spends the day's embedding budget first. The order is
    deliberate (the home market outranks the volume). The fix is budget.
