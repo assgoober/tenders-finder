@@ -113,6 +113,33 @@ def send_alarm(subject: str, body: str) -> None:
         logging.getLogger("sweep").error("could not send the alarm either: %s", exc)
 
 
+def _user() -> str:
+    try:
+        import getpass
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001 - no login name is itself the answer
+        return "?"
+
+
+def browser_hint(exc: Exception) -> Optional[str]:
+    """The thing to go and change when Playwright cannot find its browser.
+
+    Put in the digest next to the error, because the error alone ("does not
+    exist at <path>") was read for five nights as a broken install, when the
+    install was fine and the account looking for it was not the one that
+    installed it.
+    """
+    if "Executable doesn't exist" not in str(exc):
+        return None
+    where = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "(unset -- per-user default)"
+    return (
+        f"hint: the sweep ran as '{_user()}' with PLAYWRIGHT_BROWSERS_PATH={where}. "
+        "Run it through run_sweep.cmd, which pins the browsers inside the project "
+        "and installs them if missing; a task pointing at run_sweep.py directly "
+        "looks in the profile of whichever account it runs as."
+    )
+
+
 def count_tenders(settings, since: datetime) -> tuple[Optional[int], Optional[int]]:
     """(total, created since `since`), read back from the database.
 
@@ -145,6 +172,12 @@ async def run(args, log: logging.Logger) -> int:
         ted_divisions_per_query=1,    # one resumable walk per CPV division
     )
 
+    # Who and where, every run. mod-balam failed for five nights on a browser
+    # that existed -- for a different account than the one the task ran as,
+    # most likely -- and nothing in the log could say which account that was.
+    log.info("runtime   : user=%s python=%s", _user(), sys.executable)
+    log.info("browsers  : %s", os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+             or f"(default) {os.environ.get('LOCALAPPDATA', '?')}\\ms-playwright")
     log.info("sources   : %s", ", ".join(args.source))
     log.info("limit     : %d per source", args.limit)
     log.info("dry run   : %s", settings.dry_run)
@@ -191,9 +224,12 @@ async def run(args, log: logging.Logger) -> int:
             # Kept, so the digest names it. Dropping it here made the source
             # that failed the one source the digest did not mention.
             from app.pipeline import IngestReport
+            errors = [f"aborted: {type(exc).__name__}: {exc}"]
+            hint = browser_hint(exc)
+            if hint:
+                errors.append(hint)
             reports.append(IngestReport(
-                source_key=key, aborted=True, partial=True,
-                errors=[f"aborted: {type(exc).__name__}: {exc}"],
+                source_key=key, aborted=True, partial=True, errors=errors,
             ))
             continue
 

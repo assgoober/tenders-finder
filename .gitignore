@@ -20,6 +20,9 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+# Chromium for the Playwright agents, pinned inside the project by
+# run_sweep.cmd so the scheduled task finds it whatever account runs it.
+.playwright-browsers/
 
 # tooling / local agent state
 .gstack/

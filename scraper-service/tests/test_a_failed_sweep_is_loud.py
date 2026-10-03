@@ -216,3 +216,33 @@ def test_could_not_start_sends_an_alarm(monkeypatch, tmp_path):
     assert alarms and "could not start" in alarms[0][0].lower()
     assert "SUPABASE_URL" in alarms[0][1]
     assert pings == ["start", 2]
+
+
+# --- a missing browser names the account and the path ----------------------
+
+
+def test_a_missing_browser_says_where_it_looked(monkeypatch):
+    import run_sweep
+
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", r"C:\x\.playwright-browsers")
+    exc = RuntimeError(
+        r"BrowserType.launch: Executable doesn't exist at C:\...\headless_shell.exe"
+    )
+    hint = run_sweep.browser_hint(exc)
+    assert hint and "run_sweep.cmd" in hint and ".playwright-browsers" in hint
+    assert run_sweep.browser_hint(RuntimeError("timeout")) is None
+
+
+@pytest.mark.asyncio
+async def test_the_digest_carries_the_browser_hint(monkeypatch):
+    import run_sweep
+
+    async def run_source(agent):
+        raise RuntimeError("BrowserType.launch: Executable doesn't exist at X")
+
+    finished = _patch(monkeypatch, run_source)
+    args = SimpleNamespace(source=["mod-balam"], limit=5, dry_run=True)
+    await run_sweep.run(args, logging.getLogger("test-sweep"))
+
+    errors = finished[0][0][0].errors
+    assert any(e.startswith("hint:") for e in errors)

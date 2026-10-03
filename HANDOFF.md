@@ -120,16 +120,19 @@ this file is work. This is the question.
 
 Ordered by what is broken rather than by what is interesting.
 
-1. **`mod-balam` has harvested nothing since 17/09.** Five consecutive nights:
-   `BrowserType.launch: Executable doesn't exist at
-   …chromium_headless_shell-1148\chrome-win\headless_shell.exe`. This is the
-   Israeli MoD list — the home market, and the source this product is sold
-   against first. **The clue:** that executable *does* exist and runs
-   correctly when launched by hand from an interactive shell (verified,
-   Chromium 131.0.6778.33). So `playwright install chromium` may not be the
-   fix; the difference between that shell and the scheduled task is where to
-   look. The run now exits 1 instead of reporting success, which is the only
-   reason this is visible at all.
+1. **`mod-balam` fix is in, unconfirmed on the sweep machine (03/10).**
+   From 17/09 it failed nightly with `Executable doesn't exist at
+   …chromium_headless_shell-1148\…` although that file existed and ran by
+   hand. Most likely the task runs as a different account and Playwright
+   looks in *that* account's `%LOCALAPPDATA%`. Not proven -- the old log
+   never said which account ran. `run_sweep.cmd` now pins
+   `PLAYWRIGHT_BROWSERS_PATH` to `.playwright-browsers\` in the project and
+   installs Chromium there if missing (idempotent), so the account no longer
+   matters; every run logs `runtime: user=… python=…` and `browsers: …`, and
+   a missing browser puts a hint in the digest. Verified on another machine:
+   a dry run through the pinned folder read 3 live BALAM tenders, exit 0.
+   **Check on the sweep machine:** the scheduled task must call
+   `run_sweep.cmd`, not `run_sweep.py` directly, or the pin does not apply.
 2. **Sweep alarms are built (03/10); one is waiting on a setting.** The
    digest now names a source that crashed (it used to be the one source the
    digest left out), heads with `NO NEW TENDERS` when the corpus did not
