@@ -17,7 +17,7 @@
  * browser.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -25,24 +25,51 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { authCallbackUrl } from "@/lib/supabase/redirect";
+
+/** Set by `/auth/callback` when an email link could not be turned into a session. */
+const LINK_ERROR =
+  "That link has expired, was already used, or was opened in a different browser from the one " +
+  "that requested it. If you were confirming your email, try signing in -- the account may " +
+  "already be confirmed.";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Read in an effect rather than with useSearchParams, which would force a
+  // Suspense boundary around the whole page in Next 14.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("error") === "link") {
+      setError(LINK_ERROR);
+    }
+  }, []);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    setUnconfirmed(false);
+    setResent(false);
     setBusy(true);
 
     const supabase = createClient();
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
-      setError(signInError.message);
+      // Email confirmation is on in the live project. Until the link is
+      // clicked, a correct password is refused -- and with no way to get a
+      // second email, an account whose first email was lost is stuck.
+      if (signInError.code === "email_not_confirmed") {
+        setUnconfirmed(true);
+        setError("This email address has not been confirmed yet. Open the link we emailed you.");
+      } else {
+        setError(signInError.message);
+      }
       setBusy(false);
       return;
     }
@@ -52,6 +79,23 @@ export default function LoginPage() {
     // payload — an empty dashboard immediately after a successful login.
     router.push("/");
     router.refresh();
+  }
+
+  async function resendConfirmation() {
+    setBusy(true);
+    const { error: resendError } = await createClient().auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: authCallbackUrl() },
+    });
+    setBusy(false);
+    if (resendError) {
+      // Most often the free mailer's hourly limit; say so rather than pretend.
+      setError(resendError.message);
+      return;
+    }
+    setResent(true);
+    setError(null);
   }
 
   if (!isSupabaseConfigured) {
@@ -116,12 +160,36 @@ export default function LoginPage() {
               </p>
             ) : null}
 
+            {unconfirmed ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={resendConfirmation}
+                className="w-full"
+              >
+                Send the confirmation email again
+              </Button>
+            ) : null}
+
+            {resent ? (
+              <p role="status" className="text-sm text-slate-600">
+                Sent to <strong>{email}</strong>. Open it in this browser.
+              </p>
+            ) : null}
+
             <Button type="submit" disabled={busy} className="w-full">
               {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>
 
           <p className="mt-4 text-sm text-slate-500">
+            <Link href="/forgot-password" className="underline">
+              Forgot your password?
+            </Link>
+          </p>
+
+          <p className="mt-2 text-sm text-slate-500">
             No account yet?{" "}
             <Link href="/signup" className="underline">
               Create a workspace

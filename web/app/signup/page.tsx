@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { authCallbackUrl } from "@/lib/supabase/redirect";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -45,7 +46,13 @@ export default function SignUpPage() {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { company_name: company.trim() } },
+      options: {
+        data: { company_name: company.trim() },
+        // Without this the confirmation link goes to the Site URL, which has
+        // no handler: the account is confirmed but the person lands signed
+        // out and concludes the link is broken.
+        emailRedirectTo: authCallbackUrl(),
+      },
     });
 
     if (signUpError) {
@@ -95,7 +102,7 @@ export default function SignUpPage() {
             <h1 className="text-base font-semibold text-slate-900">Confirm your email</h1>
             <p className="text-sm text-slate-600">
               We sent a confirmation link to <strong>{email}</strong>. Your workspace is ready as
-              soon as you open it.
+              soon as you open it. Open it in this browser.
             </p>
             <p className="text-sm text-slate-500">
               <Link href="/login" className="underline">

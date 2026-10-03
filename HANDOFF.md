@@ -134,14 +134,19 @@ Ordered by what is broken rather than by what is interesting.
    and send a digest, and no alarm reads either. `added_today = 0` is the
    other signal nobody watches. This is the cheapest work on the list and it
    is what turns every future silent failure into a loud one.
-3. **No password reset anywhere in the app.** There is `login`, `signup`,
-   `auth/signout`, and nothing else — a customer who forgets their password is
-   locked out permanently. Found the hard way on 18/09. It is two pieces: a
-   `/forgot-password` page, and a handler for the token that comes back.
-   Supabase already issues a working recovery link; the app has nowhere to
-   receive it. Prefer PKCE with `/auth/callback` over the implicit flow — it
-   works with `@supabase/ssr` without special code and keeps the token out of
-   the URL bar.
+3. **Password reset and the email-link landing are built (03/10), not yet
+   live until two dashboard settings are made.** `/forgot-password`,
+   `/reset-password`, and `/auth/callback` (PKCE `?code=`, plus
+   `?token_hash=` for edited templates). Sign-up and the login page's new
+   "send the confirmation again" button both target the callback; before,
+   confirmation links went to the Site URL, which had no handler. **Operator
+   step:** in the live project (`vixuawfbayglbgitzqbj`) set Authentication ->
+   URL Configuration -> Site URL to `https://tenders-finder-app.vercel.app`
+   and add `https://tenders-finder-app.vercel.app/auth/callback` and
+   `http://localhost:3000/auth/callback` to Redirect URLs. A target not on
+   that list is silently replaced by the Site URL. Known limit: a PKCE link
+   only works in the browser that requested it; switching the email
+   templates to `{{ .TokenHash }}` removes that with no code change.
 4. **Run the deferred extraction.** `tenders_awaiting_extraction()` exists and
    is scheduled nowhere. 5,645 tenders are in the corpus listing-only; the
    ones somebody actually matched are the cheap and valuable subset.
