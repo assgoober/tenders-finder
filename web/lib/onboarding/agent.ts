@@ -55,8 +55,23 @@ function jsonSchemaFor(schema: z.ZodType): Record<string, unknown> {
 const RETRY_MIN_MS = 15_000;
 const CALL_MIN_MS = 10_000;
 
+/** The adapter's default per-call timeout (gemini.ts); never ask for more. */
+const MAX_CALL_MS = 45_000;
+/** Kept back from each call so the route can still answer before its limit. */
+const CALL_MARGIN_MS = 2_000;
+
 function timeLeft(deadline: number | undefined): number {
   return deadline === undefined ? Infinity : deadline - Date.now();
+}
+
+/**
+ * How long one model call may take. Without this a call that starts with
+ * 15 s left still gets the adapter's full 45 s and can outlive the route's
+ * 60 s limit — the platform then kills the function mid-call.
+ */
+function callTimeout(deadline: number | undefined): number | undefined {
+  if (deadline === undefined) return undefined;
+  return Math.max(1_000, Math.min(MAX_CALL_MS, timeLeft(deadline) - CALL_MARGIN_MS));
 }
 
 /** Ask for JSON, validate it, retry once with the problem fed back. */
@@ -72,7 +87,12 @@ export async function structured<T>(
   let attemptPrompt = prompt;
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt > 0 && timeLeft(deadline) < RETRY_MIN_MS) throw new AgentError("timeout");
-    const result = await llm.generate({ system, prompt: attemptPrompt, jsonSchema });
+    const result = await llm.generate({
+      system,
+      prompt: attemptPrompt,
+      jsonSchema,
+      timeoutMs: callTimeout(deadline),
+    });
     if (result.blocked) throw new AgentError("blocked");
     let problem = "";
     try {
@@ -139,6 +159,7 @@ export async function runTurn(
         system: RESEARCH_SYSTEM,
         prompt: researchPrompt(cls.company_query),
         search: true,
+        timeoutMs: callTimeout(deadline),
       });
       if (found.blocked) return unchanged(blockedMessage, research);
       researchedThisTurn = true;

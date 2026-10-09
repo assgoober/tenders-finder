@@ -9,6 +9,9 @@ export type GenerateRequest = {
   search?: boolean;
   /** Ask for JSON matching this schema (structuring calls only). */
   jsonSchema?: Record<string, unknown>;
+  /** Per-call timeout; when unset the adapter's own default applies. Set from
+   *  the turn's deadline so a call that starts late cannot outlive the route. */
+  timeoutMs?: number;
 };
 
 export type GenerateResult = {

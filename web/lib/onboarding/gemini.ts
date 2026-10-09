@@ -92,6 +92,7 @@ export function createGemini(config: OnboardingConfig, client?: GenAIClient): Ge
           contents: request.prompt,
           config: {
             systemInstruction: request.system,
+            ...(request.timeoutMs !== undefined ? { httpOptions: { timeout: request.timeoutMs } } : {}),
             ...(request.search ? { tools: [{ googleSearch: {} }] } : {}),
             ...(request.jsonSchema
               ? { responseMimeType: "application/json", responseJsonSchema: request.jsonSchema }

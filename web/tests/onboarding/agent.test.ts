@@ -219,6 +219,27 @@ describe("deadline", () => {
     });
     expect(calls).toHaveLength(1);
   });
+  it("gives each model call a timeout that fits inside the time left", async () => {
+    // A call allowed the adapter's full 45s could still overrun the route's
+    // 60s limit when it starts late in the turn.
+    const { llm, calls } = fake([classify("describe"), turn()]);
+    await runTurn(request("radios"), llm, key, Date.now() + 30_000);
+    expect(calls).toHaveLength(2);
+    for (const c of calls) {
+      expect(c.timeoutMs).toBeGreaterThan(0);
+      expect(c.timeoutMs!).toBeLessThanOrEqual(28_000);
+    }
+  });
+  it("never asks for more than the adapter's 45s per call", async () => {
+    const { llm, calls } = fake([classify("describe"), turn()]);
+    await runTurn(request("radios"), llm, key, Date.now() + 120_000);
+    for (const c of calls) expect(c.timeoutMs).toBe(45_000);
+  });
+  it("leaves the per-call timeout to the adapter when there is no deadline", async () => {
+    const { llm, calls } = fake([classify("describe"), turn()]);
+    await runTurn(request("radios"), llm, key);
+    for (const c of calls) expect(c.timeoutMs).toBeUndefined();
+  });
   it("runs normally with plenty of time", async () => {
     const { llm } = fake([classify("describe"), turn()]);
     const out = await runTurn(request("radios"), llm, key, Date.now() + 50_000);

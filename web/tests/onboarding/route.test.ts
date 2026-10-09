@@ -167,6 +167,17 @@ describe("POST /api/onboarding", () => {
     expect(mocks.previewDraft).not.toHaveBeenCalled();
   });
 
+  it("keeps a reusable preview even when the time budget is spent", async () => {
+    // Reusing a preview costs nothing; only computing new ones must be skipped.
+    mocks.times = [1_000_000, 1_045_000];
+    mocks.runTurn.mockResolvedValue(oneDraftTurn());
+    const previous = { ...oneDraftTurn().drafts[0], key: "old", preview: { status: "empty_corpus" } };
+    const res = await post(POST, { ...body(), drafts: [previous] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).drafts[0].preview).toEqual({ status: "empty_corpus" });
+    expect(mocks.previewDraft).not.toHaveBeenCalled();
+  });
+
   it("returns 504 when the agent times out", async () => {
     mocks.runTurn.mockRejectedValue(new AgentError("timeout"));
     expect((await post(POST, body())).status).toBe(504);

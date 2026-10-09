@@ -23,6 +23,17 @@ function client(response: unknown, embedding: number[] = [3, 4]) {
   };
 }
 
+describe("per-call timeout", () => {
+  it("passes the request's timeout to the SDK, and nothing when unset", async () => {
+    const { fake, generateContent } = client({ text: "{}", candidates: [{ finishReason: "STOP" }] });
+    const gemini = createGemini(CONFIG, fake);
+    await gemini.generate({ system: "S", prompt: "P", timeoutMs: 12_000 });
+    await gemini.generate({ system: "S", prompt: "P" });
+    expect(generateContent.mock.calls[0][0].config.httpOptions).toEqual({ timeout: 12_000 });
+    expect(generateContent.mock.calls[1][0].config.httpOptions).toBeUndefined();
+  });
+});
+
 describe("generate", () => {
   it("turns on Google Search and returns grounding sources, deduplicated", async () => {
     const { fake, generateContent } = client({

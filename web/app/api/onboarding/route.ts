@@ -47,12 +47,14 @@ export async function POST(request: Request): Promise<Response> {
     // enough to answer with a proper error instead.
     const deadline = clock.now() + TURN_BUDGET_MS;
     const turn = await runTurn(parsed.data, llm, undefined, deadline);
-    const drafts =
-      deadline - clock.now() > PREVIEW_MIN_MS
-        ? await attachPreviews(turn.drafts, parsed.data.drafts, (d) =>
-            previewDraft(d.description, d.excludedKeywords, { llm, rpc, config }),
-          )
-        : turn.drafts.map((d) => ({ ...d, preview: { status: "unavailable" as const } }));
+    // Reusing a preview whose draft did not change costs nothing, so it is
+    // kept even when the budget is spent; only NEW previews are skipped then.
+    const timeForNew = deadline - clock.now() > PREVIEW_MIN_MS;
+    const drafts = await attachPreviews(turn.drafts, parsed.data.drafts, (d) =>
+      timeForNew
+        ? previewDraft(d.description, d.excludedKeywords, { llm, rpc, config })
+        : Promise.resolve({ status: "unavailable" as const }),
+    );
     return Response.json({ ...turn, drafts });
   } catch (e) {
     const err = e instanceof AgentError ? e : toAgentError(e);
