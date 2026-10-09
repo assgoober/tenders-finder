@@ -127,6 +127,105 @@ describe("company named", () => {
   });
 });
 
+describe("the model cannot vouch for itself on the researching turn", () => {
+  it("keeps a draft with no citations unconfirmed even if the model says from_user", async () => {
+    const { llm } = fake([
+      classify("company", "Elbit Systems"),
+      { text: "Elbit makes radios.", sources: [{ url: "https://elbitsystems.com/", title: "Elbit" }] },
+      turn({ drafts: [modelDraft({ source_ids: [], from_user: true })] }),
+    ]);
+    const out = await runTurn(request("I work at Elbit Systems"), llm, key);
+    expect(out.drafts[0].unconfirmed).toBe(true);
+  });
+
+  it("honours from_user on a refine turn with carried research", async () => {
+    const research = { query: "Elbit Systems", text: "Elbit makes radios.", sources: [] };
+    const { llm } = fake([classify("refine"), turn({ drafts: [modelDraft({ source_ids: [], from_user: true })] })]);
+    const out = await runTurn(request("also night vision", { research }), llm, key);
+    expect(out.drafts[0].unconfirmed).toBe(false);
+  });
+});
+
+describe("a different company invalidates old citations", () => {
+  it("sends existing drafts with no citations when the research changes", async () => {
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: [],
+        excludedKeywords: [],
+        sources: [{ n: 1, url: "https://elbitsystems.com/", title: "Elbit" }],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const research = { query: "Elbit", text: "Elbit makes radios.", sources: existing[0].sources };
+    const { llm, calls } = fake([
+      classify("company", "Rafael"),
+      { text: "Rafael makes missiles.", sources: [{ url: "https://rafael.co.il/", title: "Rafael" }] },
+      turn(),
+    ]);
+    await runTurn(request("actually Rafael", { drafts: existing, research }), llm, key);
+    expect(calls[2].prompt).toMatch(/"source_ids":\s*\[\s*\]/);
+    expect(calls[2].prompt).toContain('"from_user": false');
+    expect(calls[2].prompt).not.toMatch(/"source_ids":\s*\[\s*1\s*\]/);
+  });
+});
+
+describe("duplicate draft names", () => {
+  it("reuses a prior key at most once", async () => {
+    n = 0;
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: [],
+        excludedKeywords: [],
+        sources: [],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const { llm } = fake([
+      classify("refine"),
+      turn({ drafts: [modelDraft({ source_ids: [] }), modelDraft({ source_ids: [], description: DESC_B })] }),
+    ]);
+    const out = await runTurn(request("x", { drafts: existing }), llm, key);
+    expect(out.drafts.map((d) => d.key)).toEqual(["d1", "k1"]);
+  });
+});
+
+describe("deadline", () => {
+  it("does not retry a bad answer when little time is left", async () => {
+    const { llm, calls } = fake([classify("describe"), { text: "not json" }, turn()]);
+    await expect(runTurn(request("radios"), llm, key, Date.now() + 12_000)).rejects.toMatchObject({
+      code: "timeout",
+    });
+    expect(calls).toHaveLength(2);
+  });
+  it("does not start research with under 10s left", async () => {
+    const { llm, calls } = fake([classify("company", "Elbit Systems"), turn()]);
+    await expect(runTurn(request("Elbit Systems"), llm, key, Date.now() + 5_000)).rejects.toMatchObject({
+      code: "timeout",
+    });
+    expect(calls).toHaveLength(1);
+  });
+  it("does not start the structuring call with under 10s left", async () => {
+    const { llm, calls } = fake([classify("describe"), turn()]);
+    await expect(runTurn(request("radios"), llm, key, Date.now() + 5_000)).rejects.toMatchObject({
+      code: "timeout",
+    });
+    expect(calls).toHaveLength(1);
+  });
+  it("runs normally with plenty of time", async () => {
+    const { llm } = fake([classify("describe"), turn()]);
+    const out = await runTurn(request("radios"), llm, key, Date.now() + 50_000);
+    expect(out.kind).toBe("drafts");
+  });
+});
+
 describe("direct description and corrections", () => {
   it("drafts without searching, and nothing is unconfirmed", async () => {
     const { llm, calls } = fake([

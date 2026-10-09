@@ -45,27 +45,31 @@ describe("numberSources", () => {
 
 describe("toDraftView", () => {
   it("maps cited numbers to the real URLs", () => {
-    const view = toDraftView(draft({ source_ids: [2] }), research, "k1");
+    const view = toDraftView(draft({ source_ids: [2] }), research, "k1", true);
     expect(view.sources.map((s) => s.url)).toEqual(["https://example.org/radios"]);
     expect(view.unconfirmed).toBe(false);
   });
   it("flags a draft with no citation as unconfirmed", () => {
-    expect(toDraftView(draft(), research, "k1").unconfirmed).toBe(true);
+    expect(toDraftView(draft(), research, "k1", true).unconfirmed).toBe(true);
   });
   it("flags a draft citing only numbers that do not exist", () => {
-    const view = toDraftView(draft({ source_ids: [9, 0, -1] }), research, "k1");
+    const view = toDraftView(draft({ source_ids: [9, 0, -1] }), research, "k1", true);
     expect(view.sources).toEqual([]);
     expect(view.unconfirmed).toBe(true);
   });
-  it("does not flag what the user said themselves", () => {
-    expect(toDraftView(draft({ from_user: true }), research, "k1").unconfirmed).toBe(false);
+  it("does not let the model clear the flag on the turn that researched", () => {
+    expect(toDraftView(draft({ from_user: true }), research, "k1", true).unconfirmed).toBe(true);
+  });
+  it("honours from_user when the research is carried over from an earlier turn", () => {
+    expect(toDraftView(draft({ from_user: true }), research, "k1", false).unconfirmed).toBe(false);
+    expect(toDraftView(draft(), research, "k1", false).unconfirmed).toBe(true);
   });
   it("does not flag drafts when no research happened (direct description)", () => {
-    const view = toDraftView(draft(), null, "k1");
+    const view = toDraftView(draft(), null, "k1", false);
     expect(view).toMatchObject({ sources: [], unconfirmed: false, preview: null, key: "k1" });
   });
   it("renames snake_case fields for the client", () => {
-    const view = toDraftView(draft({ excluded_keywords: ["catering"] }), null, "k1");
+    const view = toDraftView(draft({ excluded_keywords: ["catering"] }), null, "k1", false);
     expect(view.excludedKeywords).toEqual(["catering"]);
   });
 });

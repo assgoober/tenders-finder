@@ -54,7 +54,7 @@ export type Classification = z.infer<typeof Classification>;
 
 export const Source = z.object({
   n: z.number().int().min(1),
-  url: z.string().url(),
+  url: z.string().url().refine((u) => /^https?:\/\//i.test(u), "sources must be http(s) URLs"),
   title: z.string().max(300),
 });
 export type Source = z.infer<typeof Source>;
@@ -129,6 +129,18 @@ export function sanitizeKeywords(list: unknown): string[] {
   return out;
 }
 
+/** Integers only, deduped, at most 20 — a stray "3" or 2.5 costs one id, not the turn. */
+export function sanitizeSourceIds(list: unknown): number[] {
+  if (!Array.isArray(list)) return [];
+  const out: number[] = [];
+  for (const item of list) {
+    if (typeof item !== "number" || !Number.isInteger(item) || out.includes(item)) continue;
+    out.push(item);
+    if (out.length === 20) break;
+  }
+  return out;
+}
+
 export function sanitizeModelTurn(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const turn = raw as Record<string, unknown>;
@@ -138,6 +150,7 @@ export function sanitizeModelTurn(raw: unknown): unknown {
         const draft = d as Record<string, unknown>;
         return {
           ...draft,
+          source_ids: sanitizeSourceIds(draft.source_ids),
           keywords: sanitizeKeywords(draft.keywords),
           excluded_keywords: sanitizeKeywords(draft.excluded_keywords),
         };

@@ -52,6 +52,13 @@ function jsonSchemaFor(schema: z.ZodType): Record<string, unknown> {
   return out;
 }
 
+const RETRY_MIN_MS = 15_000;
+const CALL_MIN_MS = 10_000;
+
+function timeLeft(deadline: number | undefined): number {
+  return deadline === undefined ? Infinity : deadline - Date.now();
+}
+
 /** Ask for JSON, validate it, retry once with the problem fed back. */
 export async function structured<T>(
   llm: GeminiLike,
@@ -59,10 +66,12 @@ export async function structured<T>(
   prompt: string,
   schema: z.ZodType<T>,
   clean: (raw: unknown) => unknown = (raw) => raw,
+  deadline?: number,
 ): Promise<T> {
   const jsonSchema = jsonSchemaFor(schema);
   let attemptPrompt = prompt;
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0 && timeLeft(deadline) < RETRY_MIN_MS) throw new AgentError("timeout");
     const result = await llm.generate({ system, prompt: attemptPrompt, jsonSchema });
     if (result.blocked) throw new AgentError("blocked");
     let problem = "";
@@ -92,6 +101,7 @@ export async function runTurn(
   req: TurnRequest,
   llm: GeminiLike,
   newKey: () => string = () => crypto.randomUUID(),
+  deadline?: number,
 ): Promise<TurnResult> {
   checkLimits(req);
 
@@ -115,18 +125,23 @@ export async function runTurn(
       CLASSIFY_SYSTEM,
       classifyPrompt(req.messages, req.drafts.length > 0, research?.query ?? null),
       Classification,
+      undefined,
+      deadline,
     );
 
     if (cls.intent === "geography_only") return unchanged(geoNotice, research);
 
     const named = cls.intent === "company" || cls.intent === "pick_candidate";
+    let researchedThisTurn = false;
     if (named && cls.company_query && cls.company_query !== research?.query) {
+      if (timeLeft(deadline) < CALL_MIN_MS) throw new AgentError("timeout");
       const found = await llm.generate({
         system: RESEARCH_SYSTEM,
         prompt: researchPrompt(cls.company_query),
         search: true,
       });
       if (found.blocked) return unchanged(blockedMessage, research);
+      researchedThisTurn = true;
       research = {
         query: cls.company_query,
         text: found.text.slice(0, 20000),
@@ -134,19 +149,24 @@ export async function runTurn(
       };
     }
 
+    if (timeLeft(deadline) < CALL_MIN_MS) throw new AgentError("timeout");
     const out = await structured(
       llm,
       DRAFT_SYSTEM,
-      draftPrompt(req.messages, req.drafts, research),
+      draftPrompt(req.messages, req.drafts, research, researchedThisTurn),
       ModelTurn,
       sanitizeModelTurn,
+      deadline,
     );
 
+    const usedKeys = new Set<string>();
     const drafts =
       out.kind === "drafts"
         ? out.drafts.map((d) => {
-            const prior = req.drafts.find((p) => p.name === d.name);
-            return toDraftView(d, research, prior?.key ?? newKey());
+            const prior = req.drafts.find((p) => p.name === d.name && !usedKeys.has(p.key));
+            const key = prior?.key ?? newKey();
+            usedKeys.add(key);
+            return toDraftView(d, research, key, researchedThisTurn);
           })
         : req.drafts;
     return {

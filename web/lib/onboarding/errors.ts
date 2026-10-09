@@ -36,7 +36,7 @@ export const USER_MESSAGES: Record<AgentErrorCode, string> = {
   blocked: "I can't look that up. Describe what your company makes instead.",
   signed_out: "You've been signed out. Sign in again — this conversation can't be kept.",
   no_organization: "Your account isn't a member of an organization yet.",
-  bad_request: "Something about that request was malformed. Reload the page and try again.",
+  bad_request: "Something about that request didn't look right. Try again; if it keeps happening, start over.",
 };
 
 export const HTTP_STATUS: Record<AgentErrorCode, number> = {

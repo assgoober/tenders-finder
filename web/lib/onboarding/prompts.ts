@@ -74,7 +74,12 @@ export function researchPrompt(query: string): string {
   return `Company: ${query}`;
 }
 
-export function draftPrompt(messages: Message[], drafts: DraftView[], research: Research | null): string {
+export function draftPrompt(
+  messages: Message[],
+  drafts: DraftView[],
+  research: Research | null,
+  researchChanged = false,
+): string {
   const sourceList = research?.sources.length
     ? research.sources.map((s) => `[${s.n}] ${s.title} — ${s.url}`).join("\n")
     : "(none)";
@@ -85,8 +90,10 @@ export function draftPrompt(messages: Message[], drafts: DraftView[], research: 
           description: d.description,
           keywords: d.keywords,
           excluded_keywords: d.excludedKeywords,
-          source_ids: d.sources.map((s) => s.n),
-          from_user: d.sources.length === 0 && !d.unconfirmed,
+          // A different company was researched this turn: old citation
+          // numbers point into a source list that no longer exists.
+          source_ids: researchChanged ? [] : d.sources.map((s) => s.n),
+          from_user: researchChanged ? false : d.sources.length === 0 && !d.unconfirmed,
         })),
         null,
         1,

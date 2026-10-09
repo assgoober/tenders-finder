@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MAX_KEYWORDS,
+  TurnRequest,
   ModelDraft,
   ModelTurn,
   sanitizeKeywords,
@@ -65,5 +66,37 @@ describe("sanitizing keeps one bad keyword from failing the turn", () => {
     const parsed = ModelTurn.safeParse(sanitizeModelTurn(raw));
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data.drafts[0].keywords).toEqual(["night vision", "100"]);
+  });
+});
+
+describe("source URLs are http(s) only", () => {
+  const base = {
+    messages: [{ role: "user", text: "hi" }],
+    drafts: [],
+  };
+  const research = (url: string) => ({
+    query: "q",
+    text: "t",
+    sources: [{ n: 1, url, title: "x" }],
+  });
+  it("rejects a javascript: source in research", () => {
+    expect(TurnRequest.safeParse({ ...base, research: research("javascript:alert(1)") }).success).toBe(false);
+  });
+  it("accepts an https source", () => {
+    expect(TurnRequest.safeParse({ ...base, research: research("https://a.com/") }).success).toBe(true);
+  });
+});
+
+describe("source_ids are cleaned", () => {
+  it("keeps integers only, dedupes and caps at 20", () => {
+    const ids = [1, 1, 2.5, "3", 4, ...Array.from({ length: 25 }, (_, i) => i + 100)];
+    const raw = { kind: "drafts", reply: "ok then", candidates: [], drafts: [draft({ source_ids: ids })] };
+    const parsed = ModelTurn.safeParse(sanitizeModelTurn(raw));
+    expect(parsed.success).toBe(true);
+    const out = parsed.success ? parsed.data.drafts[0].source_ids : [];
+    expect(out.slice(0, 3)).toEqual([1, 4, 100]);
+    expect(out.length).toBe(20);
+    expect(new Set(out).size).toBe(out.length);
+    expect(out.every(Number.isInteger)).toBe(true);
   });
 });

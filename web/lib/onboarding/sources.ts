@@ -19,7 +19,12 @@ export function numberSources(raw: { url: string; title: string }[]): Source[] {
   return out;
 }
 
-export function toDraftView(d: ModelDraft, research: Research | null, key: string): DraftView {
+export function toDraftView(
+  d: ModelDraft,
+  research: Research | null,
+  key: string,
+  researchedThisTurn: boolean,
+): DraftView {
   let sources: Source[] = [];
   if (research) {
     const byNumber = new Map(research.sources.map((s) => [s.n, s]));
@@ -34,7 +39,12 @@ export function toDraftView(d: ModelDraft, research: Research | null, key: strin
     excludedKeywords: d.excluded_keywords,
     sources,
     // No research means the user described it themselves: nothing to confirm.
-    unconfirmed: research !== null && !d.from_user && sources.length === 0,
+    // On the turn that researched, the model's own `from_user` claim is
+    // ignored (it cannot vouch for itself): only real citations clear the
+    // flag. On later turns the research is carried over and the model is
+    // only echoing what the user said, so `from_user` is honoured.
+    unconfirmed:
+      research !== null && sources.length === 0 && (researchedThisTurn || !d.from_user),
     preview: null,
   };
 }
