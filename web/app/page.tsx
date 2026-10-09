@@ -19,6 +19,7 @@
  *      project. Nothing is wrong; nothing has run.
  */
 
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -26,6 +27,7 @@ import { DemoNotice } from "@/components/demo-notice";
 import { Workspace } from "@/components/workspace";
 import { fetchWorkspace } from "@/lib/api";
 import { MOCK_MATCHES, MOCK_PIPELINE, MOCK_TENDERS } from "@/lib/mock-data";
+import { SKIP_COOKIE, shouldOnboard } from "@/lib/onboarding/gate";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { daysUntil } from "@/lib/utils";
@@ -75,7 +77,7 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
   );
 }
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: { onboarded?: string } }) {
   // State 1 — no project. Render fixtures rather than crash, and say so.
   if (!isSupabaseConfigured) {
     return (
@@ -109,16 +111,33 @@ export default async function Page() {
   // State 2 — signed out.
   if (!user) redirect("/login");
 
-  const { tenders, matches, pipeline, counts } = await fetchWorkspace();
-
   // RLS makes this the honest test for membership: the policy on
   // `organizations` is `is_org_member(id)`, so a user in no organization gets
   // zero rows rather than an error.
   const { data: orgs } = await supabase.from("organizations").select("id").limit(1);
   const hasOrganization = (orgs?.length ?? 0) > 0;
 
+  // A member with no alert profile has nothing to be alerted about: send them
+  // to the onboarding chat first — unless they chose to skip it.
+  if (hasOrganization) {
+    const { data: anyProfile } = await supabase.from("alert_profiles").select("id").limit(1);
+    const skipped = (await cookies()).get(SKIP_COOKIE)?.value === "1";
+    if (shouldOnboard({ hasOrganization, hasProfile: (anyProfile?.length ?? 0) > 0, skipped })) {
+      redirect("/onboarding");
+    }
+  }
+
+  const { tenders, matches, pipeline, counts } = await fetchWorkspace();
+
   return (
     <Shell>
+      {searchParams.onboarded === "1" ? (
+        <Notice title="Your alert profiles are saved.">
+          Matching starts with tonight&apos;s run — new tenders that fit will appear here and in
+          your email. You can change your profiles any time under Alert profiles.
+        </Notice>
+      ) : null}
+
       {/* State 3 — signed in, but in no organization. */}
       {!hasOrganization ? (
         <Notice title="You are not a member of any organization.">

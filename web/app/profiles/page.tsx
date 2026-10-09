@@ -73,7 +73,11 @@ export default async function ProfilesPage() {
       <h1 className="text-xl font-semibold text-slate-900">Alert profiles</h1>
       <p className="mb-6 mt-1 text-sm text-slate-500">
         Describe what your company builds and bids on. Every new tender is compared against this
-        description, and the ones that fit are sent to you by email and shown in your alerts.
+        description, and the ones that fit are sent to you by email and shown in your alerts.{" "}
+        <Link href="/onboarding" className="underline">
+          Set up with chat
+        </Link>
+        .
       </p>
 
       {error ? (
