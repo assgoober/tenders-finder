@@ -13,7 +13,10 @@ type ResponseLike = {
   promptFeedback?: { blockReason?: string };
   candidates?: {
     finishReason?: string;
-    groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[] };
+    groundingMetadata?: {
+      groundingChunks?: { web?: { uri?: string; title?: string } }[];
+      groundingSupports?: { segment?: { endIndex?: number }; groundingChunkIndices?: number[] }[];
+    };
   }[];
 };
 
@@ -26,6 +29,47 @@ export type GenAIClient = {
 };
 
 const BLOCKING_FINISH = new Set(["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII"]);
+
+export function annotateCitations(
+  text: string,
+  supports: { segment?: { endIndex?: number }; groundingChunkIndices?: number[] }[],
+  chunkNumber: Map<number, number>,
+): string {
+  if (supports.length === 0) return text;
+
+  // Collect labels by endIndex
+  const labelsByEndIndex = new Map<number, Set<number>>();
+  for (const support of supports) {
+    const endIndex = support.segment?.endIndex;
+    if (typeof endIndex !== "number") continue;
+    const numbers = new Set<number>();
+    for (const chunkIdx of support.groundingChunkIndices ?? []) {
+      const n = chunkNumber.get(chunkIdx);
+      if (n !== undefined) numbers.add(n);
+    }
+    if (numbers.size === 0) continue;
+    if (!labelsByEndIndex.has(endIndex)) labelsByEndIndex.set(endIndex, new Set());
+    const endIndexSet = labelsByEndIndex.get(endIndex)!;
+    for (const n of Array.from(numbers)) endIndexSet.add(n);
+  }
+
+  if (labelsByEndIndex.size === 0) return text;
+
+  // Convert text to bytes for proper offset handling
+  const bytes = Buffer.from(text, "utf8");
+  const offsets = Array.from(labelsByEndIndex.keys()).sort((a, b) => b - a); // Descending order
+  let result = bytes;
+
+  for (const offset of offsets) {
+    const clamped = Math.max(0, Math.min(offset, result.length));
+    const numbers = Array.from(labelsByEndIndex.get(offset)!).sort((a, b) => a - b);
+    const label = numbers.map((n) => `[${n}]`).join("");
+    const labelBytes = Buffer.from(label, "utf8");
+    result = Buffer.concat([result.subarray(0, clamped), labelBytes, result.subarray(clamped)]);
+  }
+
+  return result.toString("utf8");
+}
 
 export function createGemini(config: OnboardingConfig, client?: GenAIClient): GeminiLike {
   const sdk: GenAIClient =
@@ -63,16 +107,27 @@ export function createGemini(config: OnboardingConfig, client?: GenAIClient): Ge
         Boolean(response.promptFeedback?.blockReason) ||
         BLOCKING_FINISH.has(candidate?.finishReason ?? "");
 
+      // Build sources only for http(s) URIs, deduplicated by URI, numbered in first-seen order
       const seen = new Set<string>();
       const sources: { url: string; title: string }[] = [];
-      for (const chunk of candidate?.groundingMetadata?.groundingChunks ?? []) {
-        const uri = chunk.web?.uri;
-        if (!uri || seen.has(uri)) continue;
+      const chunkNumber = new Map<number, number>(); // Original chunk index -> 1-based source number
+
+      const chunks = candidate?.groundingMetadata?.groundingChunks ?? [];
+      for (let i = 0; i < chunks.length; i++) {
+        const uri = chunks[i].web?.uri;
+        if (!uri || !/^https?:\/\//i.test(uri) || seen.has(uri)) continue;
         seen.add(uri);
-        sources.push({ url: uri, title: chunk.web?.title || uri });
+        chunkNumber.set(i, sources.length + 1); // Map to 1-based number
+        sources.push({ url: uri, title: chunks[i].web?.title || uri });
       }
 
-      return { text: response.text ?? "", sources, blocked };
+      // Annotate text with citation numbers based on grounding supports
+      let annotatedText = response.text ?? "";
+      if (request.search && candidate?.groundingMetadata?.groundingSupports) {
+        annotatedText = annotateCitations(annotatedText, candidate.groundingMetadata.groundingSupports, chunkNumber);
+      }
+
+      return { text: annotatedText, sources, blocked };
     },
 
     async embed(text: string): Promise<number[]> {

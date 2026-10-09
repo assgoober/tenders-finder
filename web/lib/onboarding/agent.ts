@@ -12,9 +12,11 @@ import { z } from "zod";
 import { AgentError, USER_MESSAGES } from "./errors";
 import type { GeminiLike } from "./llm";
 import {
+  BLOCKED_TEXT_HE,
   CLASSIFY_SYSTEM,
   DRAFT_SYSTEM,
   GEO_NOTICE_TEXT,
+  GEO_NOTICE_TEXT_HE,
   RESEARCH_SYSTEM,
   classifyPrompt,
   draftPrompt,
@@ -82,12 +84,22 @@ function checkLimits(req: TurnRequest): void {
   if (req.messages.some((m) => m.text.length > MAX_MESSAGE_CHARS)) throw new AgentError("too_long");
 }
 
+function isHebrew(text: string): boolean {
+  return /[֐-׿]/.test(text);
+}
+
 export async function runTurn(
   req: TurnRequest,
   llm: GeminiLike,
   newKey: () => string = () => crypto.randomUUID(),
 ): Promise<TurnResult> {
   checkLimits(req);
+
+  const latestUserMessage = [...req.messages].reverse().find((m) => m.role === "user")?.text ?? "";
+  const hebrew = isHebrew(latestUserMessage);
+  const geoNotice = hebrew ? GEO_NOTICE_TEXT_HE : GEO_NOTICE_TEXT;
+  const blockedMessage = hebrew ? BLOCKED_TEXT_HE : USER_MESSAGES.blocked;
+
   const unchanged = (reply: string, research: Research | null): TurnResult => ({
     kind: "clarify",
     reply,
@@ -105,7 +117,7 @@ export async function runTurn(
       Classification,
     );
 
-    if (cls.intent === "geography_only") return unchanged(GEO_NOTICE, research);
+    if (cls.intent === "geography_only") return unchanged(geoNotice, research);
 
     const named = cls.intent === "company" || cls.intent === "pick_candidate";
     if (named && cls.company_query && cls.company_query !== research?.query) {
@@ -114,7 +126,7 @@ export async function runTurn(
         prompt: researchPrompt(cls.company_query),
         search: true,
       });
-      if (found.blocked) return unchanged(USER_MESSAGES.blocked, research);
+      if (found.blocked) return unchanged(blockedMessage, research);
       research = {
         query: cls.company_query,
         text: found.text.slice(0, 20000),
@@ -131,16 +143,21 @@ export async function runTurn(
     );
 
     const drafts =
-      out.kind === "drafts" ? out.drafts.map((d) => toDraftView(d, research, newKey())) : req.drafts;
+      out.kind === "drafts"
+        ? out.drafts.map((d) => {
+            const prior = req.drafts.find((p) => p.name === d.name);
+            return toDraftView(d, research, prior?.key ?? newKey());
+          })
+        : req.drafts;
     return {
       kind: out.kind,
-      reply: cls.asks_geography ? `${GEO_NOTICE}\n\n${out.reply}` : out.reply,
+      reply: cls.asks_geography ? `${geoNotice}\n\n${out.reply}` : out.reply,
       candidates: out.kind === "candidates" ? out.candidates : [],
       drafts,
       research,
     };
   } catch (e) {
-    if (e instanceof AgentError && e.code === "blocked") return unchanged(USER_MESSAGES.blocked, research);
+    if (e instanceof AgentError && e.code === "blocked") return unchanged(blockedMessage, research);
     throw e;
   }
 }

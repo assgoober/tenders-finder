@@ -37,7 +37,7 @@ Each draft:
 - name: short label for the product line.
 - description: 2-5 sentences, a capability statement: products, technologies, typical buyers and contract types. No marketing language.
 - keywords: up to 10 distinctive technical terms or standards. excluded_keywords: only themes the user rejected.
-- source_ids: the numbers of the research sources this draft relies on. Cite only numbers that appear in the source list.
+- source_ids: the numbers of the research sources this draft relies on. Cite only numbers that appear in the source list. The research text marks each supported statement with [n]; cite the numbers that appear next to the statements a draft relies on.
 - from_user: true if the draft rests on what the user said rather than on research.
 
 Rules:
@@ -48,6 +48,12 @@ Rules:
 
 export const GEO_NOTICE_TEXT =
   "Filtering by country or region isn't supported yet — tenders are matched on what they're about, wherever the buyer is. I've left your profiles unchanged on that point.";
+
+export const GEO_NOTICE_TEXT_HE =
+  "עדיין אי אפשר לסנן לפי מדינה או אזור — המכרזים מותאמים לפי מה שהם עוסקים בו, בלי קשר למיקום הגוף המזמין. לא שיניתי את הפרופילים בנקודה הזו.";
+
+export const BLOCKED_TEXT_HE =
+  "אני לא יכול לחפש את זה. תאר/י במקום זה מה החברה שלך מייצרת.";
 
 export function transcript(messages: Message[]): string {
   return messages
@@ -79,6 +85,8 @@ export function draftPrompt(messages: Message[], drafts: DraftView[], research: 
           description: d.description,
           keywords: d.keywords,
           excluded_keywords: d.excludedKeywords,
+          source_ids: d.sources.map((s) => s.n),
+          from_user: d.sources.length === 0 && !d.unconfirmed,
         })),
         null,
         1,

@@ -66,6 +66,39 @@ describe("generate", () => {
     expect(req.config.tools).toBeUndefined();
   });
 
+  it("keeps only http(s) URIs in sources, numbered in first-seen order, and annotates text with citations", async () => {
+    const { fake, generateContent } = client({
+      text: "Radios are systems. Drones are aerial.",
+      candidates: [
+        {
+          finishReason: "STOP",
+          groundingMetadata: {
+            groundingChunks: [
+              { web: { uri: "https://a.com/", title: "A" } },
+              { web: { uri: "https://a.com/", title: "A" } }, // Duplicate
+              { web: { uri: "javascript:x" } }, // Not http(s)
+              { web: { uri: "https://b.com/", title: "B" } },
+            ],
+            groundingSupports: [
+              { segment: { endIndex: 19 }, groundingChunkIndices: [0] }, // After "systems."
+              { segment: { endIndex: 38 }, groundingChunkIndices: [3] }, // After "aerial."
+            ],
+          },
+        },
+      ],
+    });
+    const out = await createGemini(CONFIG, fake).generate({ system: "S", prompt: "P", search: true });
+
+    // Sources should be deduped and contain only http(s) URIs
+    expect(out.sources).toEqual([
+      { url: "https://a.com/", title: "A" },
+      { url: "https://b.com/", title: "B" },
+    ]);
+
+    // Text should have citations inserted
+    expect(out.text).toBe("Radios are systems.[1] Drones are aerial.[2]");
+  });
+
   it.each([
     [{ promptFeedback: { blockReason: "SAFETY" }, candidates: [] }],
     [{ text: "", candidates: [{ finishReason: "SAFETY" }] }],
@@ -121,6 +154,65 @@ describe("normalize", () => {
   it("scales to unit length and leaves a zero vector alone", () => {
     expect(normalize([3, 4])).toEqual([0.6, 0.8]);
     expect(normalize([0, 0])).toEqual([0, 0]);
+  });
+});
+
+describe("annotateCitations", () => {
+  it("inserts citation labels at byte offsets in ASCII text", async () => {
+    const { annotateCitations } = await import("@/lib/onboarding/gemini");
+    const text = "Elbit makes radios. They make drones.";
+    const supports = [
+      { segment: { endIndex: 19 }, groundingChunkIndices: [0] }, // After "radios."
+      { segment: { endIndex: 37 }, groundingChunkIndices: [1] }, // After "drones."
+    ];
+    const chunkNumber = new Map([[0, 1], [1, 2]]);
+
+    const result = annotateCitations(text, supports, chunkNumber);
+    expect(result).toBe("Elbit makes radios.[1] They make drones.[2]");
+  });
+
+  it("merges labels that share the same endIndex", async () => {
+    const { annotateCitations } = await import("@/lib/onboarding/gemini");
+    const text = "Elbit makes radios.";
+    const supports = [
+      { segment: { endIndex: 19 }, groundingChunkIndices: [0, 1] },
+    ];
+    const chunkNumber = new Map([[0, 1], [1, 2]]);
+
+    const result = annotateCitations(text, supports, chunkNumber);
+    expect(result).toBe("Elbit makes radios.[1][2]");
+  });
+
+  it("skips unknown chunk indices", async () => {
+    const { annotateCitations } = await import("@/lib/onboarding/gemini");
+    const text = "Elbit makes radios.";
+    const supports = [
+      { segment: { endIndex: 19 }, groundingChunkIndices: [0, 99] },
+    ];
+    const chunkNumber = new Map([[0, 1]]);
+
+    const result = annotateCitations(text, supports, chunkNumber);
+    expect(result).toBe("Elbit makes radios.[1]");
+  });
+
+  it("handles Hebrew text with byte-offset endIndex", async () => {
+    const { annotateCitations } = await import("@/lib/onboarding/gemini");
+    const text = "רדיו טקטי. מל\"טים.";
+    const endIndex = Buffer.byteLength("רדיו טקטי.", "utf8");
+    const supports = [
+      { segment: { endIndex }, groundingChunkIndices: [0] },
+    ];
+    const chunkNumber = new Map([[0, 1]]);
+
+    const result = annotateCitations(text, supports, chunkNumber);
+    expect(result.startsWith("רדיו טקטי.[1]")).toBe(true);
+  });
+
+  it("returns text unchanged when there are no supports", async () => {
+    const { annotateCitations } = await import("@/lib/onboarding/gemini");
+    const text = "Some text";
+    const result = annotateCitations(text, [], new Map());
+    expect(result).toBe("Some text");
   });
 });
 

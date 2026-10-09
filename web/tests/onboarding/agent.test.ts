@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { GEO_NOTICE, runTurn } from "@/lib/onboarding/agent";
+import { GEO_NOTICE_TEXT_HE, BLOCKED_TEXT_HE } from "@/lib/onboarding/prompts";
 import { AgentError, USER_MESSAGES } from "@/lib/onboarding/errors";
 import type { GeminiLike, GenerateRequest, GenerateResult } from "@/lib/onboarding/llm";
 import type { DraftView, TurnRequest } from "@/lib/onboarding/schema";
@@ -212,5 +213,148 @@ describe("limits, enforced before any model call", () => {
     expect(err).toBeInstanceOf(AgentError);
     expect(err.code).toBe("too_long");
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("citation state preservation during refinement", () => {
+  it("includes source_ids and from_user in the prompt for existing drafts", async () => {
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: ["SDR"],
+        excludedKeywords: [],
+        sources: [{ n: 1, url: "https://elbitsystems.com/", title: "Elbit" }],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const research = { query: "Elbit", text: "Elbit makes radios.", sources: existing[0].sources };
+    const { llm, calls } = fake([classify("refine"), turn()]);
+    await runTurn(request("drop simulators", { drafts: existing, research }), llm, key);
+
+    // The drafting prompt should include source_ids and from_user
+    expect(calls[1].prompt).toContain('"source_ids": [');
+    expect(calls[1].prompt).toContain('1');
+    expect(calls[1].prompt).toContain('"from_user": false');
+  });
+
+  it("preserves the key of a prior draft with the same name", async () => {
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: ["SDR"],
+        excludedKeywords: [],
+        sources: [{ n: 1, url: "https://elbitsystems.com/", title: "Elbit" }],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const research = { query: "Elbit", text: "Elbit makes radios.", sources: existing[0].sources };
+    const { llm } = fake([classify("refine"), turn({ drafts: [modelDraft({ source_ids: [] })] })]);
+    const out = await runTurn(request("drop simulators", { drafts: existing, research }), llm, key);
+
+    expect(out.drafts[0].key).toBe("d1");
+  });
+
+  it("generates a fresh key for a new draft with a different name", async () => {
+    n = 0; // Reset counter
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: ["SDR"],
+        excludedKeywords: [],
+        sources: [{ n: 1, url: "https://elbitsystems.com/", title: "Elbit" }],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const research = { query: "Elbit", text: "Elbit makes radios.", sources: existing[0].sources };
+    const { llm } = fake([
+      classify("refine"),
+      turn({
+        drafts: [
+          modelDraft({ source_ids: [] }),
+          modelDraft({ name: "UAV", description: DESC_B, source_ids: [] }),
+        ],
+      }),
+    ]);
+    const out = await runTurn(request("also add UAVs", { drafts: existing, research }), llm, key);
+
+    // First draft keeps existing key
+    expect(out.drafts[0].key).toBe("d1");
+    // Second draft gets a new key
+    expect(out.drafts[1].key).toBe("k1");
+  });
+});
+
+describe("language-aware notices", () => {
+  it("responds with Hebrew geography notice for a Hebrew message", async () => {
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: [],
+        excludedKeywords: [],
+        sources: [],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const { llm, calls } = fake([classify("geography_only", null, true)]);
+    const out = await runTurn(request("רק אירופה וישראל", { drafts: existing }), llm, key);
+
+    expect(out.reply).toBe(GEO_NOTICE_TEXT_HE);
+    expect(out.drafts).toEqual(existing);
+  });
+
+  it("responds with Hebrew blocked message when research is blocked for a Hebrew message", async () => {
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: [],
+        excludedKeywords: [],
+        sources: [],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const { llm, calls } = fake([classify("company", "חברה"), { blocked: true }]);
+    const out = await runTurn(request("חברה כלשהי", { drafts: existing }), llm, key);
+
+    expect(out.kind).toBe("clarify");
+    expect(out.reply).toBe(BLOCKED_TEXT_HE);
+    expect(out.drafts).toEqual(existing);
+  });
+
+  it("prefixes Hebrew geography notice when geography comes with a real correction", async () => {
+    const existing: DraftView[] = [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC_A,
+        keywords: [],
+        excludedKeywords: [],
+        sources: [],
+        unconfirmed: false,
+        preview: null,
+      },
+    ];
+    const { llm } = fake([
+      classify("refine", null, true),
+      turn({ reply: "הוספתי סימולטורים." }),
+    ]);
+    const out = await runTurn(request("הסר סימולטורים, רק אירופה", { drafts: existing }), llm, key);
+
+    expect(out.reply.startsWith(GEO_NOTICE_TEXT_HE)).toBe(true);
+    expect(out.reply).toContain("הוספתי סימולטורים.");
   });
 });
