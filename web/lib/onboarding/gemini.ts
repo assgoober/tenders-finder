@@ -108,17 +108,26 @@ export function createGemini(config: OnboardingConfig, client?: GenAIClient): Ge
         BLOCKING_FINISH.has(candidate?.finishReason ?? "");
 
       // Build sources only for http(s) URIs, deduplicated by URI, numbered in first-seen order
-      const seen = new Set<string>();
+      const uriToNumber = new Map<string, number>(); // URI -> 1-based source number
       const sources: { url: string; title: string }[] = [];
       const chunkNumber = new Map<number, number>(); // Original chunk index -> 1-based source number
 
       const chunks = candidate?.groundingMetadata?.groundingChunks ?? [];
       for (let i = 0; i < chunks.length; i++) {
         const uri = chunks[i].web?.uri;
-        if (!uri || !/^https?:\/\//i.test(uri) || seen.has(uri)) continue;
-        seen.add(uri);
-        chunkNumber.set(i, sources.length + 1); // Map to 1-based number
-        sources.push({ url: uri, title: chunks[i].web?.title || uri });
+        if (!uri || !/^https?:\/\//i.test(uri)) continue; // Skip non-http(s) URIs
+
+        let sourceNumber: number;
+        if (uriToNumber.has(uri)) {
+          // Duplicate: use existing number
+          sourceNumber = uriToNumber.get(uri)!;
+        } else {
+          // New: create new number and add to sources
+          sourceNumber = sources.length + 1;
+          uriToNumber.set(uri, sourceNumber);
+          sources.push({ url: uri, title: chunks[i].web?.title || uri });
+        }
+        chunkNumber.set(i, sourceNumber);
       }
 
       // Annotate text with citation numbers based on grounding supports

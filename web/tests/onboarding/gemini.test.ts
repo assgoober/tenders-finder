@@ -80,8 +80,8 @@ describe("generate", () => {
               { web: { uri: "https://b.com/", title: "B" } },
             ],
             groundingSupports: [
-              { segment: { endIndex: 19 }, groundingChunkIndices: [0] }, // After "systems."
-              { segment: { endIndex: 38 }, groundingChunkIndices: [3] }, // After "aerial."
+              { segment: { endIndex: 19 }, groundingChunkIndices: [1] }, // After "systems." — cites duplicate chunk
+              { segment: { endIndex: 38 }, groundingChunkIndices: [3] }, // After "aerial." — cites B
             ],
           },
         },

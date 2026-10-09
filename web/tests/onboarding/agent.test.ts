@@ -236,7 +236,7 @@ describe("citation state preservation during refinement", () => {
 
     // The drafting prompt should include source_ids and from_user
     expect(calls[1].prompt).toContain('"source_ids": [');
-    expect(calls[1].prompt).toContain('1');
+    expect(calls[1].prompt).toMatch(/"source_ids":\s*\[\s*1\s*\]/);
     expect(calls[1].prompt).toContain('"from_user": false');
   });
 
