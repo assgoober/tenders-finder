@@ -120,9 +120,17 @@ export default async function Page({ searchParams }: { searchParams: { onboarded
   // A member with no alert profile has nothing to be alerted about: send them
   // to the onboarding chat first — unless they chose to skip it.
   if (hasOrganization) {
-    const { data: anyProfile } = await supabase.from("alert_profiles").select("id").limit(1);
+    const { data: anyProfile, error: profileError } = await supabase
+      .from("alert_profiles")
+      .select("id")
+      .limit(1);
     const skipped = (await cookies()).get(SKIP_COOKIE)?.value === "1";
-    if (shouldOnboard({ hasOrganization, hasProfile: (anyProfile?.length ?? 0) > 0, skipped })) {
+    // A failed probe says nothing about whether profiles exist: never send an
+    // existing customer to onboarding because a query errored.
+    if (
+      !profileError &&
+      shouldOnboard({ hasOrganization, hasProfile: (anyProfile?.length ?? 0) > 0, skipped })
+    ) {
       redirect("/onboarding");
     }
   }

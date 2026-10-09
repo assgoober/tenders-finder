@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   orgsError: null as { message: string } | null,
   runTurn: vi.fn(),
   previewDraft: vi.fn(),
+  times: [] as number[],
+  times_last: 0,
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -15,6 +17,7 @@ vi.mock("@/lib/supabase/server", () => ({
     rpc: async () => ({ data: null, error: null }),
   }),
 }));
+vi.mock("@/lib/onboarding/clock", () => ({ clock: { now: () => mocks.times.shift() ?? mocks.times_last } }));
 vi.mock("@/lib/onboarding/gemini", () => ({ createGemini: () => ({}) }));
 vi.mock("@/lib/onboarding/agent", () => ({ runTurn: mocks.runTurn }));
 vi.mock("@/lib/onboarding/preview", async (importOriginal) => ({
@@ -47,6 +50,8 @@ beforeEach(() => {
   mocks.orgsError = null;
   mocks.runTurn.mockReset();
   mocks.previewDraft.mockReset();
+  mocks.times = [];
+  mocks.times_last = 0;
   vi.stubEnv("GEMINI_API_KEY", "k");
   vi.stubEnv("GEMINI_CHAT_MODEL", "m");
 });
@@ -124,6 +129,47 @@ describe("POST /api/onboarding", () => {
     const json = await res.json();
     expect(json.reply).toBe("Found it.");
     expect(json.drafts[0].preview).toEqual({ status: "empty_corpus" });
+  });
+
+  const oneDraftTurn = () => ({
+    kind: "drafts",
+    reply: "Found it.",
+    candidates: [],
+    research: null,
+    drafts: [
+      {
+        key: "d1",
+        name: "Radios",
+        description: DESC,
+        keywords: [],
+        excludedKeywords: [],
+        sources: [],
+        unconfirmed: false,
+        preview: null,
+      },
+    ],
+  });
+
+  it("gives runTurn a deadline 50s ahead", async () => {
+    mocks.times = [1_000_000];
+    mocks.times_last = 1_000_000;
+    mocks.runTurn.mockResolvedValue({ ...oneDraftTurn(), drafts: [] });
+    await post(POST, body());
+    expect(mocks.runTurn.mock.calls[0][3]).toBe(1_050_000);
+  });
+
+  it("skips previews when the turn used up the time budget", async () => {
+    mocks.times = [1_000_000, 1_045_000];
+    mocks.runTurn.mockResolvedValue(oneDraftTurn());
+    const res = await post(POST, body());
+    expect(res.status).toBe(200);
+    expect((await res.json()).drafts[0].preview).toEqual({ status: "unavailable" });
+    expect(mocks.previewDraft).not.toHaveBeenCalled();
+  });
+
+  it("returns 504 when the agent times out", async () => {
+    mocks.runTurn.mockRejectedValue(new AgentError("timeout"));
+    expect((await post(POST, body())).status).toBe(504);
   });
 
   it("returns 502 upstream when organizations query returns an error", async () => {
