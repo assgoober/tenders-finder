@@ -1,0 +1,40 @@
+/**
+ * Sources come from Google's grounding metadata, never from model text.
+ *
+ * The research call returns the pages it actually used; they are numbered
+ * here. The drafting call may cite only those numbers, and this module turns
+ * numbers back into links. A draft that cites nothing valid is flagged
+ * `unconfirmed` by code — the model cannot vouch for itself.
+ */
+import type { DraftView, ModelDraft, Research, Source } from "./schema";
+
+export function numberSources(raw: { url: string; title: string }[]): Source[] {
+  const seen = new Set<string>();
+  const out: Source[] = [];
+  for (const { url, title } of raw) {
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) continue;
+    seen.add(url);
+    out.push({ n: out.length + 1, url, title: (title || url).slice(0, 300) });
+  }
+  return out;
+}
+
+export function toDraftView(d: ModelDraft, research: Research | null, key: string): DraftView {
+  let sources: Source[] = [];
+  if (research) {
+    const byNumber = new Map(research.sources.map((s) => [s.n, s]));
+    const cited = Array.from(new Set(d.source_ids));
+    sources = cited.map((n) => byNumber.get(n)).filter((s): s is Source => s !== undefined);
+  }
+  return {
+    key,
+    name: d.name,
+    description: d.description,
+    keywords: d.keywords,
+    excludedKeywords: d.excluded_keywords,
+    sources,
+    // No research means the user described it themselves: nothing to confirm.
+    unconfirmed: research !== null && !d.from_user && sources.length === 0,
+    preview: null,
+  };
+}
