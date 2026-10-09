@@ -1,0 +1,123 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { AgentError, toAgentError } from "@/lib/onboarding/errors";
+import { createGemini, type GenAIClient } from "@/lib/onboarding/gemini";
+import { normalize } from "@/lib/onboarding/llm";
+import type { OnboardingConfig } from "@/lib/onboarding/config";
+
+const CONFIG: OnboardingConfig = {
+  apiKey: "k",
+  chatModel: "chat-model",
+  embeddingProvider: "gemini",
+  embeddingModel: "gemini-embedding-001",
+  embeddingDim: 1024,
+};
+
+function client(response: unknown, embedding: number[] = [3, 4]) {
+  const generateContent = vi.fn().mockResolvedValue(response);
+  const embedContent = vi.fn().mockResolvedValue({ embeddings: [{ values: embedding }] });
+  return {
+    fake: { models: { generateContent, embedContent } } as unknown as GenAIClient,
+    generateContent,
+    embedContent,
+  };
+}
+
+describe("generate", () => {
+  it("turns on Google Search and returns grounding sources, deduplicated", async () => {
+    const { fake, generateContent } = client({
+      text: "Elbit makes radios.",
+      candidates: [
+        {
+          finishReason: "STOP",
+          groundingMetadata: {
+            groundingChunks: [
+              { web: { uri: "https://a.com/", title: "A" } },
+              { web: { uri: "https://a.com/", title: "A" } },
+              { web: { uri: "https://b.com/" } },
+              {},
+            ],
+          },
+        },
+      ],
+    });
+    const out = await createGemini(CONFIG, fake).generate({ system: "S", prompt: "P", search: true });
+    const req = generateContent.mock.calls[0][0];
+    expect(req.model).toBe("chat-model");
+    expect(req.config.tools).toEqual([{ googleSearch: {} }]);
+    expect(req.config.systemInstruction).toBe("S");
+    expect(req.config.responseJsonSchema).toBeUndefined();
+    expect(out).toEqual({
+      text: "Elbit makes radios.",
+      sources: [
+        { url: "https://a.com/", title: "A" },
+        { url: "https://b.com/", title: "https://b.com/" },
+      ],
+      blocked: false,
+    });
+  });
+
+  it("asks for JSON against the schema, without tools", async () => {
+    const { fake, generateContent } = client({ text: "{}", candidates: [{ finishReason: "STOP" }] });
+    await createGemini(CONFIG, fake).generate({ system: "S", prompt: "P", jsonSchema: { type: "object" } });
+    const req = generateContent.mock.calls[0][0];
+    expect(req.config.responseMimeType).toBe("application/json");
+    expect(req.config.responseJsonSchema).toEqual({ type: "object" });
+    expect(req.config.tools).toBeUndefined();
+  });
+
+  it.each([
+    [{ promptFeedback: { blockReason: "SAFETY" }, candidates: [] }],
+    [{ text: "", candidates: [{ finishReason: "SAFETY" }] }],
+    [{ text: "", candidates: [{ finishReason: "PROHIBITED_CONTENT" }] }],
+  ])("reports a safety block as blocked, not as an error", async (response) => {
+    const { fake } = client(response);
+    const out = await createGemini(CONFIG, fake).generate({ system: "S", prompt: "P" });
+    expect(out.blocked).toBe(true);
+  });
+
+  it("maps SDK failures to agent errors", async () => {
+    const { fake, generateContent } = client({});
+    generateContent.mockRejectedValueOnce(Object.assign(new Error("Too many"), { status: 429 }));
+    await expect(createGemini(CONFIG, fake).generate({ system: "S", prompt: "P" })).rejects.toMatchObject({
+      code: "quota",
+    });
+  });
+});
+
+describe("embed", () => {
+  it("uses the sweep's recipe and normalizes", async () => {
+    const { fake, embedContent } = client({}, [3, 4]);
+    const v = await createGemini(CONFIG, fake).embed("radios");
+    const req = embedContent.mock.calls[0][0];
+    expect(req.model).toBe("gemini-embedding-001");
+    expect(req.contents).toEqual(["radios"]);
+    expect(req.config).toEqual({ taskType: "RETRIEVAL_QUERY", outputDimensionality: 1024 });
+    expect(v).toEqual([0.6, 0.8]);
+  });
+});
+
+describe("normalize", () => {
+  it("scales to unit length and leaves a zero vector alone", () => {
+    expect(normalize([3, 4])).toEqual([0.6, 0.8]);
+    expect(normalize([0, 0])).toEqual([0, 0]);
+  });
+});
+
+describe("toAgentError", () => {
+  it.each([
+    [Object.assign(new Error("x"), { status: 429 }), "quota"],
+    [new Error("RESOURCE_EXHAUSTED: quota"), "quota"],
+    [Object.assign(new Error("aborted"), { name: "AbortError" }), "timeout"],
+    [new Error("request timed out"), "timeout"],
+    [Object.assign(new Error("x"), { status: 403 }), "unavailable"],
+    [new Error("API key not valid"), "unavailable"],
+    [new Error("socket hang up"), "upstream"],
+  ])("maps %s to %s", (err, code) => {
+    expect(toAgentError(err).code).toBe(code);
+  });
+  it("passes an AgentError through", () => {
+    const e = new AgentError("cap");
+    expect(toAgentError(e)).toBe(e);
+  });
+});
