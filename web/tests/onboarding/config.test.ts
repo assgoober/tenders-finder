@@ -22,6 +22,7 @@ describe("config", () => {
       embeddingProvider: "gemini",
       embeddingModel: "gemini-embedding-001",
       embeddingDim: 1024,
+      _embeddingDimRaw: "1024",
     });
   });
   it("falls back to GEMINI_MODEL for chat and to 1024 dimensions", () => {
@@ -43,5 +44,10 @@ describe("config", () => {
       previewUnavailableReason(readConfig({ ...FULL, GEMINI_EMBEDDING_MODEL: "" })),
     ).toMatch(/GEMINI_EMBEDDING_MODEL/);
     expect(previewUnavailableReason(readConfig({ ...FULL, EMBEDDING_DIM: "768" }))).toMatch(/1024/);
+  });
+  it("detects malformed EMBEDDING_DIM and names the problem", () => {
+    const reason = previewUnavailableReason(readConfig({ ...FULL, EMBEDDING_DIM: "abc" }));
+    expect(reason).toMatch(/EMBEDDING_DIM is not a number/);
+    expect(reason).toMatch(/abc/);
   });
 });

@@ -5,7 +5,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 import type { OnboardingConfig } from "./config";
-import { toAgentError } from "./errors";
+import { AgentError, toAgentError } from "./errors";
 import { normalize, type GeminiLike, type GenerateRequest, type GenerateResult } from "./llm";
 
 type ResponseLike = {
@@ -37,6 +37,10 @@ export function createGemini(config: OnboardingConfig, client?: GenAIClient): Ge
 
   return {
     async generate(request: GenerateRequest): Promise<GenerateResult> {
+      if (request.search && request.jsonSchema) {
+        throw new AgentError("upstream", "search and jsonSchema cannot be combined in one call");
+      }
+
       let response: ResponseLike;
       try {
         response = await sdk.models.generateContent({
@@ -78,7 +82,11 @@ export function createGemini(config: OnboardingConfig, client?: GenAIClient): Ge
           contents: [text],
           config: { taskType: "RETRIEVAL_QUERY", outputDimensionality: config.embeddingDim },
         });
-        return normalize(response.embeddings?.[0]?.values ?? []);
+        const values = response.embeddings?.[0]?.values;
+        if (!values || values.length === 0) {
+          throw new AgentError("upstream", "the embedding response contained no vector");
+        }
+        return normalize(values);
       } catch (e) {
         throw toAgentError(e);
       }

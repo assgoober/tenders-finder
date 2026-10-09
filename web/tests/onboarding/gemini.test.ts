@@ -83,6 +83,17 @@ describe("generate", () => {
       code: "quota",
     });
   });
+
+  it("rejects when both search and jsonSchema are provided", async () => {
+    const { fake, generateContent } = client({});
+    await expect(
+      createGemini(CONFIG, fake).generate({ system: "S", prompt: "P", search: true, jsonSchema: { type: "object" } }),
+    ).rejects.toMatchObject({
+      code: "upstream",
+      message: "search and jsonSchema cannot be combined in one call",
+    });
+    expect(generateContent).not.toHaveBeenCalled();
+  });
 });
 
 describe("embed", () => {
@@ -94,6 +105,15 @@ describe("embed", () => {
     expect(req.contents).toEqual(["radios"]);
     expect(req.config).toEqual({ taskType: "RETRIEVAL_QUERY", outputDimensionality: 1024 });
     expect(v).toEqual([0.6, 0.8]);
+  });
+
+  it("throws when the response contains no embedding values", async () => {
+    const { fake } = client({}, []);
+    fake.models.embedContent = vi.fn().mockResolvedValue({ embeddings: [] });
+    await expect(createGemini(CONFIG, fake).embed("radios")).rejects.toMatchObject({
+      code: "upstream",
+      message: "the embedding response contained no vector",
+    });
   });
 });
 
