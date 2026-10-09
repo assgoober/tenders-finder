@@ -32,8 +32,10 @@ was written about **the original**:
 | Nightly sweep | runs on the original's machine | **none scheduled** |
 | Data | ~5,600 tenders | empty — started fresh on purpose |
 
-The copy's Supabase has all 22 migrations (verified: RLS on every table,
-forced on the five tenant tables, 3 cron jobs, signup, 0021 and 0022 triggers),
+The copy's Supabase has all 24 migrations (verified: RLS on every table,
+forced on the five tenant tables, 3 cron jobs, signup, 0021 and 0022 triggers;
+0023/0024 `preview_profile_matches` checked for parity against
+`generate_matches_for_profile` on synthetic data — see below),
 Site URL `http://localhost:3000`, and `http://localhost:3000/auth/callback`
 plus `http://localhost:3000/**` on the redirect allow-list (the wildcard
 because the callback carries `?next=...`, and an exact entry may not match it). Keys live in the gitignored `.env` (DB password,
@@ -44,6 +46,41 @@ original's project — always pass `gfetpegbmlctsmpqagqi` explicitly.
 "Operator steps" in the work queue that name the original's project, its
 Vercel URL or "the sweep machine" are about the original. For this copy
 they are either done (auth URLs, 0021) or not yet applicable (no sweep).
+
+### Onboarding chat (branch `onboarding-chat`, not merged)
+
+After login, a member with no alert profile is sent to `/onboarding`: they
+name their company or describe the tenders they want; a Gemini agent
+researches the company with Google Search, drafts one profile per product
+line citing sources, shows a live match preview per draft, and saves only
+what the user ticks. Design: `docs/superpowers/specs/2026-10-04-onboarding-chat-design.md`;
+plan: `docs/superpowers/plans/2026-10-05-onboarding-chat.md`.
+
+- **Built and reviewed, not yet run against a real model.** Plan Task 8 —
+  live checks — needs a Gemini key, which this copy does not have yet. 142
+  web tests use a fake Gemini. Until a key is set, `/onboarding` says chat
+  is unavailable and links to the form; nothing breaks.
+- **To finish it:** put the keys in BOTH `web/.env.local` and the root `.env`
+  (see `.env.example`, "Onboarding chat"); run a small sweep so the copy has
+  tenders; then Task 8 steps 3-5 (embedding parity Python vs TypeScript,
+  preview parity on real tenders, four browser conversations).
+- **The vector is now made in two places** — the sweep (Python) and the
+  preview (TypeScript). Same env names, a preview that disables itself when
+  they don't line up, and a parity check in Task 8. A drift here gives
+  plausible, wrong preview numbers with no error.
+- **Migrations 0023 and 0024 must be applied before this web code is
+  deployed anywhere.** 0024 replaces 0023's function to match production's
+  double-vs-real comparison (the 0014 lesson); 0023 is kept because it is
+  applied on the copy.
+- **Unresolved, worth a look:** during the 0023/0024 parity runs,
+  `generate_matches_for_profile` (0015) returned fewer rows than the exact
+  preview in 3 of ~8 runs (e.g. 0 vs 6, 1 vs 2), then could not be
+  reproduced: 3 further full parity runs, 300 qualifying tenders through the
+  function, and the same query forced onto the HNSW index all returned
+  everything. The approximate-index explanation is therefore NOT proven;
+  0015 was left unchanged. If a customer reports "missing" backfill matches,
+  start from `order by t.embedding <=> ...` in 0015 (hnsw.ef_search = 40,
+  iterative_scan = off on this project, pgvector 0.8.2).
 
 ---
 
