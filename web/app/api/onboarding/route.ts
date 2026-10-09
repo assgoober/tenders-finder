@@ -7,8 +7,9 @@
  */
 import { runTurn } from "@/lib/onboarding/agent";
 import { chatUnavailableReason, readConfig } from "@/lib/onboarding/config";
-import { AgentError, HTTP_STATUS, USER_MESSAGES, toAgentError, type AgentErrorCode } from "@/lib/onboarding/errors";
+import { AgentError, toAgentError } from "@/lib/onboarding/errors";
 import { createGemini } from "@/lib/onboarding/gemini";
+import { fail, makeRpc, requireMember } from "@/lib/onboarding/http";
 import { attachPreviews, previewDraft } from "@/lib/onboarding/preview";
 import { TurnRequest } from "@/lib/onboarding/schema";
 import { createClient } from "@/lib/supabase/server";
@@ -16,19 +17,11 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-function fail(code: AgentErrorCode): Response {
-  return Response.json({ error: { code, message: USER_MESSAGES[code] } }, { status: HTTP_STATUS[code] });
-}
-
 export async function POST(request: Request): Promise<Response> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return fail("signed_out");
 
-  const { data: orgs } = await supabase.from("organizations").select("id").limit(1);
-  if (!orgs || orgs.length === 0) return fail("no_organization");
+  const memberError = await requireMember(supabase);
+  if (memberError) return memberError;
 
   const config = readConfig();
   if (chatUnavailableReason(config)) return fail("unavailable");
@@ -43,10 +36,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.success) return fail("bad_request");
 
   const llm = createGemini(config);
-  const rpc = async (fn: string, args: Record<string, unknown>) => {
-    const { data, error } = await supabase.rpc(fn, args);
-    return { data: data as unknown, error: error ? { message: error.message } : null };
-  };
+  const rpc = makeRpc(supabase);
 
   try {
     const turn = await runTurn(parsed.data, llm);

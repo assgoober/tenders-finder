@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   user: { id: "u1" } as { id: string } | null,
-  orgs: [{ id: "o1" }] as { id: string }[],
+  orgs: [{ id: "o1" }] as { id: string }[] | null,
+  orgsError: null as { message: string } | null,
   runTurn: vi.fn(),
   previewDraft: vi.fn(),
 }));
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: mocks.user } }) },
-    from: () => ({ select: () => ({ limit: async () => ({ data: mocks.orgs }) }) }),
+    from: () => ({ select: () => ({ limit: async () => ({ data: mocks.orgs, error: mocks.orgsError }) }) }),
     rpc: async () => ({ data: null, error: null }),
   }),
 }));
@@ -43,10 +44,15 @@ const post = (handler: (r: Request) => Promise<Response>, payload: unknown) =>
 beforeEach(() => {
   mocks.user = { id: "u1" };
   mocks.orgs = [{ id: "o1" }];
+  mocks.orgsError = null;
   mocks.runTurn.mockReset();
   mocks.previewDraft.mockReset();
   vi.stubEnv("GEMINI_API_KEY", "k");
   vi.stubEnv("GEMINI_CHAT_MODEL", "m");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("POST /api/onboarding", () => {
@@ -119,6 +125,13 @@ describe("POST /api/onboarding", () => {
     expect(json.reply).toBe("Found it.");
     expect(json.drafts[0].preview).toEqual({ status: "empty_corpus" });
   });
+
+  it("returns 502 upstream when organizations query returns an error", async () => {
+    mocks.orgsError = { message: "boom" };
+    const res = await post(POST, body());
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.code).toBe("upstream");
+  });
 });
 
 describe("POST /api/onboarding/preview", () => {
@@ -127,8 +140,24 @@ describe("POST /api/onboarding/preview", () => {
     expect((await post(PREVIEW, { description: DESC, excludedKeywords: [] })).status).toBe(401);
   });
 
+  it("refuses a user with no organization", async () => {
+    mocks.orgs = [];
+    expect((await post(PREVIEW, { description: DESC, excludedKeywords: [] })).status).toBe(403);
+  });
+
+  it("says chat is unavailable when no key is configured", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "");
+    const res = await post(PREVIEW, { description: DESC, excludedKeywords: [] });
+    expect(res.status).toBe(503);
+    expect((await res.json()).error.code).toBe("unavailable");
+  });
+
   it("rejects a description the form would refuse", async () => {
     expect((await post(PREVIEW, { description: "radios", excludedKeywords: [] })).status).toBe(400);
+  });
+
+  it("rejects an exclusion keyword containing %", async () => {
+    expect((await post(PREVIEW, { description: DESC, excludedKeywords: ["bad%keyword"] })).status).toBe(400);
   });
 
   it("returns the preview", async () => {
@@ -137,5 +166,13 @@ describe("POST /api/onboarding/preview", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ preview: { status: "unavailable" } });
     expect(mocks.previewDraft.mock.calls[0][1]).toEqual(["catering"]);
+  });
+
+  it("wraps previewDraft errors in error shape with status 502", async () => {
+    mocks.previewDraft.mockRejectedValue(new Error("network fail"));
+    const res = await post(PREVIEW, { description: DESC, excludedKeywords: [] });
+    expect(res.status).toBe(502);
+    const json = await res.json();
+    expect(json).toEqual({ error: { code: "upstream", message: expect.any(String) } });
   });
 });
