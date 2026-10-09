@@ -1,19 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { saveProfile } from "@/lib/actions/profiles";
+import { apiErrorFrom, messageState, type ApiError } from "@/lib/onboarding/client-errors";
+import { USER_MESSAGES } from "@/lib/onboarding/errors";
+import { descriptionProblem, isStaleResponse, needsPreviewRefresh, type PreviewInput } from "@/lib/onboarding/preview-state";
 import { SKIP_COOKIE } from "@/lib/onboarding/gate";
 import { saveDrafts } from "@/lib/onboarding/save";
 import type { Candidate, DraftView, Preview, Research } from "@/lib/onboarding/schema";
 
 type Msg = { role: "user" | "assistant"; text: string };
-type DraftCard = DraftView & { checked: boolean };
-type ApiError = { code: string; message: string };
+type DraftCard = DraftView & { checked: boolean; previewInput: PreviewInput | null };
+
+/** A preview counts as computed for this text only if it is a real answer. */
+const previewInputOf = (d: DraftView): PreviewInput | null =>
+  d.preview && d.preview.status !== "unavailable"
+    ? { description: d.description, excludedKeywords: d.excludedKeywords }
+    : null;
 
 const INPUT =
   "w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900";
@@ -71,6 +79,13 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<ReadonlySet<string>>(new Set());
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
+  const draftsRef = useRef<DraftCard[]>([]);
+  draftsRef.current = drafts;
+  const inFlight = useRef<Set<string>>(new Set());
+
+  const anyInvalid = drafts.some((d) => descriptionProblem(d.description) !== null);
+  const msg = messageState(input);
+  const canSend = !busy && !saving && !anyInvalid && !msg.tooLong && input.trim().length > 0;
 
   const unsaved = drafts.some((d) => d.checked && !saved.has(d.key));
   useEffect(() => {
@@ -91,7 +106,7 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || busy || saving || anyInvalid || text.length > 4000) return;
     const previous = messages;
     const next: Msg[] = [...messages, { role: "user", text: trimmed }];
     setMessages(next);
@@ -104,9 +119,14 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next, drafts: drafts.map(toView), research }),
       });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error as ApiError);
+      let body: Record<string, unknown> | null = null;
+      try {
+        body = await res.json();
+      } catch {
+        body = null; // A gateway timeout page is not JSON.
+      }
+      if (!res.ok || body === null) {
+        setError(apiErrorFrom(res.ok ? 504 : res.status, body));
         setMessages(previous);
         setInput(trimmed);
         return;
@@ -118,6 +138,7 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
         (body.drafts as DraftView[]).map((d) => ({
           ...d,
           checked: drafts.find((p) => p.key === d.key)?.checked ?? !d.unconfirmed,
+          previewInput: previewInputOf(d),
         })),
       );
     } catch {
@@ -134,21 +155,32 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
   }
 
   async function refreshPreview(d: DraftCard) {
-    if (d.description.trim().length < 40) return;
+    if (!needsPreviewRefresh(d)) return;
+    const sent = { description: d.description, excludedKeywords: d.excludedKeywords };
+    const flightKey = JSON.stringify([d.key, sent.description, sent.excludedKeywords]);
+    if (inFlight.current.has(flightKey)) return;
+    inFlight.current.add(flightKey);
     try {
       const res = await fetch("/api/onboarding/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: d.description, excludedKeywords: d.excludedKeywords }),
+        body: JSON.stringify(sent),
       });
-      if (res.ok) patch(d.key, { preview: (await res.json()).preview as Preview });
+      if (!res.ok) return;
+      const preview = (await res.json()).preview as Preview;
+      const current = draftsRef.current.find((x) => x.key === d.key);
+      // The user kept typing, or a newer turn replaced the draft: drop it.
+      if (isStaleResponse(current, sent.description, sent.excludedKeywords)) return;
+      patch(d.key, { preview, previewInput: previewInputOf({ ...d, preview }) });
     } catch {
       // Keep the previous preview; a preview is a convenience, not a gate.
+    } finally {
+      inFlight.current.delete(flightKey);
     }
   }
 
   async function create() {
-    if (saving) return;
+    if (saving || busy || anyInvalid) return;
     setSaving(true);
     setSaveErrors({});
     const chosen = drafts.filter((d) => d.checked).map(toView);
@@ -214,7 +246,7 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
               key={`${c.name}-${c.website ?? ""}`}
               type="button"
               variant="outline"
-              disabled={busy}
+              disabled={busy || saving || anyInvalid}
               onClick={() => send(`It's ${c.name}${c.website ? ` (${c.website})` : ""}${c.country ? `, ${c.country}` : ""}`)}
             >
               {c.name}
@@ -245,10 +277,16 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
               rows={4}
               value={d.description}
               disabled={saved.has(d.key)}
+              readOnly={busy}
               onChange={(e) => patch(d.key, { description: e.target.value })}
               onBlur={() => refreshPreview(d)}
               className={INPUT}
             />
+            {descriptionProblem(d.description) ? (
+              <p role="alert" className="text-xs text-red-600">
+                {descriptionProblem(d.description)}
+              </p>
+            ) : null}
             {d.keywords.length > 0 ? <p className="text-xs text-slate-500">Keywords: {d.keywords.join(", ")}</p> : null}
             {d.excludedKeywords.length > 0 ? (
               <p className="text-xs text-slate-500">Never: {d.excludedKeywords.join(", ")}</p>
@@ -302,27 +340,44 @@ export function OnboardingChat({ unavailable }: { unavailable: boolean }) {
         <textarea
           dir="auto"
           rows={3}
-          maxLength={4000}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              send(input);
+              if (canSend) send(input);
             }
           }}
           placeholder={messages.length === 0 ? "e.g. I work at … — or: tactical radios and night vision for armies" : "Say what to change…"}
           className={INPUT}
         />
+        {msg.warn ? (
+          <p className="text-xs text-slate-500">
+            {msg.length.toLocaleString("en-US")} / 4,000 characters
+          </p>
+        ) : null}
+        {msg.tooLong ? (
+          <p role="alert" className="text-sm text-red-600">
+            {USER_MESSAGES.too_long}
+          </p>
+        ) : null}
+        {anyInvalid ? (
+          <p className="text-xs text-red-600">
+            Fix the profile descriptions marked above before sending or creating.
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={busy || !input.trim()}>
+          <Button type="submit" disabled={!canSend}>
             Send
           </Button>
           {checkedCount > 0 ? (
-            <Button type="button" variant="outline" disabled={saving || busy} onClick={create}>
+            <Button type="button" variant="outline" disabled={saving || busy || anyInvalid} onClick={create}>
               {saving ? "Saving…" : `Create ${checkedCount} ${checkedCount === 1 ? "profile" : "profiles"}`}
             </Button>
           ) : null}
+          <Link href="/profiles" className="text-sm text-slate-500 underline">
+            Set up with the form instead
+          </Link>
           <button type="button" onClick={skip} className="text-sm text-slate-500 underline">
             Skip for now
           </button>
