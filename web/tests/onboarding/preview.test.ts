@@ -91,6 +91,38 @@ describe("previewDraft", () => {
       top: [{ id: "t1", title: "HF radios", deadline: "2026-11-01T00:00:00Z", similarity: 0.83 }],
     });
   });
+
+  it("is unavailable when the rpc call throws (network error)", async () => {
+    const rpc: RpcFn = vi.fn(async () => {
+      throw new Error("fetch failed");
+    });
+    const out = await previewDraft(DESC, [], {
+      llm: llm(async () => VECTOR),
+      rpc,
+      config: CONFIG,
+    });
+    expect(out).toEqual({ status: "unavailable" });
+  });
+
+  it("is unavailable when the embedding service rejects the key", async () => {
+    const out = await previewDraft(DESC, [], {
+      llm: llm(async () => {
+        throw new AgentError("unavailable");
+      }),
+      rpc: rpcReturning(null),
+      config: CONFIG,
+    });
+    expect(out).toEqual({ status: "unavailable" });
+  });
+
+  it("is unavailable when the rpc result is missing open_tenders", async () => {
+    const out = await previewDraft(DESC, [], {
+      llm: llm(async () => VECTOR),
+      rpc: rpcReturning({ total: 3, cut: 0.5, top: [] }),
+      config: CONFIG,
+    });
+    expect(out).toEqual({ status: "unavailable" });
+  });
 });
 
 describe("attachPreviews", () => {
@@ -128,5 +160,19 @@ describe("attachPreviews", () => {
     const compute = vi.fn(async () => ok);
     await attachPreviews([draft()], [draft({ preview: { status: "unavailable" } })], compute);
     expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not propagate unavailable status from one draft to another", async () => {
+    const unavailable: Preview = { status: "unavailable" };
+    const compute = vi.fn(async (d: DraftView) => {
+      return d.key === "a" ? unavailable : ok;
+    });
+    const out = await attachPreviews(
+      [draft({ key: "a" }), draft({ key: "b" })],
+      [],
+      compute,
+    );
+    expect(out[0].preview).toEqual(unavailable);
+    expect(out[1].preview).toEqual(ok);
   });
 });

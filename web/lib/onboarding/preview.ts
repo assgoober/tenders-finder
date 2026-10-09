@@ -7,7 +7,6 @@
  * show, never to an error that stops the conversation.
  */
 import { previewUnavailableReason, type OnboardingConfig } from "./config";
-import { toAgentError } from "./errors";
 import type { GeminiLike } from "./llm";
 import type { DraftView, Preview } from "./schema";
 
@@ -34,11 +33,8 @@ export async function previewDraft(
   let vector: number[];
   try {
     vector = await deps.llm.embed(description);
-  } catch (e) {
-    const err = toAgentError(e);
-    return err.code === "unavailable"
-      ? { status: "disabled", reason: "the embedding service rejected the key" }
-      : { status: "unavailable" };
+  } catch {
+    return { status: "unavailable" };
   }
   if (vector.length !== deps.config.embeddingDim) {
     return {
@@ -47,14 +43,23 @@ export async function previewDraft(
     };
   }
 
-  const { data, error } = await deps.rpc("preview_profile_matches", {
-    p_embedding: `[${vector.join(",")}]`,
-    p_excluded_keywords: excluded,
-    p_limit: 3,
-  });
-  if (error || !data) return { status: "unavailable" };
+  let data: unknown;
+  try {
+    const response = await deps.rpc("preview_profile_matches", {
+      p_embedding: `[${vector.join(",")}]`,
+      p_excluded_keywords: excluded,
+      p_limit: 3,
+    });
+    if (response.error || !response.data) return { status: "unavailable" };
+    data = response.data;
+  } catch {
+    return { status: "unavailable" };
+  }
 
   const result = data as SqlPreview;
+  if (typeof result.open_tenders !== "number" || typeof result.total !== "number") {
+    return { status: "unavailable" };
+  }
   if (result.open_tenders === 0) return { status: "empty_corpus" };
   return {
     status: "ok",
