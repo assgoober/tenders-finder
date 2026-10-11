@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { GEO_NOTICE, runTurn } from "@/lib/onboarding/agent";
-import { GEO_NOTICE_TEXT_HE, BLOCKED_TEXT_HE } from "@/lib/onboarding/prompts";
+import { GEO_NOTICE, runTurn, structured } from "@/lib/onboarding/agent";
+import {
+  BLOCKED_DRAFT_TEXT_HE,
+  BLOCKED_TEXT_HE,
+  GEO_NOTICE_NO_DRAFTS_TEXT,
+  GEO_NOTICE_NO_DRAFTS_TEXT_HE,
+  GEO_NOTICE_TEXT_HE,
+} from "@/lib/onboarding/prompts";
 import { AgentError, USER_MESSAGES } from "@/lib/onboarding/errors";
 import type { GeminiLike, GenerateRequest, GenerateResult } from "@/lib/onboarding/llm";
-import type { DraftView, TurnRequest } from "@/lib/onboarding/schema";
+import { Classification, type DraftView, type TurnRequest } from "@/lib/onboarding/schema";
 
 const DESC_A = "Tactical software-defined radios for armed forces and border police.";
 const DESC_B = "Unmanned aerial systems for surveillance, with ground control stations.";
@@ -523,5 +529,116 @@ describe("language-aware notices", () => {
 
     expect(out.reply.startsWith(GEO_NOTICE_TEXT_HE)).toBe(true);
     expect(out.reply).toContain("הוספתי סימולטורים.");
+  });
+});
+
+describe("polish", () => {
+  const oneDraft: DraftView[] = [
+    {
+      key: "d1",
+      name: "Radios",
+      description: DESC_A,
+      keywords: [],
+      excludedKeywords: [],
+      sources: [],
+      unconfirmed: false,
+      preview: null,
+    },
+  ];
+
+  it("treats the same company with different spacing and case as already researched", async () => {
+    const research = { query: "Elbit Systems", text: "Elbit makes radios.", sources: [] };
+    const { llm, calls } = fake([classify("company", "  elbit   systems "), turn()]);
+    await runTurn(request("elbit systems", { research }), llm, key);
+    expect(calls.some((c) => c.search)).toBe(false);
+  });
+
+  it("says it cannot draft (not 'look that up') when the structuring call is blocked", async () => {
+    const { llm } = fake([classify("describe"), { blocked: true }]);
+    const out = await runTurn(request("radios"), llm, key);
+    expect(out.kind).toBe("clarify");
+    expect(out.reply).toBe(USER_MESSAGES.blocked_draft);
+    expect(out.reply).not.toBe(USER_MESSAGES.blocked);
+  });
+
+  it("says it cannot draft in Hebrew when the structuring call is blocked", async () => {
+    const { llm } = fake([classify("describe"), { blocked: true }]);
+    const out = await runTurn(request("רדיו טקטי"), llm, key);
+    expect(out.reply).toBe(BLOCKED_DRAFT_TEXT_HE);
+  });
+
+  it("keeps the research wording when the research call is blocked", async () => {
+    const { llm } = fake([classify("company", "Something"), { blocked: true }]);
+    const out = await runTurn(request("Something"), llm, key);
+    expect(out.reply).toBe(USER_MESSAGES.blocked);
+  });
+
+  it("retries an invalid classification once, feeding the problem back", async () => {
+    const { llm, calls } = fake([{ text: "not json" }, classify("describe"), turn()]);
+    const out = await runTurn(request("radios"), llm, key);
+    expect(out.kind).toBe("drafts");
+    expect(calls[1].prompt).toContain("was rejected");
+  });
+
+  it("does not claim to have left profiles unchanged when there are none (English)", async () => {
+    const { llm } = fake([classify("geography_only", null, true)]);
+    const out = await runTurn(request("only Europe"), llm, key);
+    expect(out.reply).toBe(GEO_NOTICE_NO_DRAFTS_TEXT);
+    expect(out.reply).not.toContain("unchanged");
+  });
+
+  it("does not claim to have left profiles unchanged when there are none (Hebrew)", async () => {
+    const { llm } = fake([classify("geography_only", null, true)]);
+    const out = await runTurn(request("רק אירופה"), llm, key);
+    expect(out.reply).toBe(GEO_NOTICE_NO_DRAFTS_TEXT_HE);
+  });
+
+  it("keeps the 'unchanged' notice when drafts exist", async () => {
+    const { llm } = fake([classify("geography_only", null, true)]);
+    const out = await runTurn(request("only Europe", { drafts: oneDraft }), llm, key);
+    expect(out.reply).toBe(GEO_NOTICE);
+  });
+
+  it("labels a clean() failure as 'could not be processed', not as bad JSON", async () => {
+    const { llm, calls } = fake([classify("describe"), classify("describe")]);
+    let first = true;
+    const out = await structured(llm, "S", "P", Classification, (raw) => {
+      if (first) {
+        first = false;
+        throw new Error("boom");
+      }
+      return raw;
+    });
+    expect(out.intent).toBe("describe");
+    expect(calls[1].prompt).toContain("could not be processed (boom)");
+    expect(calls[1].prompt).not.toContain("not valid JSON");
+  });
+
+  it("still labels a JSON.parse failure as 'not valid JSON'", async () => {
+    const { llm, calls } = fake([{ text: "nope" }, classify("describe")]);
+    await structured(llm, "S", "P", Classification);
+    expect(calls[1].prompt).toContain("not valid JSON");
+  });
+
+  it("keeps every cited source's marker when a long research text is cut", async () => {
+    const filler = "word ".repeat(4100); // ~20500 chars
+    const text = `Start [1]. ${filler}end [2][3]`;
+    const { llm } = fake([
+      classify("company", "Elbit Systems"),
+      {
+        text,
+        sources: [
+          { url: "https://a.com/", title: "A" },
+          { url: "https://b.com/", title: "B" },
+          { url: "https://c.com/", title: "C" },
+        ],
+      },
+      turn(),
+    ]);
+    const out = await runTurn(request("Elbit Systems"), llm, key);
+    const kept = out.research!.text;
+    expect(kept.length).toBeLessThanOrEqual(20000);
+    expect(kept).toContain("[1]");
+    expect(kept.endsWith("\u2026 [2][3]")).toBe(true);
   });
 });

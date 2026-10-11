@@ -12,9 +12,12 @@ import { z } from "zod";
 import { AgentError, USER_MESSAGES } from "./errors";
 import type { GeminiLike, Researcher } from "./llm";
 import {
+  BLOCKED_DRAFT_TEXT_HE,
   BLOCKED_TEXT_HE,
   CLASSIFY_SYSTEM,
   DRAFT_SYSTEM,
+  GEO_NOTICE_NO_DRAFTS_TEXT,
+  GEO_NOTICE_NO_DRAFTS_TEXT_HE,
   GEO_NOTICE_TEXT,
   GEO_NOTICE_TEXT_HE,
   RESEARCH_SYSTEM,
@@ -114,12 +117,23 @@ export async function structured<T>(
     });
     if (result.blocked) throw new AgentError("blocked");
     let problem = "";
+    let raw: unknown;
+    let parseFailure = "";
     try {
-      const parsed = schema.safeParse(clean(JSON.parse(result.text)));
-      if (parsed.success) return parsed.data;
-      problem = z.prettifyError(parsed.error);
+      raw = JSON.parse(result.text);
     } catch (e) {
-      problem = `not valid JSON (${e instanceof Error ? e.message : String(e)})`;
+      parseFailure = `not valid JSON (${e instanceof Error ? e.message : String(e)})`;
+    }
+    if (parseFailure) {
+      problem = parseFailure;
+    } else {
+      try {
+        const parsed = schema.safeParse(clean(raw));
+        if (parsed.success) return parsed.data;
+        problem = z.prettifyError(parsed.error);
+      } catch (e) {
+        problem = `could not be processed (${e instanceof Error ? e.message : String(e)})`;
+      }
     }
     attemptPrompt = `${prompt}\n\nYour previous answer was rejected: ${problem}\nReturn JSON that satisfies the schema.`;
   }
@@ -134,6 +148,31 @@ function checkLimits(req: TurnRequest): void {
 
 function isHebrew(text: string): boolean {
   return /[֐-׿]/.test(text);
+}
+
+const normalizeQuery = (q: string | null | undefined) => (q ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+/** Room kept free at the end of the research text for markers of cut sources. */
+const RESEARCH_TEXT_MAX = 20000;
+const RESEARCH_MARKER_ROOM = 300;
+
+/**
+ * Keep research text within the schema limit without losing a source: cut at
+ * whitespace and append the markers of any source whose marker was cut away,
+ * so every source that was cited still has a marker.
+ */
+function fitResearchText(text: string, sources: { n: number }[]): string {
+  if (text.length <= RESEARCH_TEXT_MAX) return text;
+  const limit = RESEARCH_TEXT_MAX - RESEARCH_MARKER_ROOM;
+  let cut = text.slice(0, limit);
+  const space = cut.search(/\s\S*$/);
+  if (space > 0) cut = cut.slice(0, space);
+  cut = cut.trimEnd();
+  const lost = sources
+    .filter((s) => text.includes(`[${s.n}]`) && !cut.includes(`[${s.n}]`))
+    .map((s) => `[${s.n}]`)
+    .join("");
+  return lost ? `${cut} \u2026 ${lost}` : cut;
 }
 
 /** Research through Gemini's own Google Search grounding (the default). */
@@ -153,8 +192,12 @@ export async function runTurn(
 
   const latestUserMessage = [...req.messages].reverse().find((m) => m.role === "user")?.text ?? "";
   const hebrew = isHebrew(latestUserMessage);
-  const geoNotice = hebrew ? GEO_NOTICE_TEXT_HE : GEO_NOTICE_TEXT;
+  const noDrafts = req.drafts.length === 0;
+  const geoNotice = hebrew
+    ? noDrafts ? GEO_NOTICE_NO_DRAFTS_TEXT_HE : GEO_NOTICE_TEXT_HE
+    : noDrafts ? GEO_NOTICE_NO_DRAFTS_TEXT : GEO_NOTICE_TEXT;
   const blockedMessage = hebrew ? BLOCKED_TEXT_HE : USER_MESSAGES.blocked;
+  const blockedDraftMessage = hebrew ? BLOCKED_DRAFT_TEXT_HE : USER_MESSAGES.blocked_draft;
 
   const unchanged = (reply: string, research: Research | null): TurnResult => ({
     kind: "clarify",
@@ -179,7 +222,7 @@ export async function runTurn(
 
     const named = cls.intent === "company" || cls.intent === "pick_candidate";
     let researchedThisTurn = false;
-    if (named && cls.company_query && cls.company_query !== research?.query) {
+    if (named && cls.company_query && normalizeQuery(cls.company_query) !== normalizeQuery(research?.query)) {
       if (timeLeft(deadline) < CALL_MIN_MS) throw new AgentError("timeout");
       const found = await researcher.research({
         system: RESEARCH_SYSTEM,
@@ -188,22 +231,29 @@ export async function runTurn(
       });
       if (found.blocked) return unchanged(blockedMessage, research);
       researchedThisTurn = true;
+      const numbered = numberSources(found.sources).slice(0, 40);
       research = {
         query: cls.company_query,
-        text: found.text.slice(0, 20000),
-        sources: numberSources(found.sources).slice(0, 40),
+        text: fitResearchText(found.text, numbered),
+        sources: numbered,
       };
     }
 
     if (timeLeft(deadline) < CALL_MIN_MS) throw new AgentError("timeout");
-    const out = await structured(
-      llm,
-      DRAFT_SYSTEM,
-      draftPrompt(req.messages, req.drafts, research, researchedThisTurn),
-      ModelTurn,
-      sanitizeModelTurn,
-      deadline,
-    );
+    let out: ModelTurn;
+    try {
+      out = await structured(
+        llm,
+        DRAFT_SYSTEM,
+        draftPrompt(req.messages, req.drafts, research, researchedThisTurn),
+        ModelTurn,
+        sanitizeModelTurn,
+        deadline,
+      );
+    } catch (e) {
+      if (e instanceof AgentError && e.code === "blocked") return unchanged(blockedDraftMessage, research);
+      throw e;
+    }
 
     const usedKeys = new Set<string>();
     const drafts =

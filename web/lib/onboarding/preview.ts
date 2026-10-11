@@ -74,8 +74,12 @@ export async function previewDraft(
   };
 }
 
+/** Exclusions compare as a case-insensitive set: order and case do not change the match. */
+const exclusionSet = (list: string[]) =>
+  Array.from(new Set(list.map((k) => k.toLowerCase()))).sort().join("\n");
+
 const sameInput = (a: DraftView, b: DraftView) =>
-  a.description === b.description && a.excludedKeywords.join("\n") === b.excludedKeywords.join("\n");
+  a.description === b.description && exclusionSet(a.excludedKeywords) === exclusionSet(b.excludedKeywords);
 
 export async function attachPreviews(
   drafts: DraftView[],

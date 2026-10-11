@@ -52,6 +52,15 @@ export const GEO_NOTICE_TEXT =
 export const GEO_NOTICE_TEXT_HE =
   "עדיין אי אפשר לסנן לפי מדינה או אזור — המכרזים מותאמים לפי מה שהם עוסקים בו, בלי קשר למיקום הגוף המזמין. לא שיניתי את הפרופילים בנקודה הזו.";
 
+export const GEO_NOTICE_NO_DRAFTS_TEXT =
+  "Filtering by country or region isn't supported yet — tenders are matched on what they're about, wherever the buyer is.";
+
+export const GEO_NOTICE_NO_DRAFTS_TEXT_HE =
+  "עדיין אי אפשר לסנן לפי מדינה או אזור — המכרזים מותאמים לפי מה שהם עוסקים בו, בלי קשר למיקום הגוף המזמין.";
+
+export const BLOCKED_DRAFT_TEXT_HE =
+  "לא הצלחתי לנסח את זה. נסו לתאר במילים אחרות מה החברה שלכם מייצרת.";
+
 export const BLOCKED_TEXT_HE =
   "אני לא יכול לחפש את זה. תאר/י במקום זה מה החברה שלך מייצרת.";
 

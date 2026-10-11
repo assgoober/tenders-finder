@@ -84,6 +84,9 @@ describe("previewDraft", () => {
     expect(fn).toBe("preview_profile_matches");
     expect(args).toMatchObject({ p_excluded_keywords: ["catering"], p_limit: 3 });
     expect(String(args.p_embedding).startsWith("[")).toBe(true);
+    expect(String(args.p_embedding)).toMatch(/^\[-?[\d.e-]+(,-?[\d.e-]+)*\]$/);
+    expect(String(args.p_embedding)).not.toContain(" ");
+    expect(String(args.p_embedding).slice(1, -1).split(",")).toHaveLength(CONFIG.embeddingDim);
     expect(out).toEqual({
       status: "ok",
       openTenders: 900,
@@ -154,6 +157,17 @@ describe("attachPreviews", () => {
       compute,
     );
     expect(compute).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats exclusions as a case-insensitive set, whatever their order", async () => {
+    const compute = vi.fn(async () => ok);
+    const out = await attachPreviews(
+      [draft({ key: "new", excludedKeywords: ["A", "b"] })],
+      [draft({ key: "old", excludedKeywords: ["b", "a"], preview: ok })],
+      compute,
+    );
+    expect(compute).not.toHaveBeenCalled();
+    expect(out[0].preview).toEqual(ok);
   });
 
   it("retries a preview that was unavailable last time", async () => {
