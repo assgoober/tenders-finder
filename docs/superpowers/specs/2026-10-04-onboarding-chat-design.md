@@ -16,7 +16,7 @@ user-approved alert profiles in a few minutes, without writing the paragraph
 themselves — and nothing the agent invented reaches a profile unnoticed.
 
 **Non-goals:** chat history storage; changing how profiles match; a per-user
-daily cost cap; any provider other than Gemini; **geography filters** (see
+daily cost cap; any provider other than Gemini (amended 2026-10-11, approved by the user: OpenAI web search for company research only, because the Gemini free tier refuses Google Search; drafting and embeddings stay on Gemini — see ADR-30); **geography filters** (see
 §2.5 — the matcher has no country filter today; that is its own feature).
 
 ## 2. User flow

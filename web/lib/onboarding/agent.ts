@@ -3,9 +3,9 @@
  *
  * classify → (research, only for a newly named company) → structure.
  * Research and structuring are separate calls on purpose: the research call
- * has Google Search and returns the pages it used as metadata; the
+ * has web search (Gemini grounding or OpenAI, see Researcher) and returns the pages it used as metadata; the
  * structuring call has no tools and may cite those pages only by number.
- * Links therefore come from Google, never from model text.
+ * Links therefore come from the search tool's citation metadata, never from model text.
  */
 import { z } from "zod";
 

@@ -18,7 +18,7 @@ intent:
 asks_geography: true if the message asks to limit tenders by country, region or buyer location, in any language.
 company_query is null unless intent is "company" or "pick_candidate".`;
 
-export const RESEARCH_SYSTEM = `You research a company for a tender alert service. Use Google Search.
+export const RESEARCH_SYSTEM = `You research a company for a tender alert service. Use web search.
 Report only what the sources say. Do not infer products or customers that no source states.
 Organize by product line or business area: what it is, the technologies, and the kinds of buyers (armed forces, police, other government, civilian).
 If several different companies match the name, write CANDIDATES and list each with country and website.

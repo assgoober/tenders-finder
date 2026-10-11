@@ -1,5 +1,5 @@
 /**
- * Sources come from Google's grounding metadata, never from model text.
+ * Sources come from the search tool's citation metadata (Gemini grounding or OpenAI url_citation), never from model text.
  *
  * The research call returns the pages it actually used; they are numbered
  * here. The drafting call may cite only those numbers, and this module turns

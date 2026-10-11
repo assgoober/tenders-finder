@@ -20,20 +20,20 @@ function cite(text: string, span: string) {
   return { start_index: start, end_index: start + span.length };
 }
 
+/** OpenAI writes each citation into the text as an inline markdown link. */
+const link = (host: string, url: string) => `([${host}](${url}))`;
+
 describe("parseResponsesOutput", () => {
   it("replaces each cited span with a [n] marker and lists the source once", () => {
-    const linkA = "([elbitsystems.com](https://www.elbitsystems.com/segments/?utm_source=openai))";
-    const linkB = "([reuters.com](https://www.reuters.com/x?utm_source=openai))";
-    const linkA2 = "([elbitsystems.com](https://www.elbitsystems.com/segments/?utm_source=openai))";
-    const text = `Elbit makes radios. ${linkA} It also makes drones. ${linkB} And avionics. ${linkA2}`;
-    const a1 = cite(text, linkA);
-    const b = cite(text, linkB);
-    const a2 = { start_index: text.lastIndexOf(linkA2), end_index: text.lastIndexOf(linkA2) + linkA2.length };
+    const linkA = link("elbitsystems.com", "https://www.elbitsystems.com/segments/?utm_source=openai");
+    const linkB = link("reuters.com", "https://www.reuters.com/x?utm_source=openai");
+    const text = `Elbit makes radios. ${linkA} It also makes drones. ${linkB} And avionics. ${linkA}`;
+    const a2 = text.lastIndexOf(linkA);
     const out = parseResponsesOutput(
       response(text, [
-        { ...a1, url: "https://www.elbitsystems.com/segments/?utm_source=openai", title: "Segments | Elbit Systems" },
-        { ...b, url: "https://www.reuters.com/x?utm_source=openai", title: "Reuters" },
-        { ...a2, url: "https://www.elbitsystems.com/segments/?utm_source=openai", title: "Segments | Elbit Systems" },
+        { ...cite(text, linkA), url: "https://www.elbitsystems.com/segments/?utm_source=openai", title: "Segments | Elbit Systems" },
+        { ...cite(text, linkB), url: "https://www.reuters.com/x?utm_source=openai", title: "Reuters" },
+        { start_index: a2, end_index: a2 + linkA.length, url: "https://www.elbitsystems.com/segments/?utm_source=openai", title: "Segments | Elbit Systems" },
       ]),
     );
     expect(out.text).toBe("Elbit makes radios. [1] It also makes drones. [2] And avionics. [1]");
@@ -45,11 +45,14 @@ describe("parseResponsesOutput", () => {
   });
 
   it("treats a trailing slash as the same page (seen live: /segments and /segments/)", () => {
-    const text = "Aerospace. (a) Land. (b)";
+    const la = link("elbitsystems.com", "https://www.elbitsystems.com/segments?utm_source=openai");
+    const lb = link("elbitsystems.com", "https://www.elbitsystems.com/segments/?utm_source=openai");
+    const text = `Aerospace. ${la} Land. ${lb}`;
+    const b = text.lastIndexOf(lb);
     const out = parseResponsesOutput(
       response(text, [
-        { ...cite(text, "(a)"), url: "https://www.elbitsystems.com/segments?utm_source=openai", title: "Segments" },
-        { ...cite(text, "(b)"), url: "https://www.elbitsystems.com/segments/?utm_source=openai", title: "Segments" },
+        { ...cite(text, la), url: "https://www.elbitsystems.com/segments?utm_source=openai", title: "Segments" },
+        { start_index: b, end_index: b + lb.length, url: "https://www.elbitsystems.com/segments/?utm_source=openai", title: "Segments" },
       ]),
     );
     expect(out.sources).toHaveLength(1);
@@ -57,23 +60,108 @@ describe("parseResponsesOutput", () => {
   });
 
   it("works on Hebrew text (character offsets)", () => {
-    const link = "([idf.il](https://www.idf.il/a))";
-    const text = `מכ"מים לצבא. ${link}`;
-    const out = parseResponsesOutput(response(text, [{ ...cite(text, link), url: "https://www.idf.il/a", title: "IDF" }]));
+    const l = link("idf.il", "https://www.idf.il/a");
+    const text = `מכ"מים לצבא. ${l}`;
+    const out = parseResponsesOutput(response(text, [{ ...cite(text, l), url: "https://www.idf.il/a", title: "IDF" }]));
     expect(out.text).toBe('מכ"מים לצבא. [1]');
     expect(out.sources).toEqual([{ url: "https://www.idf.il/a", title: "IDF" }]);
   });
 
-  it("drops non-http(s) citations and uses the URL when there is no title", () => {
-    const text = "A. (x) B. (y)";
+  it("two sources on the same span keep the text intact and show both markers", () => {
+    // Review finding: the old rewrite turned this into "Radios. [2]e made here too."
+    const l = link("a.example", "https://a.example/x");
+    const text = `Radios. ${l} Drones are made here too.`;
+    const span = cite(text, l);
     const out = parseResponsesOutput(
       response(text, [
-        { ...cite(text, "(x)"), url: "javascript:alert(1)" },
-        { ...cite(text, "(y)"), url: "https://b.example/" },
+        { ...span, url: "https://a.example/x", title: "A" },
+        { ...span, url: "https://a.example/y", title: "A2" },
+      ]),
+    );
+    expect(out.text).toBe("Radios. [1][2] Drones are made here too.");
+    expect(out.sources.map((s) => s.url)).toEqual(["https://a.example/x", "https://a.example/y"]);
+  });
+
+  it("a span nested inside another becomes one marker, without eating text", () => {
+    const inner = link("b.example", "https://b.example/");
+    const outer = `(see ${inner} and a.example)`;
+    const text = `Radios. ${outer} Drones.`;
+    const out = parseResponsesOutput(
+      response(text, [
+        { ...cite(text, outer), url: "https://a.example/", title: "A" },
+        { ...cite(text, inner), url: "https://b.example/", title: "B" },
+      ]),
+    );
+    expect(out.text).toBe("Radios. [1][2] Drones.");
+  });
+
+  it("gives the same result whatever order the annotations arrive in", () => {
+    const la = link("a.example", "https://a.example/");
+    const lb = link("b.example", "https://b.example/");
+    const text = `One. ${la} Two. ${lb}`;
+    const anns = [
+      { ...cite(text, la), url: "https://a.example/", title: "A" },
+      { ...cite(text, lb), url: "https://b.example/", title: "B" },
+    ];
+    expect(parseResponsesOutput(response(text, [...anns].reverse()))).toEqual(parseResponsesOutput(response(text, anns)));
+  });
+
+  it("does not cut text when an offset does not point at its link (unit or index drift)", () => {
+    const l = link("a.example", "https://a.example/");
+    const text = `😀 Radios. ${l}`;
+    const at = text.indexOf(l);
+    const out = parseResponsesOutput(response(text, [{ start_index: at - 6, end_index: at - 1, url: "https://a.example/", title: "A" }]));
+    expect(out.text).toBe(`😀 Radios. ${l} [1]`);
+    expect(out.sources).toHaveLength(1);
+  });
+
+  it("removes a non-http citation's inline link and does not list it", () => {
+    const bad = "([x](javascript:alert(1)))";
+    const good = link("b.example", "https://b.example/");
+    const text = `A. ${bad} B. ${good}`;
+    const out = parseResponsesOutput(
+      response(text, [
+        { ...cite(text, bad), url: "javascript:alert(1)" },
+        { ...cite(text, good), url: "https://b.example/" },
       ]),
     );
     expect(out.sources).toEqual([{ url: "https://b.example/", title: "https://b.example/" }]);
-    expect(out.text).toBe("A. (x) B. [1]");
+    expect(out.text).toBe("A. B. [1]");
+  });
+
+  it("numbers sources consistently across several text parts", () => {
+    const la = link("a.example", "https://a.example/");
+    const lb = link("b.example", "https://b.example/");
+    const p1 = `First. ${la}`;
+    const p2 = `Second. ${lb} Again. ${la}`;
+    const again = p2.lastIndexOf(la);
+    const out = parseResponsesOutput({
+      output: [
+        { type: "message", content: [{ type: "output_text", text: p1, annotations: [{ type: "url_citation", ...cite(p1, la), url: "https://a.example/", title: "A" }] }] },
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: p2,
+              annotations: [
+                { type: "url_citation", ...cite(p2, lb), url: "https://b.example/", title: "B" },
+                { type: "url_citation", start_index: again, end_index: again + la.length, url: "https://a.example/", title: "A" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(out.text).toBe("First. [1]\nSecond. [2] Again. [1]");
+  });
+
+  it("leaves a link's own query string alone when there is no utm_source", () => {
+    const url = "https://a.example/s?q=a%20b&flag";
+    const l = link("a.example", url);
+    const text = `X. ${l}`;
+    const out = parseResponsesOutput(response(text, [{ ...cite(text, l), url, title: "A" }]));
+    expect(out.sources[0].url).toBe(url);
   });
 
   it("returns the text unchanged with no sources when nothing was cited", () => {
@@ -83,6 +171,11 @@ describe("parseResponsesOutput", () => {
   it("reports a refusal as blocked, not as an error", () => {
     const refused = { output: [{ type: "message", content: [{ type: "refusal", refusal: "I can't help with that." }] }] };
     expect(parseResponsesOutput(refused)).toEqual({ text: "", sources: [], blocked: true });
+  });
+
+  it("reports a content-filtered (incomplete) response as blocked", () => {
+    const filtered = { status: "incomplete", incomplete_details: { reason: "content_filter" }, output: [] };
+    expect(parseResponsesOutput(filtered)).toEqual({ text: "", sources: [], blocked: true });
   });
 });
 
@@ -115,6 +208,15 @@ describe("createOpenAIResearcher", () => {
     const fetchFn = vi.fn(async () => ({ ok: false, status, json: async () => ({ error: { message: "nope" } }) }) as Response);
     const r = createOpenAIResearcher({ apiKey: "k", model: "m" }, fetchFn as unknown as typeof fetch);
     await expect(r.research({ system: "S", prompt: "P" })).rejects.toMatchObject({ code });
+  });
+
+  it("maps a 400 about the model to unavailable, so a wrong OPENAI_RESEARCH_MODEL is visible", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        ({ ok: false, status: 400, json: async () => ({ error: { message: "The model `nope` does not exist", code: "model_not_found" } }) }) as Response,
+    );
+    const r = createOpenAIResearcher({ apiKey: "k", model: "nope" }, fetchFn as unknown as typeof fetch);
+    await expect(r.research({ system: "S", prompt: "P" })).rejects.toMatchObject({ code: "unavailable" });
   });
 
   it("maps an aborted request to timeout", async () => {
