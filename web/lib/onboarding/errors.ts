@@ -12,6 +12,7 @@ export type AgentErrorCode =
   | "cap"
   | "too_long"
   | "blocked"
+  | "blocked_draft"
   | "signed_out"
   | "no_organization"
   | "bad_request";
@@ -34,6 +35,7 @@ export const USER_MESSAGES: Record<AgentErrorCode, string> = {
   cap: "This conversation has reached its length limit. Create the profiles you have, or start over.",
   too_long: "That message is too long — keep it under 4,000 characters.",
   blocked: "I can't look that up. Describe what your company makes instead.",
+  blocked_draft: "I can't draft that. Try describing what your company makes in different words.",
   signed_out: "You've been signed out. Sign in again — this conversation can't be kept.",
   no_organization: "Your account isn't a member of an organization yet.",
   bad_request: "Something about that request didn't look right. Try again; if it keeps happening, start over.",
@@ -48,6 +50,7 @@ export const HTTP_STATUS: Record<AgentErrorCode, number> = {
   cap: 429,
   too_long: 413,
   blocked: 422,
+  blocked_draft: 422,
   signed_out: 401,
   no_organization: 403,
   bad_request: 400,
@@ -58,7 +61,7 @@ export function toAgentError(e: unknown): AgentError {
   const err = (e ?? {}) as { status?: number; name?: string; message?: string };
   const status = typeof err.status === "number" ? err.status : undefined;
   const message = String(err.message ?? e);
-  if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(message)) return new AgentError("quota", message);
+  if (status === 429 || /RESOURCE_EXHAUSTED|exceeded your current quota/i.test(message)) return new AgentError("quota", message);
   if (err.name === "AbortError" || /timed? ?out|ETIMEDOUT|DEADLINE_EXCEEDED/i.test(message)) {
     return new AgentError("timeout", message);
   }

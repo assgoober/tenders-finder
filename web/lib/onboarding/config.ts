@@ -65,6 +65,10 @@ export function previewUnavailableReason(c: OnboardingConfig): string | null {
     const raw = c._embeddingDimRaw ? ` ("${c._embeddingDimRaw}")` : "";
     return `EMBEDDING_DIM is not a number${raw}`;
   }
+  if (!Number.isInteger(c.embeddingDim)) {
+    const raw = c._embeddingDimRaw ? ` ("${c._embeddingDimRaw}")` : "";
+    return `EMBEDDING_DIM is not a whole number${raw}`;
+  }
   if (c.embeddingDim !== DB_VECTOR_DIM) return `EMBEDDING_DIM must be ${DB_VECTOR_DIM}, the database column's size`;
   return null;
 }

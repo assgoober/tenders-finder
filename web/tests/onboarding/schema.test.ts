@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_CANDIDATES,
   MAX_KEYWORDS,
   TurnRequest,
   ModelDraft,
@@ -37,6 +38,8 @@ describe("ModelDraft limits match the form", () => {
     ["keyword with _", { keywords: ["a_b"] }],
     ["keyword with comma", { keywords: ["a,b"] }],
     ["keyword over 60", { keywords: ["x".repeat(61)] }],
+    ["keyword with tab", { keywords: ["a\tb"] }],
+    ["keyword with carriage return", { keywords: ["a\rb"] }],
   ])("rejects %s", (_label, over) => {
     expect(ModelDraft.safeParse(draft(over)).success).toBe(false);
   });
@@ -98,5 +101,20 @@ describe("source_ids are cleaned", () => {
     expect(out.length).toBe(20);
     expect(new Set(out).size).toBe(out.length);
     expect(out.every(Number.isInteger)).toBe(true);
+  });
+});
+
+describe("polish: tabs, carriage returns and the candidate cap", () => {
+  it("turns tabs and carriage returns inside a keyword into spaces", () => {
+    expect(sanitizeKeywords(["a\tb", "c\rd"])).toEqual(["a b", "c d"]);
+  });
+
+  it("caps a 12-candidate turn at MAX_CANDIDATES", () => {
+    const candidates = Array.from({ length: 12 }, (_, i) => ({ name: `Co ${i}`, country: null, website: null }));
+    const out = sanitizeModelTurn({ kind: "candidates", reply: "Which?", candidates, drafts: [] }) as {
+      candidates: unknown[];
+    };
+    expect(out.candidates).toHaveLength(MAX_CANDIDATES);
+    expect(ModelTurn.safeParse(out).success).toBe(true);
   });
 });

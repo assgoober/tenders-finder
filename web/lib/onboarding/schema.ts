@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 export const MAX_DRAFTS = 8;
+export const MAX_CANDIDATES = 8;
 export const MAX_KEYWORDS = 30;
 export const MAX_USER_MESSAGES = 15;
 export const MAX_MESSAGE_CHARS = 4000;
@@ -18,7 +19,7 @@ const keyword = z
   .string()
   .min(1)
   .max(60)
-  .regex(/^[^%_,\n]+$/, "keywords may not contain %, _, commas or newlines");
+  .regex(/^[^%_,\r\n\t]+$/, "keywords may not contain %, _, commas, tabs or newlines");
 
 export const ModelDraft = z.object({
   name: z.string().trim().min(1).max(120),
@@ -40,7 +41,7 @@ export type Candidate = z.infer<typeof Candidate>;
 export const ModelTurn = z.object({
   kind: z.enum(["drafts", "candidates", "not_found", "clarify"]),
   reply: z.string().trim().min(1).max(4000),
-  candidates: z.array(Candidate).max(8),
+  candidates: z.array(Candidate).max(MAX_CANDIDATES),
   drafts: z.array(ModelDraft).max(MAX_DRAFTS),
 });
 export type ModelTurn = z.infer<typeof ModelTurn>;
@@ -119,7 +120,7 @@ export function sanitizeKeywords(list: unknown): string[] {
   const out: string[] = [];
   for (const item of list) {
     if (typeof item !== "string") continue;
-    const word = item.replace(/[%_,\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60).trim();
+    const word = item.replace(/[%_,\r\n\t]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60).trim();
     const key = word.toLowerCase();
     if (!word || seen.has(key)) continue;
     seen.add(key);
@@ -156,6 +157,6 @@ export function sanitizeModelTurn(raw: unknown): unknown {
         };
       })
     : turn.drafts;
-  const candidates = Array.isArray(turn.candidates) ? turn.candidates.slice(0, 8) : turn.candidates;
+  const candidates = Array.isArray(turn.candidates) ? turn.candidates.slice(0, MAX_CANDIDATES) : turn.candidates;
   return { ...turn, drafts, candidates };
 }

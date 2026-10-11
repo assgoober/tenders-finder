@@ -128,6 +128,20 @@ describe("generate", () => {
     });
   });
 
+  it("returns empty, unblocked output for a response with no candidates and no block reason", async () => {
+    const { fake } = client({ candidates: [] });
+    const out = await createGemini(CONFIG, fake).generate({ system: "S", prompt: "P" });
+    expect(out).toEqual({ text: "", sources: [], blocked: false });
+  });
+
+  it("maps a non-429 SDK error to upstream", async () => {
+    const { fake, generateContent } = client({});
+    generateContent.mockRejectedValueOnce(Object.assign(new Error("Internal"), { status: 500 }));
+    await expect(createGemini(CONFIG, fake).generate({ system: "S", prompt: "P" })).rejects.toMatchObject({
+      code: "upstream",
+    });
+  });
+
   it("rejects when both search and jsonSchema are provided", async () => {
     const { fake, generateContent } = client({});
     await expect(
@@ -236,6 +250,8 @@ describe("toAgentError", () => {
     [Object.assign(new Error("x"), { status: 403 }), "unavailable"],
     [new Error("API key not valid"), "unavailable"],
     [new Error("socket hang up"), "upstream"],
+    [Object.assign(new Error("quota project not set"), { status: 400 }), "upstream"],
+    [new Error("You exceeded your current quota"), "quota"],
   ])("maps %s to %s", (err, code) => {
     expect(toAgentError(err).code).toBe(code);
   });

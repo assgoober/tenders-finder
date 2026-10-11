@@ -61,4 +61,8 @@ describe("config", () => {
     expect(reason).toMatch(/EMBEDDING_DIM is not a number/);
     expect(reason).toMatch(/abc/);
   });
+  it("names a non-integer EMBEDDING_DIM as not a whole number", () => {
+    const reason = previewUnavailableReason(readConfig({ ...FULL, EMBEDDING_DIM: "1024.5" }));
+    expect(reason).toBe('EMBEDDING_DIM is not a whole number ("1024.5")');
+  });
 });
