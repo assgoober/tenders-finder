@@ -47,6 +47,14 @@ original's project — always pass `gfetpegbmlctsmpqagqi` explicitly.
 Vercel URL or "the sweep machine" are about the original. For this copy
 they are either done (auth URLs, 0021) or not yet applicable (no sweep).
 
+### Dashboard look: on hold for the UX design (decided 11/10)
+
+The dashboard does not match the brand (`landing/index.html`: navy/blue, Heebo/
+Assistant/IBM Plex Mono, dark-first); it uses slate + Inter, and every screen added
+since copies that on purpose. The user is commissioning a UX design for the whole
+product. **Do not restyle anything until that design arrives.** Only fix outright
+rendering bugs (like the serif-font fallback fixed in b27489f).
+
 ### Onboarding chat (branch `onboarding-chat`, not merged)
 
 After login, a member with no alert profile is sent to `/onboarding`: they
