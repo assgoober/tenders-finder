@@ -46,10 +46,29 @@ export type TurnResult = {
   research: Research | null;
 };
 
+/**
+ * Keywords the Gemini API refuses in `responseJsonSchema`. Found live: with
+ * `minItems`/`maxItems` present the drafting call fails with 400
+ * INVALID_ARGUMENT, so every turn failed. Dropping them loses nothing —
+ * array sizes are enforced after the response by sanitizeModelTurn and the
+ * Zod parse in `structured`, which is where trust lives anyway.
+ */
+const UNSUPPORTED_BY_GEMINI = new Set(["$schema", "minItems", "maxItems"]);
+
+function stripUnsupported(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripUnsupported);
+  if (node && typeof node === "object") {
+    return Object.fromEntries(
+      Object.entries(node as Record<string, unknown>)
+        .filter(([key]) => !UNSUPPORTED_BY_GEMINI.has(key))
+        .map(([key, value]) => [key, stripUnsupported(value)]),
+    );
+  }
+  return node;
+}
+
 function jsonSchemaFor(schema: z.ZodType): Record<string, unknown> {
-  const out = { ...(z.toJSONSchema(schema, { unrepresentable: "any" }) as Record<string, unknown>) };
-  delete out.$schema;
-  return out;
+  return stripUnsupported(z.toJSONSchema(schema, { unrepresentable: "any" })) as Record<string, unknown>;
 }
 
 const RETRY_MIN_MS = 15_000;

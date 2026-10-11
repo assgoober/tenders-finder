@@ -197,6 +197,26 @@ describe("duplicate draft names", () => {
   });
 });
 
+describe("the schema sent to Gemini", () => {
+  it("has no minItems/maxItems, which the Gemini API rejects with 400 INVALID_ARGUMENT", async () => {
+    // Found in the live check: the drafting schema was refused outright, so
+    // every turn failed with "something went wrong". Array sizes are still
+    // enforced after the response (sanitizeModelTurn + Zod).
+    const { llm, calls } = fake([classify("describe"), turn()]);
+    await runTurn(request("radios"), llm, key);
+    for (const c of calls) {
+      const sent = JSON.stringify(c.jsonSchema);
+      expect(sent).not.toMatch(/"minItems"|"maxItems"/);
+    }
+  });
+  it("still rejects an over-long array after the response", async () => {
+    const tooMany = Array.from({ length: 9 }, (_, i) => modelDraft({ name: `P${i}`, source_ids: [], from_user: true }));
+    const { llm } = fake([classify("describe"), turn({ drafts: tooMany })]);
+    const out = await runTurn(request("radios"), llm, key);
+    expect(out.drafts.length).toBeLessThanOrEqual(8);
+  });
+});
+
 describe("deadline", () => {
   it("does not retry a bad answer when little time is left", async () => {
     const { llm, calls } = fake([classify("describe"), { text: "not json" }, turn()]);
