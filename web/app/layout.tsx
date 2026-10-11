@@ -13,8 +13,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={inter.variable}>{children}</body>
+    // The font variable must sit on <html>: Tailwind's base styles set
+    // font-family on <html> from var(--font-sans), and a variable defined
+    // only on <body> is undefined there — the whole rule is dropped and every
+    // page falls back to the browser's serif font.
+    <html lang="en" className={inter.variable}>
+      <body>{children}</body>
     </html>
   );
 }
