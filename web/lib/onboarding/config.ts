@@ -15,6 +15,11 @@ export type OnboardingConfig = {
   embeddingDim: number;
   /** @internal Raw EMBEDDING_DIM value for error messages. */
   _embeddingDimRaw?: string;
+  /** OpenAI is used for company web research only (never for embeddings —
+   *  those must match the corpus — and never for drafting). Optional so
+   *  hand-built configs in tests need not mention it. */
+  openaiApiKey?: string | null;
+  openaiResearchModel?: string | null;
 };
 
 /** The `vector(1024)` columns in migrations 0003/0004 fix this. */
@@ -31,7 +36,15 @@ export function readConfig(env: Record<string, string | undefined> = process.env
     embeddingModel: v("GEMINI_EMBEDDING_MODEL"),
     embeddingDim: dimNum,
     ...(dimStr ? { _embeddingDimRaw: dimStr } : {}),
+    openaiApiKey: v("OPENAI_API_KEY"),
+    openaiResearchModel: v("OPENAI_RESEARCH_MODEL"),
   };
+}
+
+/** Which service researches a named company. OpenAI only when both of its
+ *  settings are present; otherwise Gemini with Google Search, as before. */
+export function researchProvider(c: OnboardingConfig): "openai" | "gemini" {
+  return c.openaiApiKey && c.openaiResearchModel ? "openai" : "gemini";
 }
 
 export function chatUnavailableReason(c: OnboardingConfig): string | null {

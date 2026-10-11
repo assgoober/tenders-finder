@@ -6,11 +6,12 @@
  * the server.
  */
 import { runTurn } from "@/lib/onboarding/agent";
-import { chatUnavailableReason, readConfig } from "@/lib/onboarding/config";
+import { chatUnavailableReason, readConfig, researchProvider } from "@/lib/onboarding/config";
 import { clock } from "@/lib/onboarding/clock";
 import { AgentError, toAgentError } from "@/lib/onboarding/errors";
 import { createGemini } from "@/lib/onboarding/gemini";
 import { fail, makeRpc, requireMember } from "@/lib/onboarding/http";
+import { createOpenAIResearcher } from "@/lib/onboarding/openai";
 import { attachPreviews, previewDraft } from "@/lib/onboarding/preview";
 import { TurnRequest } from "@/lib/onboarding/schema";
 import { createClient } from "@/lib/supabase/server";
@@ -46,7 +47,13 @@ export async function POST(request: Request): Promise<Response> {
     // The platform kills the function at maxDuration; stop the agent early
     // enough to answer with a proper error instead.
     const deadline = clock.now() + TURN_BUDGET_MS;
-    const turn = await runTurn(parsed.data, llm, undefined, deadline);
+    // OpenAI researches named companies only when configured (Gemini's
+    // free tier refuses Google Search); everything else stays on Gemini.
+    const researcher =
+      researchProvider(config) === "openai"
+        ? createOpenAIResearcher({ apiKey: config.openaiApiKey!, model: config.openaiResearchModel! })
+        : undefined;
+    const turn = await runTurn(parsed.data, llm, undefined, deadline, researcher);
     // Reusing a preview whose draft did not change costs nothing, so it is
     // kept even when the budget is spent; only NEW previews are skipped then.
     const timeForNew = deadline - clock.now() > PREVIEW_MIN_MS;

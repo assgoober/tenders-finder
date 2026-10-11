@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GEO_NOTICE, runTurn } from "@/lib/onboarding/agent";
 import { GEO_NOTICE_TEXT_HE, BLOCKED_TEXT_HE } from "@/lib/onboarding/prompts";
@@ -194,6 +194,33 @@ describe("duplicate draft names", () => {
     ]);
     const out = await runTurn(request("x", { drafts: existing }), llm, key);
     expect(out.drafts.map((d) => d.key)).toEqual(["d1", "k1"]);
+  });
+});
+
+describe("research through a separate researcher (OpenAI)", () => {
+  it("uses the researcher for the company lookup and Gemini for everything else", async () => {
+    const { llm, calls } = fake([classify("company", "Elbit Systems"), turn()]);
+    const research = vi.fn(async (_req: { system: string; prompt: string; timeoutMs?: number }) => ({
+      text: "Elbit makes radios. [1]",
+      sources: [{ url: "https://elbitsystems.com/", title: "Elbit Systems" }],
+      blocked: false,
+    }));
+    const out = await runTurn(request("I work at Elbit Systems"), llm, key, Date.now() + 50_000, { research });
+    expect(research).toHaveBeenCalledTimes(1);
+    expect(research.mock.calls[0][0]).toMatchObject({ prompt: expect.stringContaining("Elbit Systems") });
+    expect(research.mock.calls[0][0].timeoutMs).toBeGreaterThan(0);
+    expect(calls.some((c) => c.search)).toBe(false);
+    expect(calls).toHaveLength(2);
+    expect(out.research?.sources[0]).toMatchObject({ n: 1, url: "https://elbitsystems.com/" });
+    expect(out.drafts[0].unconfirmed).toBe(false);
+  });
+
+  it("treats a researcher refusal like a blocked lookup", async () => {
+    const { llm } = fake([classify("company", "Something")]);
+    const research = vi.fn(async (_req: { system: string; prompt: string; timeoutMs?: number }) => ({ text: "", sources: [], blocked: true }));
+    const out = await runTurn(request("Something"), llm, key, undefined, { research });
+    expect(out.kind).toBe("clarify");
+    expect(out.reply).toBe(USER_MESSAGES.blocked);
   });
 });
 

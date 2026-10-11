@@ -178,6 +178,17 @@ describe("POST /api/onboarding", () => {
     expect(mocks.previewDraft).not.toHaveBeenCalled();
   });
 
+  it("hands the agent an OpenAI researcher only when both OpenAI settings are present", async () => {
+    mocks.runTurn.mockResolvedValue({ ...oneDraftTurn(), drafts: [] });
+    await post(POST, body());
+    expect(mocks.runTurn.mock.calls[0][4]).toBeUndefined();
+
+    vi.stubEnv("OPENAI_API_KEY", "sk-test");
+    vi.stubEnv("OPENAI_RESEARCH_MODEL", "research-model");
+    await post(POST, body());
+    expect(typeof mocks.runTurn.mock.calls[1][4]?.research).toBe("function");
+  });
+
   it("returns 504 when the agent times out", async () => {
     mocks.runTurn.mockRejectedValue(new AgentError("timeout"));
     expect((await post(POST, body())).status).toBe(504);

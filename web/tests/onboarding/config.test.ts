@@ -4,6 +4,7 @@ import {
   chatUnavailableReason,
   previewUnavailableReason,
   readConfig,
+  researchProvider,
 } from "@/lib/onboarding/config";
 
 const FULL = {
@@ -23,7 +24,17 @@ describe("config", () => {
       embeddingModel: "gemini-embedding-001",
       embeddingDim: 1024,
       _embeddingDimRaw: "1024",
+      openaiApiKey: null,
+      openaiResearchModel: null,
     });
+  });
+  it("uses OpenAI for research only when both its key and model are set", () => {
+    expect(researchProvider(readConfig(FULL))).toBe("gemini");
+    expect(researchProvider(readConfig({ ...FULL, OPENAI_API_KEY: "sk-x" }))).toBe("gemini");
+    expect(researchProvider(readConfig({ ...FULL, OPENAI_RESEARCH_MODEL: "m" }))).toBe("gemini");
+    const both = readConfig({ ...FULL, OPENAI_API_KEY: "sk-x", OPENAI_RESEARCH_MODEL: "m" });
+    expect(researchProvider(both)).toBe("openai");
+    expect(both).toMatchObject({ openaiApiKey: "sk-x", openaiResearchModel: "m" });
   });
   it("falls back to GEMINI_MODEL for chat and to 1024 dimensions", () => {
     const c = readConfig({ GEMINI_API_KEY: "k", GEMINI_MODEL: "m" });

@@ -21,6 +21,18 @@ export type GenerateResult = {
   blocked: boolean;
 };
 
+/**
+ * Web research for a named company. Gemini does it with Google Search when
+ * the key allows it; the free tier does not, so OpenAI's web search can take
+ * this one job (and only this one) — see config.researchProvider.
+ * Contract: `sources` come from the search tool's citation metadata, never
+ * from the model's text, deduplicated, http(s) only, and `text` marks cited
+ * statements with [n] where n is the 1-based position in `sources`.
+ */
+export interface Researcher {
+  research(request: { system: string; prompt: string; timeoutMs?: number }): Promise<GenerateResult>;
+}
+
 export interface GeminiLike {
   generate(request: GenerateRequest): Promise<GenerateResult>;
   embed(text: string): Promise<number[]>;

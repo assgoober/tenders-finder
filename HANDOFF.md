@@ -56,14 +56,23 @@ line citing sources, shows a live match preview per draft, and saves only
 what the user ticks. Design: `docs/superpowers/specs/2026-10-04-onboarding-chat-design.md`;
 plan: `docs/superpowers/plans/2026-10-05-onboarding-chat.md`.
 
-- **Built and reviewed, not yet run against a real model.** Plan Task 8 —
-  live checks — needs a Gemini key, which this copy does not have yet. 142
-  web tests use a fake Gemini. Until a key is set, `/onboarding` says chat
-  is unavailable and links to the form; nothing breaks.
-- **To finish it:** put the keys in BOTH `web/.env.local` and the root `.env`
-  (see `.env.example`, "Onboarding chat"); run a small sweep so the copy has
-  tenders; then Task 8 steps 3-5 (embedding parity Python vs TypeScript,
-  preview parity on real tenders, four browser conversations).
+- **Live-checked 11/10 with real keys** (Gemini free key "tenders-finder-copy"
+  in both env files; OpenAI key in `web/.env.local` only). Copy DB holds 299
+  real TED tenders. Embedding parity Python vs TypeScript: cosine 1.000000
+  (English and Hebrew). Preview vs `generate_matches_for_profile` on real
+  tenders: equal for 3 profiles incl. an exclusion. A real "I work at Elbit
+  Systems" turn: 18.8 s, 5 sources (all elbitsystems.com), 6 drafts matching
+  Elbit's real segments, none unconfirmed. Browser: login → redirect to
+  /onboarding, Hebrew RTL, quota/upstream error paths.
+- **Found by the live check, fixed:** Gemini rejects `minItems`/`maxItems` in
+  `responseJsonSchema` (400) — every turn failed; stripped before sending.
+- **Gemini FREE tier limits (measured):** Google Search grounding refused on
+  every model (429) — so company research goes through **OpenAI**
+  (`OPENAI_RESEARCH_MODEL`, research only, ADR-30); and **20 generate requests
+  per day per model** — a turn uses 2-4, so roughly 5-10 turns a day across
+  all users. Real use needs billing on the Google project. Not yet run in the
+  browser after the fixes: approving drafts → saved profiles (blocked only by
+  the daily quota; the code path is unit-tested).
 - **The vector is now made in two places** — the sweep (Python) and the
   preview (TypeScript). Same env names, a preview that disables itself when
   they don't line up, and a parity check in Task 8. A drift here gives

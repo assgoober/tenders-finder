@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 import { AgentError, USER_MESSAGES } from "./errors";
-import type { GeminiLike } from "./llm";
+import type { GeminiLike, Researcher } from "./llm";
 import {
   BLOCKED_TEXT_HE,
   CLASSIFY_SYSTEM,
@@ -136,11 +136,18 @@ function isHebrew(text: string): boolean {
   return /[֐-׿]/.test(text);
 }
 
+/** Research through Gemini's own Google Search grounding (the default). */
+export function geminiResearcher(llm: GeminiLike): Researcher {
+  return { research: (r) => llm.generate({ ...r, search: true }) };
+}
+
 export async function runTurn(
   req: TurnRequest,
   llm: GeminiLike,
   newKey: () => string = () => crypto.randomUUID(),
   deadline?: number,
+  /** Company research only. Defaults to Gemini with Google Search. */
+  researcher: Researcher = geminiResearcher(llm),
 ): Promise<TurnResult> {
   checkLimits(req);
 
@@ -174,10 +181,9 @@ export async function runTurn(
     let researchedThisTurn = false;
     if (named && cls.company_query && cls.company_query !== research?.query) {
       if (timeLeft(deadline) < CALL_MIN_MS) throw new AgentError("timeout");
-      const found = await llm.generate({
+      const found = await researcher.research({
         system: RESEARCH_SYSTEM,
         prompt: researchPrompt(cls.company_query),
-        search: true,
         timeoutMs: callTimeout(deadline),
       });
       if (found.blocked) return unchanged(blockedMessage, research);
