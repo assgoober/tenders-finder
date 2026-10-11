@@ -31,9 +31,22 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) return;
+    let cancelled = false;
+
     createClient()
       .auth.getUser()
-      .then(({ data }) => setSession(data.user ? "ready" : "missing"));
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        const next = error || !data?.user ? "missing" : "ready";
+        setSession(next);
+      })
+      .catch(() => {
+        if (!cancelled) setSession("missing");
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function onSubmit(event: React.FormEvent) {

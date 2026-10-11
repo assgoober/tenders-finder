@@ -83,19 +83,24 @@ export default function LoginPage() {
 
   async function resendConfirmation() {
     setBusy(true);
-    const { error: resendError } = await createClient().auth.resend({
-      type: "signup",
-      email,
-      options: { emailRedirectTo: authCallbackUrl() },
-    });
-    setBusy(false);
-    if (resendError) {
-      // Most often the free mailer's hourly limit; say so rather than pretend.
-      setError(resendError.message);
-      return;
+    try {
+      const { error: resendError } = await createClient().auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: authCallbackUrl() },
+      });
+      if (resendError) {
+        // Most often the free mailer's hourly limit; say so rather than pretend.
+        setError(resendError.message);
+        return;
+      }
+      setResent(true);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not resend the confirmation email.");
+    } finally {
+      setBusy(false);
     }
-    setResent(true);
-    setError(null);
   }
 
   if (!isSupabaseConfigured) {
