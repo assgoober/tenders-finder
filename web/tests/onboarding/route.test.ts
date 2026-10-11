@@ -189,6 +189,39 @@ describe("POST /api/onboarding", () => {
     expect(typeof mocks.runTurn.mock.calls[1][4]?.research).toBe("function");
   });
 
+  it("returns 429 with the quota message when the agent hits the quota", async () => {
+    mocks.runTurn.mockRejectedValue(new AgentError("quota"));
+    const res = await post(POST, body());
+    expect(res.status).toBe(429);
+    expect((await res.json()).error.message).toBe(USER_MESSAGES.quota);
+  });
+
+  it("answers 413 from Content-Length alone, before reading a huge body", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": "300000" },
+        body: JSON.stringify(body()),
+      }),
+    );
+    expect(res.status).toBe(413);
+    expect((await res.json()).error.code).toBe("too_long");
+    expect(mocks.runTurn).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body that is not application/json", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(body()),
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("bad_request");
+    expect(mocks.runTurn).not.toHaveBeenCalled();
+  });
+
   it("returns 504 when the agent times out", async () => {
     mocks.runTurn.mockRejectedValue(new AgentError("timeout"));
     expect((await post(POST, body())).status).toBe(504);
@@ -234,6 +267,18 @@ describe("POST /api/onboarding/preview", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ preview: { status: "unavailable" } });
     expect(mocks.previewDraft.mock.calls[0][1]).toEqual(["catering"]);
+  });
+
+  it("rejects a body that is not application/json", async () => {
+    const res = await PREVIEW(
+      new Request("http://localhost/api/onboarding/preview", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ description: DESC, excludedKeywords: [] }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(mocks.previewDraft).not.toHaveBeenCalled();
   });
 
   it("wraps previewDraft errors in error shape with status 502", async () => {

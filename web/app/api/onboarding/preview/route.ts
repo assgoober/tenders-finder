@@ -26,6 +26,10 @@ export async function POST(request: Request): Promise<Response> {
   const config = readConfig();
   if (chatUnavailableReason(config)) return fail("unavailable");
 
+  if (!(request.headers.get("content-type") ?? "").toLowerCase().includes("application/json")) {
+    return fail("bad_request");
+  }
+
   let payload: unknown;
   try {
     payload = await request.json();

@@ -4,7 +4,7 @@
  */
 import { HTTP_STATUS, USER_MESSAGES, type AgentErrorCode } from "./errors";
 import type { RpcFn } from "./preview";
-import { createClient } from "@/lib/supabase/server";
+import type { createClient } from "@/lib/supabase/server";
 
 export function fail(code: AgentErrorCode): Response {
   return Response.json({ error: { code, message: USER_MESSAGES[code] } }, { status: HTTP_STATUS[code] });

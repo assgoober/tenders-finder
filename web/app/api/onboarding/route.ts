@@ -8,7 +8,7 @@
 import { runTurn } from "@/lib/onboarding/agent";
 import { chatUnavailableReason, readConfig, researchProvider } from "@/lib/onboarding/config";
 import { clock } from "@/lib/onboarding/clock";
-import { AgentError, toAgentError } from "@/lib/onboarding/errors";
+import { toAgentError } from "@/lib/onboarding/errors";
 import { createGemini } from "@/lib/onboarding/gemini";
 import { fail, makeRpc, requireMember } from "@/lib/onboarding/http";
 import { createOpenAIResearcher } from "@/lib/onboarding/openai";
@@ -21,6 +21,10 @@ export const maxDuration = 60;
 
 const TURN_BUDGET_MS = 50_000;
 const PREVIEW_MIN_MS = 8_000;
+const MAX_BODY_BYTES = 200_000;
+
+const isJson = (request: Request) =>
+  (request.headers.get("content-type") ?? "").toLowerCase().includes("application/json");
 
 export async function POST(request: Request): Promise<Response> {
   const supabase = await createClient();
@@ -30,6 +34,12 @@ export async function POST(request: Request): Promise<Response> {
 
   const config = readConfig();
   if (chatUnavailableReason(config)) return fail("unavailable");
+
+  // Cheap guard: refuse a huge body before parsing it. runTurn still gives
+  // the precise per-message 413.
+  const length = Number(request.headers.get("content-length"));
+  if (Number.isFinite(length) && length > MAX_BODY_BYTES) return fail("too_long");
+  if (!isJson(request)) return fail("bad_request");
 
   let payload: unknown;
   try {
@@ -64,7 +74,6 @@ export async function POST(request: Request): Promise<Response> {
     );
     return Response.json({ ...turn, drafts });
   } catch (e) {
-    const err = e instanceof AgentError ? e : toAgentError(e);
-    return fail(err.code);
+    return fail(toAgentError(e).code);
   }
 }
