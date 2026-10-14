@@ -16,10 +16,10 @@ scheduler now runs this file directly and the agent's only job is to read the
 result afterwards.
 
 Usage:
-    python scraper-service/run_sweep.py                 # both sources
-    python scraper-service/run_sweep.py --source ted-eu # one
-    python scraper-service/run_sweep.py --limit 500     # bounded, for a smoke test
-    python scraper-service/run_sweep.py --dry-run       # no writes, no embeddings
+    python backend/scraper-service/run_sweep.py                 # both sources
+    python backend/scraper-service/run_sweep.py --source ted-eu # one
+    python backend/scraper-service/run_sweep.py --limit 500     # bounded, for a smoke test
+    python backend/scraper-service/run_sweep.py --dry-run       # no writes, no embeddings
 
 Exit codes are meant to be read by a scheduler:
     0  every source finished and wrote what it found
@@ -57,7 +57,7 @@ STAGE = {"now": "setup"}
 DEFAULT_LIMIT = 20000
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+ROOT = HERE.parent.parent  # the repository root: .env and logs/ live there
 sys.path.insert(0, str(HERE))
 
 

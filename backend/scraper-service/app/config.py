@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Must equal the vector(N) declared in supabase/migrations/0001_extensions.sql.
+# Must equal the vector(N) declared in backend/supabase/migrations/0001_extensions.sql.
 # Changing it requires a migration plus a full re-embedding — see REPOMIX.md
 # ADR-6. Asserted at startup in main.py so a mismatch fails loudly and early
 # rather than as an opaque INSERT error thousands of rows later.
@@ -21,7 +21,7 @@ EMBEDDING_DIM = 1024
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env", "../.env"),
+        env_file=(".env", "../.env", "../../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

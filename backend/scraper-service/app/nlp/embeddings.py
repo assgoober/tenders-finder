@@ -113,7 +113,7 @@ class GeminiEmbeddingProvider:
 
     **1024 dimensions are reachable, so no migration is needed.**
     `gemini-embedding-001` accepts `output_dimensionality`, and 1024 -- the
-    width `supabase/migrations/0001_extensions.sql` declares -- comes back
+    width `backend/supabase/migrations/0001_extensions.sql` declares -- comes back
     exactly. A provider that could only emit its native width would have
     forced `ALTER TABLE ... TYPE vector(N)` plus a full re-embedding.
 

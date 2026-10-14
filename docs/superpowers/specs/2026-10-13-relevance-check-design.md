@@ -41,7 +41,7 @@ nightly sweep:  check_pending_relevance()   ◀── NEW, before alerts
                 deliver_match_alerts()      ◀── reads pending_match_alerts (changed)
 ```
 
-The check runs in the Python sweep (`scraper-service`), in `finish_sweep`,
+The check runs in the Python sweep (`backend/scraper-service`), in `finish_sweep`,
 **after** profiles are embedded/backfilled and **before** `deliver_match_alerts`.
 
 ## 3. The check

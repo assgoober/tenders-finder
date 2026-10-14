@@ -17,6 +17,17 @@ Reply in the language the user writes in. (This line said "Reply in Hebrew";
 the user of this copy asked for English.) Code, comments, commit messages
 and documentation stay in English — keep that split.
 
+**Layout (2026-10-14):** the code moved into two folders at the user's
+request, ahead of hosting on Railway: `frontend/web` (Next.js dashboard),
+`frontend/landing` (static landing page), `backend/scraper-service` (Python
+sweep) and `backend/supabase` (migrations). Paths elsewhere in this file and
+in dated specs/plans written before then still say `web/`, `scraper-service/`
+etc. — read them as the new locations. The root `.env`, `logs/`,
+`.playwright-browsers/` and `run_sweep.cmd` stay at the root, so the Windows
+scheduled task needs no change. On Railway each service's Root Directory is
+its folder (`frontend/web`, `backend/scraper-service`). The Supabase CLI now
+runs from `backend/` (its link cache is `backend/supabase/.temp/`, ignored).
+
 ---
 
 ## THIS REPOSITORY IS A COPY — read before touching anything live
@@ -39,7 +50,7 @@ forced on the five tenant tables, 3 cron jobs, signup, 0021 and 0022 triggers;
 Site URL `http://localhost:3000`, and `http://localhost:3000/auth/callback`
 plus `http://localhost:3000/**` on the redirect allow-list (the wildcard
 because the callback carries `?next=...`, and an exact entry may not match it). Keys live in the gitignored `.env` (DB password,
-service-role key) and `web/.env.local` (anon key). The Supabase CLI on the
+service-role key) and `frontend/web/.env.local` (anon key). The Supabase CLI on the
 operator's machine is logged into an account that can also reach the
 original's project — always pass `gfetpegbmlctsmpqagqi` explicitly.
 
@@ -49,7 +60,7 @@ they are either done (auth URLs, 0021) or not yet applicable (no sweep).
 
 ### Dashboard look: on hold for the UX design (decided 11/10)
 
-The dashboard does not match the brand (`landing/index.html`: navy/blue, Heebo/
+The dashboard does not match the brand (`frontend/landing/index.html`: navy/blue, Heebo/
 Assistant/IBM Plex Mono, dark-first); it uses slate + Inter, and every screen added
 since copies that on purpose. The user is commissioning a UX design for the whole
 product. **Do not restyle anything until that design arrives.** Only fix outright
@@ -65,7 +76,7 @@ what the user ticks. Design: `docs/superpowers/specs/2026-10-04-onboarding-chat-
 plan: `docs/superpowers/plans/2026-10-05-onboarding-chat.md`.
 
 - **Live-checked 11/10 with real keys** (Gemini free key "tenders-finder-copy"
-  in both env files; OpenAI key in `web/.env.local` only). Copy DB holds 299
+  in both env files; OpenAI key in `frontend/web/.env.local` only). Copy DB holds 299
   real TED tenders. Embedding parity Python vs TypeScript: cosine 1.000000
   (English and Hebrew). Preview vs `generate_matches_for_profile` on real
   tenders: equal for 3 profiles incl. an exclusion. A real "I work at Elbit
@@ -281,7 +292,7 @@ Each was decided for a reason and re-deciding them is not in scope.
    `User-agent: * / Disallow: /`. Re-confirmed after a robots-parsing bug was
    fixed, so it is policy, not artefact.
 3. **The Supabase service-role key bypasses RLS entirely.** It lives in the
-   root `.env` for the scraper and nowhere else — never in `web/`, never
+   root `.env` for the scraper and nowhere else — never in `frontend/web/`, never
    behind `NEXT_PUBLIC_`, never in a commit.
 4. **Never persist unvalidated LLM output.** Validate against the Pydantic
    model; on failure retry once with the errors fed back; on a second failure

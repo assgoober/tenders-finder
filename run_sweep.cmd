@@ -26,5 +26,5 @@ if not exist "%~dp0logs" mkdir "%~dp0logs"
 python -m playwright install chromium > "%~dp0logs\playwright-install.log" 2>&1
 set "PLAYWRIGHT_INSTALL_EXIT=%ERRORLEVEL%"
 
-python "%~dp0scraper-service\run_sweep.py" %*
+python "%~dp0backend\scraper-service\run_sweep.py" %*
 exit /b %ERRORLEVEL%

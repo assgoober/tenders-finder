@@ -151,7 +151,7 @@ export default async function Page({ searchParams }: { searchParams: { onboarded
         <Notice title="You are not a member of any organization.">
           Tenders are visible to any signed-in user, but alerts and the bid pipeline are scoped to an
           organization, so both stay empty until your account is added to one. The two inserts that
-          do it are in <code>supabase/README.md</code>.
+          do it are in <code>backend/supabase/README.md</code>.
         </Notice>
       ) : null}
 

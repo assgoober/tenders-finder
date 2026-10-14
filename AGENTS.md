@@ -4,10 +4,10 @@ This repository holds one project. Everything in it is Tenders Finder.
 
 | Path | Piece | Stack |
 |---|---|---|
-| `web/` | Dashboard | Next.js 14 |
-| `scraper-service/` | Aggregation agents + NLP extraction | Python · FastAPI · Playwright |
-| `supabase/` | Schema, RLS, matching engine | PostgreSQL + pgvector |
-| `landing/` | Public landing page | Hebrew source, English generated (`npm run build:en`) |
+| `frontend/web/` | Dashboard | Next.js 14 |
+| `backend/scraper-service/` | Aggregation agents + NLP extraction | Python · FastAPI · Playwright |
+| `backend/supabase/` | Schema, RLS, matching engine | PostgreSQL + pgvector |
+| `frontend/landing/` | Public landing page | Hebrew source, English generated (`npm run build:en`) |
 
 Project knowledge base: `REPOMIX.md` at the repository root. Read it before
 making architectural decisions.
@@ -31,13 +31,13 @@ original source document.
 
 ## Brand and visual identity
 
-`landing/index.html` is the single source of truth for the brand. It carries
+`frontend/landing/index.html` is the single source of truth for the brand. It carries
 the logo, the full colour token set for both themes, and a design plan in a
 comment at the top of the file explaining why each choice was made.
 
-It is also the Hebrew source of truth for the site's copy. `landing/en/`
+It is also the Hebrew source of truth for the site's copy. `frontend/landing/en/`
 is **generated** from it by `npm run build:en` against
-`landing/content/en.json` — never hand-edited, and never the file you make a
+`frontend/landing/content/en.json` — never hand-edited, and never the file you make a
 content change in. `npm run check:en` fails when Hebrew has been edited and
 its translation has not.
 
@@ -49,7 +49,7 @@ has not decided what it is.
 The load-bearing parts:
 
 - **Logo:** `brand/logo.png` is the master, keyed from the operator's own
-  artwork; `landing/logo.png` is that file resized for the web, and the
+  artwork; `frontend/landing/logo.png` is that file resized for the web, and the
   favicon and the Apple touch icon are cut from it. Every mark on the site
   comes from one image on purpose -- a favicon that drifts from the header
   mark is a favicon nobody associates with the product. Its aspect ratio is
@@ -189,16 +189,16 @@ the answer is SQL handed to the operator.
 
 ```bash
 # Web
-cd web && npm install && npm run dev
-cd web && npm run typecheck && npm run lint
+cd frontend/web && npm install && npm run dev
+cd frontend/web && npm run typecheck && npm run lint
 
 # Scraper / NLP service
-cd scraper-service && pip install -r requirements.txt
-cd scraper-service && uvicorn app.main:app --reload
-cd scraper-service && pytest -q
+cd backend/scraper-service && pip install -r requirements.txt
+cd backend/scraper-service && uvicorn app.main:app --reload
+cd backend/scraper-service && pytest -q
 
 # Landing page
-cd landing && npm run serve
+cd frontend/landing && npm run serve
 ```
 
 ## Done criteria
@@ -206,8 +206,8 @@ cd landing && npm run serve
 A task is not complete until:
 
 1. `npm run typecheck` passes in `web` (for web changes).
-2. `pytest -q` passes in `scraper-service` (for service changes).
-3. New SQL lives in a new numbered file under `supabase/migrations/` — never
+2. `pytest -q` passes in `backend/scraper-service` (for service changes).
+3. New SQL lives in a new numbered file under `backend/supabase/migrations/` — never
    edit an applied migration.
 4. Any new tenant-scoped table has an RLS policy in the same migration.
 5. `REPOMIX.md` is updated when an architectural decision changes.

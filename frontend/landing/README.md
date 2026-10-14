@@ -40,7 +40,7 @@ these are run from your machine. Nothing here is built — Vercel serves the
 directory as-is, with the headers in `vercel.json`.
 
 ```bash
-cd landing
+cd frontend/landing
 npx vercel login          # once
 npx vercel deploy --prod  # answer: use current directory, framework "Other"
 ```

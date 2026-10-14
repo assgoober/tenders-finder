@@ -14,11 +14,14 @@ Agent working rules: [`AGENTS.md`](AGENTS.md).
 ## Layout
 
 ```
-supabase/migrations/   PostgreSQL schema: pgvector, RLS, hybrid matching engine
-supabase/seed.sql      Local development data (never run in production)
-scraper-service/       Python · FastAPI · Playwright · LLM extraction (Gemini or Anthropic)
-web/                   Next.js 14 dashboard
-landing/               Public landing page — Hebrew source, English generated
+frontend/
+  web/                         Next.js 14 dashboard
+  landing/                     Public landing page — Hebrew source, English generated
+backend/
+  scraper-service/             Python · FastAPI · Playwright · LLM extraction (Gemini or Anthropic)
+  supabase/migrations/         PostgreSQL schema: pgvector, RLS, hybrid matching engine
+  supabase/seed.sql            Local development data (never run in production)
+run_sweep.cmd                  Windows launcher for the nightly sweep (stays at the root)
 ```
 
 ## Status
@@ -62,7 +65,7 @@ been applied — add a new file.
 ### 2. Scraper / NLP service
 
 ```bash
-cd scraper-service
+cd backend/scraper-service
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium     # only needed for real portal agents
@@ -156,7 +159,7 @@ digest exists to prevent.
 ### 3. Dashboard
 
 ```bash
-cd web
+cd frontend/web
 npm install
 npm run dev          # http://localhost:3000
 ```
@@ -164,9 +167,9 @@ npm run dev          # http://localhost:3000
 With no credentials it renders `lib/mock-data.ts` and says so in the page, so
 a fresh checkout works before the database does.
 
-**Live data needs its own env file.** Next.js reads env from the `web/`
+**Live data needs its own env file.** Next.js reads env from the `frontend/web/`
 directory, not the repository root, so the root `.env` the scraper service
-uses is invisible to it. Create `web/.env.local`:
+uses is invisible to it. Create `frontend/web/.env.local`:
 
 ```ini
 NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
@@ -189,7 +192,7 @@ knowing before concluding something is broken:
 | What you see | Why |
 |---|---|
 | Redirected to `/login` | Every policy keys on `auth.uid()`, so signed out reads as an empty database rather than an error. The app refuses to render one |
-| Signed in, but no alerts and no pipeline | Your account belongs to no organization. Both are scoped to membership. See [`supabase/README.md`](supabase/README.md) |
+| Signed in, but no alerts and no pipeline | Your account belongs to no organization. Both are scoped to membership. See [`backend/supabase/README.md`](backend/supabase/README.md) |
 | Signed in, no tenders at all | Check `EMBEDDING_PROVIDER`. A tender with no embedding is invisible to every query that matters, and the corpus is empty rather than broken |
 
 Accounts come from `/signup`. A trigger on `auth.users` provisions the
@@ -380,7 +383,7 @@ Playwright — not the service's full `requirements.txt`.
 
 ```bash
 git clone https://github.com/omer-izhaki/tenders-finder.git
-cd tenders-finder/scraper-service
+cd tenders-finder/backend/scraper-service
 
 pip install playwright
 playwright install chromium
@@ -393,7 +396,7 @@ python tools/probe_portal.py --url "https://www.gov.il/he/collectors/publication
 
 ```powershell
 git clone https://github.com/omer-izhaki/tenders-finder.git
-cd tenders-finder\scraper-service
+cd tenders-finder\backend\scraper-service
 
 pip install playwright
 playwright install chromium
@@ -455,7 +458,7 @@ than raising:
 
 ## Adding a tender portal
 
-1. Create `scraper-service/app/agents/<portal>.py`.
+1. Create `backend/scraper-service/app/agents/<portal>.py`.
 2. Subclass `PlaywrightPortalAgent` (listing + detail portals) or
    `TenderSourceAgent` (anything else) and decorate it with `@register_agent`.
 3. Import it in `app/agents/__init__.py`.
@@ -469,6 +472,6 @@ Nothing in the pipeline changes. Keep navigation (`discover`) and extraction
 ## Checks
 
 ```bash
-cd scraper-service && pytest -q
-cd web && npm run typecheck && npm run lint && npm run build
+cd backend/scraper-service && pytest -q
+cd frontend/web && npm run typecheck && npm run lint && npm run build
 ```

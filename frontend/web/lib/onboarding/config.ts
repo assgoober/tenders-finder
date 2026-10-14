@@ -2,7 +2,7 @@
  * Settings for the onboarding agent, read from the environment.
  *
  * The embedding settings use the SAME variable names the scraper reads
- * (`scraper-service/app/config.py`), because the preview's vectors must be
+ * (`backend/scraper-service/app/config.py`), because the preview's vectors must be
  * comparable with the corpus the sweep embedded. A vector from another model
  * has the right shape and a meaningless score — so the preview is disabled,
  * not guessed, whenever these do not line up.

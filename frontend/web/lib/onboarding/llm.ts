@@ -38,7 +38,7 @@ export interface GeminiLike {
   embed(text: string): Promise<number[]>;
 }
 
-/** L2-normalize, as `scraper-service/app/nlp/embeddings.py::_normalize` does:
+/** L2-normalize, as `backend/scraper-service/app/nlp/embeddings.py::_normalize` does:
  *  a truncated Gemini vector is not unit length, and cosine thresholds assume it. */
 export function normalize(v: number[]): number[] {
   const length = Math.sqrt(v.reduce((sum, x) => sum + x * x, 0));

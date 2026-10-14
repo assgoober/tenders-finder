@@ -2,7 +2,7 @@
  * @type {import('next').NextConfig}
  *
  * The response headers below are the ones the landing page has carried since
- * it was deployed (`landing/vercel.json`). The dashboard has had none of them,
+ * it was deployed (`frontend/landing/vercel.json`). The dashboard has had none of them,
  * for no better reason than that it had never been deployed anywhere — and it
  * is the half of the product that holds a session cookie and renders one
  * tenant's bid pipeline, so it is the half that needed them more.

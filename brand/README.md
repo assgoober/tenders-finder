@@ -8,10 +8,10 @@ opaque black field, 1254x1254, JPEG.
 
 | Derived file | How |
 |---|---|
-| `landing/logo.png` | resized to 384px wide |
-| `landing/favicon-32.png` | centred on a 32px transparent square |
-| `landing/apple-touch-icon.png` | centred on a 180px transparent square |
-| `landing/og.png` | rendered by `landing/tools/build-og.mjs` |
+| `frontend/landing/logo.png` | resized to 384px wide |
+| `frontend/landing/favicon-32.png` | centred on a 32px transparent square |
+| `frontend/landing/apple-touch-icon.png` | centred on a 180px transparent square |
+| `frontend/landing/og.png` | rendered by `frontend/landing/tools/build-og.mjs` |
 
 Two things worth knowing before you touch it.
 

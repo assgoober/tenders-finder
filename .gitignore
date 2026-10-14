@@ -8,20 +8,20 @@ node_modules/
 !.env.example
 secrets/
 
-# next.js (web/)
+# next.js (frontend/web/)
 .next/
 out/
 next-env.d.ts
 *.tsbuildinfo
 
-# python (scraper-service/)
+# python (backend/scraper-service/)
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 .pytest_cache/
 # Chromium for the Playwright agents, pinned inside the project by
-# run_sweep.cmd so the scheduled task finds it whatever account runs it.
+# run_sweep.cmd (repository root) so the scheduled task finds it whatever account runs it.
 .playwright-browsers/
 
 # tooling / local agent state
@@ -39,7 +39,7 @@ venv/
 # the field alone was theatre because `raw_row` still carried it; the same
 # logic applies here, one layer further out. Fixtures are for running tests
 # locally, not for the repository.
-scraper-service/tests/fixtures/
+backend/scraper-service/tests/fixtures/
 
 # repomix packed output
 repomix-output.xml
@@ -54,3 +54,6 @@ logs/
 
 # Rendered alert bodies: they contain real recipient addresses.
 alert-*.txt
+
+# Supabase CLI cache (version check, project link)
+backend/supabase/.temp/

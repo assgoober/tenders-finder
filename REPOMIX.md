@@ -159,7 +159,7 @@ HTTP 200 עם `stop_reason: "refusal"` ו-`content` ריק. קוד שקורא א
 בסדר, והממשק לא נותן דרך לטפל בזה. **ריצה שהחניתה שליש מהמכרזים נראתה
 בדיוק כמו ריצה שעבדה.**
 
-**החלטה א' — תור סקירה** (`web/components/review-queue.tsx`), טאב שלישי:
+**החלטה א' — תור סקירה** (`frontend/web/components/review-queue.tsx`), טאב שלישי:
 
 - **ממוין לפי הדדליין הקרוב ביותר.** מכרז מוחנה שנסגר ביום שישי הוא זה
   שעולה כסף אם יישאר מוחנה.
@@ -527,7 +527,8 @@ Voyage AI (`voyage-3-large`), שמייצר 1024 מימדים.
 **החלטה.** Tenders Finder עבר ל-`omer-izhaki/tenders-finder`, ריפו משלו, עם
 ההיסטוריה (`git subtree split --prefix=tenders-finder` — 20 קומיטים; שלושה
 מהמקוריים נגעו רק בקבצי שורש והובאו כקומיט אחד). `web/`, `scraper-service/`,
-`supabase/` ו-`landing/` יושבים בשורש.
+`supabase/` ו-`landing/` ישבו בשורש; ב-14.10.2026 עברו ל-`frontend/` (`web/`,
+`landing/`) ול-`backend/` (`scraper-service/`, `supabase/`) לקראת אירוח ב-Railway.
 
 **הסינון, ה-`include`/`ignore` והטבלה נמחקו — לא הותאמו.** התאמה הייתה
 משאירה את המנגנון שדורש תחזוקה; מחיקה מסירה את הצורך בו. הדרך היחידה
@@ -673,7 +674,7 @@ Tenders Finder ב-`main` — כל 23 הקומיטים חיו על ענף הפי�
 
 **ההחלטה.** בעבודה הזאת אין שיקול דעת: fetch → filter → embed → upsert.
 לעטוף עבודת batch דטרמיניסטית של ארבע שעות בתוך שיחה **מוסיפה מצב כשל שאין
-לו קשר לרכש ואינה קונה דבר.** `scraper-service/run_sweep.py` הוא סקריפט
+לו קשר לרכש ואינה קונה דבר.** `backend/scraper-service/run_sweep.py` הוא סקריפט
 עצמאי, `run_sweep.cmd` עוטף אותו, ו-Windows Task Scheduler מריץ אותו ישירות.
 תפקיד הסוכן הוא **לקרוא את התוצאה אחר כך**, לא לבצע.
 
@@ -1017,16 +1018,16 @@ README.md                      הוראות הרצה
 .github/workflows/
 └── ci.yml                     CI: pytest · web · דף נחיתה (ADR-16), בלי סינון
 
-supabase/migrations/
+backend/supabase/migrations/
 ├── 0001_extensions.sql            pgvector, pgcrypto, קבוע המימד
 ├── 0002_organizations_users.sql   ארגונים, חברות, RLS
 ├── 0003_tenders.sql               מכרזים, מסמכים, אינדקסים (HNSW + FTS)
 ├── 0004_alert_profiles.sql        פרופילי התראה + pipeline + matches
 └── 0005_matching_engine.sql       פונקציות חיפוש היברידי + טריגר התראות
-supabase/seed.sql                  נתוני דמו לפיתוח בלבד — לא מיגרציה, ולא
+backend/supabase/seed.sql          נתוני דמו לפיתוח בלבד — לא מיגרציה, ולא
                                    לרוץ על ייצור
 
-scraper-service/               Python · FastAPI · Playwright · Claude
+backend/scraper-service/       Python · FastAPI · Playwright · Claude
 ├── app/
 │   ├── main.py                FastAPI endpoints
 │   ├── config.py              Settings (pydantic-settings)
@@ -1042,13 +1043,13 @@ scraper-service/               Python · FastAPI · Playwright · Claude
 ├── pytest.ini                 pythonpath=. — בלעדיו `pytest -q` נשבר (ADR-16)
 └── requirements.txt           anthropic>=1.2.0 — הרצפה נושאת משקל (ADR-13)
 
-web/                           Next.js 14 App Router
+frontend/web/                  Next.js 14 App Router
 ├── app/                       layout · page · tenders/[id]
 ├── components/                feed · detail · pipeline board ·
 │                              review-queue (ADR-15) · alerts-panel · ui/
 └── lib/                       types · mock-data · utils
 
-landing/                       דף נחיתה — HTML אחד, בלי שלב בנייה
+frontend/landing/              דף נחיתה — HTML אחד, בלי שלב בנייה
 ├── index.html                 כולל רצועת מקורות ותרשים התכנסות
 ├── og.png · favicon.svg       כרטיס שיתוף (1200×630) ואייקון
 ├── vercel.json                CSP · nosniff · referrer · cache

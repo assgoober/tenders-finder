@@ -79,7 +79,7 @@ $("*").each((_, el) => {
 if (missing.length) {
   console.error(`${missing.length} string(s) have no English:\n`);
   for (const m of [...new Set(missing)].slice(0, 20)) console.error(`  ${m}`);
-  console.error(`\nfix: add them to landing/content/en.json`);
+  console.error(`\nfix: add them to frontend/landing/content/en.json`);
   process.exit(1);
 }
 
