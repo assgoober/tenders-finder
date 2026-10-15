@@ -5,7 +5,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 import type { OnboardingConfig } from "./config";
-import { AgentError, toAgentError } from "./errors";
+import { AgentError, isOverloaded, toAgentError } from "./errors";
 import { normalize, type GeminiLike, type GenerateRequest, type GenerateResult } from "./llm";
 
 type ResponseLike = {
@@ -71,7 +71,42 @@ export function annotateCitations(
   return result.toString("utf8");
 }
 
-export function createGemini(config: OnboardingConfig, client?: GenAIClient): GeminiLike {
+/** Waits between attempts when Google reports it is overloaded. */
+export const OVERLOAD_BACKOFF_MS = [1_000, 2_500];
+
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Run `call` and retry it while Google reports overload (503), up to
+ * OVERLOAD_BACKOFF_MS.length more times. A retry is only made if the call's
+ * own time budget still has room for the wait plus a real attempt, so a
+ * retry can never push a turn past the route's limit.
+ */
+export async function withOverloadRetry<T>(
+  call: (timeoutMs: number | undefined) => Promise<T>,
+  timeoutMs: number | undefined,
+  sleep: (ms: number) => Promise<void> = realSleep,
+  now: () => number = Date.now,
+): Promise<T> {
+  const start = now();
+  for (let attempt = 0; ; attempt++) {
+    const left = timeoutMs === undefined ? undefined : timeoutMs - (now() - start);
+    try {
+      return await call(left);
+    } catch (e) {
+      const wait = OVERLOAD_BACKOFF_MS[attempt];
+      const roomLeft = timeoutMs === undefined ? Infinity : timeoutMs - (now() - start) - wait;
+      if (!isOverloaded(e) || wait === undefined || roomLeft < 3_000) throw e;
+      await sleep(wait);
+    }
+  }
+}
+
+export function createGemini(
+  config: OnboardingConfig,
+  client?: GenAIClient,
+  sleep: (ms: number) => Promise<void> = realSleep,
+): GeminiLike {
   const sdk: GenAIClient =
     client ??
     (new GoogleGenAI({
@@ -87,18 +122,23 @@ export function createGemini(config: OnboardingConfig, client?: GenAIClient): Ge
 
       let response: ResponseLike;
       try {
-        response = await sdk.models.generateContent({
-          model: config.chatModel,
-          contents: request.prompt,
-          config: {
-            systemInstruction: request.system,
-            ...(request.timeoutMs !== undefined ? { httpOptions: { timeout: request.timeoutMs } } : {}),
-            ...(request.search ? { tools: [{ googleSearch: {} }] } : {}),
-            ...(request.jsonSchema
-              ? { responseMimeType: "application/json", responseJsonSchema: request.jsonSchema }
-              : {}),
-          },
-        });
+        response = await withOverloadRetry(
+          (timeout) =>
+            sdk.models.generateContent({
+              model: config.chatModel,
+              contents: request.prompt,
+              config: {
+                systemInstruction: request.system,
+                ...(timeout !== undefined ? { httpOptions: { timeout } } : {}),
+                ...(request.search ? { tools: [{ googleSearch: {} }] } : {}),
+                ...(request.jsonSchema
+                  ? { responseMimeType: "application/json", responseJsonSchema: request.jsonSchema }
+                  : {}),
+              },
+            }),
+          request.timeoutMs,
+          sleep,
+        );
       } catch (e) {
         throw toAgentError(e);
       }
@@ -142,11 +182,16 @@ export function createGemini(config: OnboardingConfig, client?: GenAIClient): Ge
 
     async embed(text: string): Promise<number[]> {
       try {
-        const response = await sdk.models.embedContent({
-          model: config.embeddingModel,
-          contents: [text],
-          config: { taskType: "RETRIEVAL_QUERY", outputDimensionality: config.embeddingDim },
-        });
+        const response = await withOverloadRetry(
+          () =>
+            sdk.models.embedContent({
+              model: config.embeddingModel,
+              contents: [text],
+              config: { taskType: "RETRIEVAL_QUERY", outputDimensionality: config.embeddingDim },
+            }),
+          undefined,
+          sleep,
+        );
         const values = response.embeddings?.[0]?.values;
         if (!values || values.length === 0) {
           throw new AgentError("upstream", "the embedding response contained no vector");

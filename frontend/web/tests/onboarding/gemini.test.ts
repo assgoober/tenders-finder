@@ -260,3 +260,60 @@ describe("toAgentError", () => {
     expect(toAgentError(e)).toBe(e);
   });
 });
+
+describe("overload retry (Google 503 high demand)", () => {
+  const overloaded = Object.assign(new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'), { status: 503 });
+  const ok = { text: "{}", candidates: [{ finishReason: "STOP" }] };
+
+  it("retries a 503 and succeeds", async () => {
+    const generateContent = vi.fn().mockRejectedValueOnce(overloaded).mockResolvedValueOnce(ok);
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    const out = await createGemini(CONFIG, fake, sleep).generate({ system: "S", prompt: "P", timeoutMs: 40_000 });
+    expect(out.text).toBe("{}");
+    expect(generateContent).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(1_000);
+  });
+
+  it("gives up after the retries as 'busy', not a generic failure", async () => {
+    const generateContent = vi.fn().mockRejectedValue(overloaded);
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    const err = await createGemini(CONFIG, fake, async () => {}).generate({ system: "S", prompt: "P" }).catch((e) => e);
+    expect(err).toBeInstanceOf(AgentError);
+    expect(err.code).toBe("busy");
+    expect(generateContent).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry other errors", async () => {
+    const generateContent = vi.fn().mockRejectedValue(Object.assign(new Error("bad request"), { status: 400 }));
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    const err = await createGemini(CONFIG, fake, async () => {}).generate({ system: "S", prompt: "P" }).catch((e) => e);
+    expect(err.code).toBe("upstream");
+    expect(generateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry when the call's time budget has no room left", async () => {
+    const generateContent = vi.fn().mockRejectedValue(overloaded);
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    const err = await createGemini(CONFIG, fake, async () => {}).generate({ system: "S", prompt: "P", timeoutMs: 2_000 }).catch((e) => e);
+    expect(err.code).toBe("busy");
+    expect(generateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes the remaining budget, not the original, to a retry", async () => {
+    let t = 0;
+    const { withOverloadRetry } = await import("@/lib/onboarding/gemini");
+    const seen: (number | undefined)[] = [];
+    await withOverloadRetry(
+      async (timeout) => {
+        seen.push(timeout);
+        if (seen.length === 1) { t += 5_000; throw overloaded; }
+        return "ok";
+      },
+      40_000,
+      async (ms) => { t += ms; },
+      () => t,
+    );
+    expect(seen).toEqual([40_000, 34_000]);
+  });
+});

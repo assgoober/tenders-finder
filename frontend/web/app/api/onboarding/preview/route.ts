@@ -4,7 +4,7 @@ import { z } from "zod";
 import { chatUnavailableReason, readConfig } from "@/lib/onboarding/config";
 import { toAgentError } from "@/lib/onboarding/errors";
 import { createGemini } from "@/lib/onboarding/gemini";
-import { fail, makeRpc, requireMember } from "@/lib/onboarding/http";
+import { fail, logFailure, makeRpc, requireMember } from "@/lib/onboarding/http";
 import { previewDraft } from "@/lib/onboarding/preview";
 import { DraftView } from "@/lib/onboarding/schema";
 import { createClient } from "@/lib/supabase/server";
@@ -48,6 +48,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ preview });
   } catch (e) {
     const err = toAgentError(e);
+    logFailure("preview", err);
     return fail(err.code);
   }
 }

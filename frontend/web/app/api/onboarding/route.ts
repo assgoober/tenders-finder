@@ -10,7 +10,7 @@ import { chatUnavailableReason, readConfig, researchProvider } from "@/lib/onboa
 import { clock } from "@/lib/onboarding/clock";
 import { toAgentError } from "@/lib/onboarding/errors";
 import { createGemini } from "@/lib/onboarding/gemini";
-import { fail, makeRpc, requireMember } from "@/lib/onboarding/http";
+import { fail, logFailure, makeRpc, requireMember } from "@/lib/onboarding/http";
 import { createOpenAIResearcher } from "@/lib/onboarding/openai";
 import { attachPreviews, previewDraft } from "@/lib/onboarding/preview";
 import { TurnRequest } from "@/lib/onboarding/schema";
@@ -74,6 +74,8 @@ export async function POST(request: Request): Promise<Response> {
     );
     return Response.json({ ...turn, drafts });
   } catch (e) {
-    return fail(toAgentError(e).code);
+    const err = toAgentError(e);
+    logFailure("turn", err);
+    return fail(err.code);
   }
 }
