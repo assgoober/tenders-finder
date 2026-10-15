@@ -1,8 +1,9 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { redirectToPath } from "@/lib/http/relative-redirect";
 import { safeNextPath } from "@/lib/supabase/redirect";
 
 /**
@@ -22,7 +23,8 @@ import { safeNextPath } from "@/lib/supabase/redirect";
  *   cross-device case; no code change has to follow.
  *
  * Either way the session cookie is written on this response and the user is
- * forwarded to `next` already signed in.
+ * forwarded to `next` already signed in. Redirects are relative: behind the
+ * hosting proxy `origin` is the container's address (see relative-redirect).
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
@@ -34,22 +36,22 @@ export async function GET(request: NextRequest) {
   // Supabase reports an expired or already-used link in the query string
   // before we ever get to exchange anything.
   if (searchParams.get("error")) {
-    return NextResponse.redirect(new URL("/login?error=link", origin));
+    return redirectToPath("/login?error=link");
   }
 
   // Demo build: there is no auth server to exchange anything with, and a
   // client built on an empty URL throws.
-  if (!isSupabaseConfigured) return NextResponse.redirect(new URL("/", origin));
+  if (!isSupabaseConfigured) return redirectToPath("/");
 
   const supabase = await createClient();
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) return NextResponse.redirect(new URL(next, origin));
+    if (!error) return redirectToPath(next);
   } else if (tokenHash && type) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    if (!error) return NextResponse.redirect(new URL(next, origin));
+    if (!error) return redirectToPath(next);
   }
 
-  return NextResponse.redirect(new URL("/login?error=link", origin));
+  return redirectToPath("/login?error=link");
 }
