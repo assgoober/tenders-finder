@@ -336,3 +336,25 @@ describe("fallback model on overload", () => {
     expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["chat-model", "chat-model", "chat-model"]);
   });
 });
+
+describe("fallback model on a spent quota", () => {
+  const quota = Object.assign(new Error("429 RESOURCE_EXHAUSTED exceeded your current quota"), { status: 429 });
+  const ok = { text: "{}", candidates: [{ finishReason: "STOP" }] };
+
+  it("moves to the fallback model at once (quotas are per model)", async () => {
+    const generateContent = vi.fn().mockRejectedValueOnce(quota).mockResolvedValueOnce(ok);
+    const sleep = vi.fn();
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    await createGemini({ ...CONFIG, chatFallbackModel: "fallback-model" }, fake, sleep).generate({ system: "S", prompt: "P" });
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["chat-model", "fallback-model"]);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("still reports quota when there is no fallback", async () => {
+    const generateContent = vi.fn().mockRejectedValue(quota);
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    const err = await createGemini(CONFIG, fake, async () => {}).generate({ system: "S", prompt: "P" }).catch((e) => e);
+    expect(err.code).toBe("quota");
+    expect(generateContent).toHaveBeenCalledTimes(1);
+  });
+});

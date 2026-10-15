@@ -123,29 +123,43 @@ export function createGemini(
 
       let response: ResponseLike;
       try {
-        response = await withOverloadRetry(
-          (timeout, attempt) =>
-            sdk.models.generateContent({
-              // The last attempt goes to the fallback model when one is set:
-              // overload bursts hit one model at a time (2026-10-15:
-              // 3.6-flash failed for minutes while 3.7-flash answered).
-              model:
-                config.chatFallbackModel && attempt >= OVERLOAD_BACKOFF_MS.length
-                  ? config.chatFallbackModel
-                  : config.chatModel,
-              contents: request.prompt,
-              config: {
-                systemInstruction: request.system,
-                ...(timeout !== undefined ? { httpOptions: { timeout } } : {}),
-                ...(request.search ? { tools: [{ googleSearch: {} }] } : {}),
-                ...(request.jsonSchema
-                  ? { responseMimeType: "application/json", responseJsonSchema: request.jsonSchema }
-                  : {}),
-              },
-            }),
-          request.timeoutMs,
-          sleep,
-        );
+        const callModel = (model: string | null, timeout: number | undefined) =>
+          sdk.models.generateContent({
+            model,
+            contents: request.prompt,
+            config: {
+              systemInstruction: request.system,
+              ...(timeout !== undefined ? { httpOptions: { timeout } } : {}),
+              ...(request.search ? { tools: [{ googleSearch: {} }] } : {}),
+              ...(request.jsonSchema
+                ? { responseMimeType: "application/json", responseJsonSchema: request.jsonSchema }
+                : {}),
+            },
+          });
+        const fallback =
+          config.chatFallbackModel && config.chatFallbackModel !== config.chatModel
+            ? config.chatFallbackModel
+            : null;
+        const started = Date.now();
+        try {
+          response = await withOverloadRetry(
+            // The last overload attempt goes to the fallback model when one is
+            // set: overload bursts hit one model at a time (2026-10-15:
+            // 3.6-flash failed for minutes while other models answered).
+            (timeout, attempt) =>
+              callModel(fallback && attempt >= OVERLOAD_BACKOFF_MS.length ? fallback : config.chatModel, timeout),
+            request.timeoutMs,
+            sleep,
+          );
+        } catch (e) {
+          // Free-tier quota is per model, so a spent quota on the main model
+          // says nothing about the fallback's. Same day: 3.6-flash hit 429
+          // while flash-lite answered every call in about a second.
+          if (!fallback || toAgentError(e).code !== "quota") throw e;
+          const left = request.timeoutMs === undefined ? undefined : request.timeoutMs - (Date.now() - started);
+          if (left !== undefined && left < 3_000) throw e;
+          response = await withOverloadRetry((timeout) => callModel(fallback, timeout), left, sleep);
+        }
       } catch (e) {
         throw toAgentError(e);
       }
