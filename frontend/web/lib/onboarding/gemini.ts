@@ -78,12 +78,13 @@ const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(reso
 
 /**
  * Run `call` and retry it while Google reports overload (503), up to
- * OVERLOAD_BACKOFF_MS.length more times. A retry is only made if the call's
+ * OVERLOAD_BACKOFF_MS.length more times. `call` gets the attempt number, so
+ * a caller can switch to a fallback model for the later attempts. A retry is only made if the call's
  * own time budget still has room for the wait plus a real attempt, so a
  * retry can never push a turn past the route's limit.
  */
 export async function withOverloadRetry<T>(
-  call: (timeoutMs: number | undefined) => Promise<T>,
+  call: (timeoutMs: number | undefined, attempt: number) => Promise<T>,
   timeoutMs: number | undefined,
   sleep: (ms: number) => Promise<void> = realSleep,
   now: () => number = Date.now,
@@ -92,7 +93,7 @@ export async function withOverloadRetry<T>(
   for (let attempt = 0; ; attempt++) {
     const left = timeoutMs === undefined ? undefined : timeoutMs - (now() - start);
     try {
-      return await call(left);
+      return await call(left, attempt);
     } catch (e) {
       const wait = OVERLOAD_BACKOFF_MS[attempt];
       const roomLeft = timeoutMs === undefined ? Infinity : timeoutMs - (now() - start) - wait;
@@ -123,9 +124,15 @@ export function createGemini(
       let response: ResponseLike;
       try {
         response = await withOverloadRetry(
-          (timeout) =>
+          (timeout, attempt) =>
             sdk.models.generateContent({
-              model: config.chatModel,
+              // The last attempt goes to the fallback model when one is set:
+              // overload bursts hit one model at a time (2026-10-15:
+              // 3.6-flash failed for minutes while 3.7-flash answered).
+              model:
+                config.chatFallbackModel && attempt >= OVERLOAD_BACKOFF_MS.length
+                  ? config.chatFallbackModel
+                  : config.chatModel,
               contents: request.prompt,
               config: {
                 systemInstruction: request.system,

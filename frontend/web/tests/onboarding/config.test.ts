@@ -20,6 +20,7 @@ describe("config", () => {
     expect(readConfig(FULL)).toEqual({
       apiKey: "k",
       chatModel: "chat-model",
+      chatFallbackModel: null,
       embeddingProvider: "gemini",
       embeddingModel: "gemini-embedding-001",
       embeddingDim: 1024,
@@ -35,6 +36,9 @@ describe("config", () => {
     const both = readConfig({ ...FULL, OPENAI_API_KEY: "sk-x", OPENAI_RESEARCH_MODEL: "m" });
     expect(researchProvider(both)).toBe("openai");
     expect(both).toMatchObject({ openaiApiKey: "sk-x", openaiResearchModel: "m" });
+  });
+  it("reads the optional fallback chat model", () => {
+    expect(readConfig({ ...FULL, GEMINI_CHAT_FALLBACK_MODEL: " fb " }).chatFallbackModel).toBe("fb");
   });
   it("falls back to GEMINI_MODEL for chat and to 1024 dimensions", () => {
     const c = readConfig({ GEMINI_API_KEY: "k", GEMINI_MODEL: "m" });

@@ -317,3 +317,22 @@ describe("overload retry (Google 503 high demand)", () => {
     expect(seen).toEqual([40_000, 34_000]);
   });
 });
+
+describe("fallback model on overload", () => {
+  const overloaded = Object.assign(new Error("503 UNAVAILABLE high demand"), { status: 503 });
+  const ok = { text: "{}", candidates: [{ finishReason: "STOP" }] };
+
+  it("sends the last attempt to the fallback model", async () => {
+    const generateContent = vi.fn().mockRejectedValueOnce(overloaded).mockRejectedValueOnce(overloaded).mockResolvedValueOnce(ok);
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    await createGemini({ ...CONFIG, chatFallbackModel: "fallback-model" }, fake, async () => {}).generate({ system: "S", prompt: "P" });
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["chat-model", "chat-model", "fallback-model"]);
+  });
+
+  it("stays on the main model when no fallback is set", async () => {
+    const generateContent = vi.fn().mockRejectedValue(overloaded);
+    const fake = { models: { generateContent, embedContent: vi.fn() } } as unknown as GenAIClient;
+    await createGemini(CONFIG, fake, async () => {}).generate({ system: "S", prompt: "P" }).catch(() => {});
+    expect(generateContent.mock.calls.map((c) => c[0].model)).toEqual(["chat-model", "chat-model", "chat-model"]);
+  });
+});

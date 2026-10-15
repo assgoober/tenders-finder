@@ -10,6 +10,9 @@
 export type OnboardingConfig = {
   apiKey: string | null;
   chatModel: string | null;
+  /** Used for a call only when chatModel is overloaded (Google 503) after a
+   *  retry. Optional; must be a chat model on the same key. */
+  chatFallbackModel?: string | null;
   embeddingProvider: string | null;
   embeddingModel: string | null;
   embeddingDim: number;
@@ -32,6 +35,7 @@ export function readConfig(env: Record<string, string | undefined> = process.env
   return {
     apiKey: v("GEMINI_API_KEY"),
     chatModel: v("GEMINI_CHAT_MODEL") ?? v("GEMINI_MODEL"),
+    chatFallbackModel: v("GEMINI_CHAT_FALLBACK_MODEL"),
     embeddingProvider: v("EMBEDDING_PROVIDER"),
     embeddingModel: v("GEMINI_EMBEDDING_MODEL"),
     embeddingDim: dimNum,
